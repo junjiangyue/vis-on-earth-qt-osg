@@ -99,21 +99,26 @@ class RAWVolumeData {
             auto valIn = 0.f;
             for (uint8_t zi = 0; zi < 2; ++zi)
                 for (uint8_t yi = 0; yi < 2; ++yi)
-                    for (uint8_t xi = 0; xi < 2; ++xi)
+                    for (uint8_t xi = 0; xi < 2; ++xi) {
+                        auto omega = (zi == 0 ? 1.f - omegas[2] : omegas[2]) *
+                                     (yi == 0 ? 1.f - omegas[1] : omegas[1]) *
+                                     (xi == 0 ? 1.f - omegas[0] : omegas[0]);
                         switch (voxTy) {
                         case VIS4Earth::ESupportedVoxelType::UInt8:
-                            valIn +=
-                                (zi == 0 ? 1.f - omegas[2] : omegas[2]) *
-                                (yi == 0 ? 1.f - omegas[1] : omegas[1]) *
-                                (xi == 0 ? 1.f - omegas[0] : omegas[0]) *
-                                Sample<uint8_t>(posInRng[0][xi], posInRng[1][yi], posInRng[2][zi]);
+                            valIn += omega * Sample<uint8_t>(posInRng[0][xi], posInRng[1][yi],
+                                                             posInRng[2][zi]);
                             break;
+                        default:
+                            assert(false);
                         }
+                    }
 
             switch (voxTy) {
             case VIS4Earth::ESupportedVoxelType::UInt8:
-                volOut.dat[offsOut] = static_cast<uint8_t>(valIn);
+                volOut.dat[offsOut] = static_cast<uint8_t>(std::round(valIn));
                 break;
+            default:
+                assert(false);
             }
         };
 
@@ -123,6 +128,21 @@ class RAWVolumeData {
                     append(x, y, z);
 
         return volOut;
+    }
+
+    enum class ESmoothType { Max = 0, Avg };
+    enum class ESmoothDimension { XYZ = 0, XY };
+    struct SmoothParameters {
+        ESmoothType smoothType = ESmoothType::Max;
+        ESmoothDimension smoothDim = ESmoothDimension::XYZ;
+    };
+    RAWVolumeData GetSmoothed(const SmoothParameters &param) const {
+        switch (voxTy) {
+        case ESupportedVoxelType::UInt8:
+            return getSmoothed<uint8_t>(param);
+        default:
+            assert(false);
+        }
     }
 
     const std::vector<uint8_t> &GetData() const { return dat; }
@@ -141,7 +161,6 @@ class RAWVolumeData {
         switch (Type) {
         case ESupportedVoxelType::UInt8:
             return sizeof(uint8_t);
-            break;
         default:
             assert(false);
         }
@@ -197,7 +216,64 @@ class RAWVolumeData {
     size_t voxPerVolYxX;
     ESupportedVoxelType voxTy;
     std::vector<uint8_t> dat;
+
+    template <typename T>
+    T smoothKernelMax(const T *dat, const std::array<int32_t, 3> &pos,
+                      ESmoothDimension smoothDim) const {
+        auto scalar = std::numeric_limits<T>::min();
+        std::array<int32_t, 3> dPos = {pos[0] == 0 ? 0 : -1, pos[1] == 0 ? 0 : -1,
+                                       smoothDim != ESmoothDimension::XY || pos[2] == 0 ? 0 : -1};
+        for (; dPos[2] < (smoothDim != ESmoothDimension::XY || pos[2] == voxPerVol[2] - 1 ? 1 : 2);
+             ++dPos[2])
+            for (; dPos[1] < (pos[1] == voxPerVol[1] - 1 ? 1 : 2); ++dPos[1])
+                for (; dPos[0] < (pos[0] == voxPerVol[0] - 1 ? 1 : 2); ++dPos[0]) {
+                    std::array<int32_t, 3> newPos = {pos[0] + dPos[0], pos[1] + dPos[1],
+                                                     pos[2] + dPos[2]};
+                    scalar = std::max(
+                        scalar,
+                        dat[newPos[2] * voxPerVolYxX + newPos[1] * voxPerVol[0] + newPos[0]]);
+                }
+        return scalar;
+    }
+    template <typename T>
+    T smoothKernelAvg(const T *dat, const std::array<int32_t, 3> &pos,
+                      ESmoothDimension smoothDim) const {
+        float scalar = 0.f;
+        uint32_t num = 0.f;
+        std::array<int32_t, 3> dPos = {pos[0] == 0 ? 0 : -1, pos[1] == 0 ? 0 : -1,
+                                       smoothDim != ESmoothDimension::XY || pos[2] == 0 ? 0 : -1};
+        for (; dPos[2] < (smoothDim != ESmoothDimension::XY || pos[2] == voxPerVol[2] - 1 ? 1 : 2);
+             ++dPos[2])
+            for (; dPos[1] < (pos[1] == voxPerVol[1] - 1 ? 1 : 2); ++dPos[1])
+                for (; dPos[0] < (pos[0] == voxPerVol[0] - 1 ? 1 : 2); ++dPos[0]) {
+                    std::array<int32_t, 3> newPos = {pos[0] + dPos[0], pos[1] + dPos[1],
+                                                     pos[2] + dPos[2]};
+                    scalar += dat[newPos[2] * voxPerVolYxX + newPos[1] * voxPerVol[0] + newPos[0]];
+                    ++num;
+                }
+        return static_cast<T>(std::roundf(1.f * scalar / num));
+    }
+    template <typename T> RAWVolumeData getSmoothed(const SmoothParameters &param) const {
+        RAWVolumeData ret = *this;
+
+        auto oldDat = reinterpret_cast<const T *>(dat.data());
+        auto newDat = reinterpret_cast<T *>(ret.dat.data());
+
+        size_t idx = 0;
+        std::array<int32_t, 3> pos;
+        for (pos[2] = 0; pos[2] < voxPerVol[2]; ++pos[2])
+            for (pos[1] = 0; pos[1] < voxPerVol[1]; ++pos[1])
+                for (pos[0] = 0; pos[0] < voxPerVol[0]; ++pos[0]) {
+                    newDat[idx] = param.smoothType == ESmoothType::Avg
+                                      ? smoothKernelAvg(oldDat, pos, param.smoothDim)
+                                      : smoothKernelMax(oldDat, pos, param.smoothDim);
+                    ++idx;
+                }
+
+        return ret;
+    }
 };
+
 } // namespace VIS4Earth
 
 #endif // !VIS4EARTH_DATA_VOL_DATA_H

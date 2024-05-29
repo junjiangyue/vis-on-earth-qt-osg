@@ -16,6 +16,7 @@
 using CCusBaseDlg = QWidget;
 #endif // DEPLOY_ON_ZHONGDIAN15
 #include <QtWidgets/QCheckBox>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QDoubleSpinBox>
 #include <QtWidgets/QSpinBox>
 
@@ -169,6 +170,29 @@ class QtOSGReflectableWidget : public CCusBaseDlg {
   protected:
     std::unordered_map<std::string, std::shared_ptr<Property>> properties;
 
+    void debugProperties(const std::vector<const QtOSGReflectableWidget *> &wdgts) {
+        for (auto wdgt : wdgts)
+            wdgt->ForEachProperty([&](const std::string &name, const Property &prop) {
+                auto val = prop.GetValue();
+                switch (val.type) {
+                case Reflectable::ESupportedType::Int:
+                    qDebug() << QString::fromStdString(name) << ": " << val.val.asInt;
+                    break;
+                case Reflectable::ESupportedType::Bool:
+                    qDebug() << QString::fromStdString(name) << ": " << val.val.asBool;
+                    break;
+                case Reflectable::ESupportedType::Float:
+                    qDebug() << QString::fromStdString(name) << ": " << val.val.asFloat;
+                    break;
+                case Reflectable::ESupportedType::Double:
+                    qDebug() << QString::fromStdString(name) << ": " << val.val.asDouble;
+                    break;
+                default:
+                    assert(false);
+                }
+            });
+    }
+
   private:
     void syncPropertiesFromQtToOSG(QWidget *wdgt) {
         auto pos = wdgt->objectName().indexOf("VIS4EarthReflectable");
@@ -202,6 +226,13 @@ class QtOSGReflectableWidget : public CCusBaseDlg {
                         return SyncFromQtToOSGWhenSignaled<QDoubleSpinBox, double, double, double,
                                                            &QDoubleSpinBox::valueChanged,
                                                            &QDoubleSpinBox::value>();
+                    else
+                        assert(false);
+                else if (strs[0] == "comboBox")
+                    if (propTy == Reflectable::ESupportedType::Int)
+                        return SyncFromQtToOSGWhenSignaled<QComboBox, int, int, int,
+                                                           &QComboBox::currentIndexChanged,
+                                                           &QComboBox::currentIndex>();
                     else
                         assert(false);
                 else

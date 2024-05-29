@@ -17,7 +17,9 @@
 namespace VIS4Earth {
 class TransferFunctionData {
   public:
+    enum class EFilterType { Linear, Spline };
     struct FromFileParameters {
+        EFilterType filterTy;
         std::string filePath;
     };
     static ReteurnOrError<TransferFunctionData> LoadFromFile(const FromFileParameters &param) {
@@ -26,6 +28,7 @@ class TransferFunctionData {
             return "Invalid filePath.";
 
         TransferFunctionData tf;
+        tf.filterTy = param.filterTy;
 
         std::string buf;
         while (std::getline(is, buf)) {
@@ -45,6 +48,14 @@ class TransferFunctionData {
 
         tf.fromPointsToFlatData();
         return tf;
+    }
+
+    void SetFilterType(EFilterType type) {
+        if (filterTy == type)
+            return;
+
+        filterTy = type;
+        fromPointsToFlatData();
     }
 
     const std::map<uint8_t, std::array<float, 4>> &GetPoints() const { return pnts; }
@@ -125,6 +136,7 @@ class TransferFunctionData {
     }
 
   private:
+    EFilterType filterTy;
     std::map<uint8_t, std::array<float, 4>> pnts;
     std::array<std::array<float, 4>, 256> flatDat;
 

@@ -15,10 +15,6 @@
 #include <vis4earth/qt_osg_reflectable.h>
 #include <vis4earth/volume_cmpt.h>
 
-namespace Ui {
-class DirectVolumeRenderer;
-}
-
 namespace VIS4Earth {
 
 class DirectVolumeRenderer : public QtOSGReflectableWidget {
@@ -26,8 +22,8 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
 
   public:
     DirectVolumeRenderer(QWidget *parent = nullptr) : QtOSGReflectableWidget(ui, parent) {
-        layout()->addWidget(&geoCmpt);
-        layout()->addWidget(&volCmpt);
+        ui.scrollAreaWidgetContents_main->layout()->addWidget(&geoCmpt);
+        ui.scrollAreaWidgetContents_main->layout()->addWidget(&volCmpt);
 
         for (auto name : {"lightPosX", "lightPosY", "lightPosZ"}) {
             // 为光源位置进行坐标转换
@@ -151,7 +147,7 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
         connect(&geoCmpt, &GeographicsComponent::GeographicsChanged, changeStep);
         changeStep();
 
-        debugProperties();
+        debugProperties({this, &volCmpt, &geoCmpt});
     }
 
     osg::ref_ptr<osg::Group> GetGroup() const { return grp; }
@@ -185,6 +181,10 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
         stateSet->addUniform(dSamplePoss[1]);
         stateSet->addUniform(useMultiVols);
         stateSet->addUniform(geoCmpt.GetRotateMatrix());
+        for (auto obj : std::array<QtOSGReflectableWidget *, 3>{this, &geoCmpt, &volCmpt})
+            obj->ForEachProperty([&](const std::string &name, const Property &prop) {
+                stateSet->addUniform(prop.GetUniform());
+            });
         {
             osg::ref_ptr<osg::Shader> vertShader = osg::Shader::readShaderFile(
                 osg::Shader::VERTEX,
@@ -194,12 +194,8 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
                 GetDataPathPrefix() + VIS4EARTH_SHADER_PREFIX "scalar_viser/dvr_frag.glsl");
             program->addShader(vertShader);
             program->addShader(fragShader);
-
-            for (auto obj : std::array<QtOSGReflectableWidget *, 3>{this, &geoCmpt, &volCmpt})
-                obj->ForEachProperty([&](const std::string &name, const Property &prop) {
-                    stateSet->addUniform(prop.GetUniform());
-                });
-
+        }
+        {
             auto volTexUni = new osg::Uniform(osg::Uniform::SAMPLER_3D, "volTex0");
             volTexUni->set(0);
             stateSet->addUniform(volTexUni);
@@ -220,40 +216,18 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
             tfTexUni = new osg::Uniform(osg::Uniform::SAMPLER_1D, "tfTex1");
             tfTexUni->set(5);
             stateSet->addUniform(tfTexUni);
-
-            osg::ref_ptr<osg::CullFace> cf = new osg::CullFace(osg::CullFace::BACK);
-            stateSet->setAttributeAndModes(cf);
-
-            stateSet->setAttributeAndModes(program, osg::StateAttribute::ON);
-            stateSet->setMode(GL_BLEND, osg::StateAttribute::ON);
-            stateSet->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-
-            sphere->setCullCallback(new EyePositionUpdateCallback(eyePos));
         }
-        grp->addChild(sphere);
-    }
 
-    void debugProperties() {
-        for (auto obj : std::array<QtOSGReflectableWidget *, 3>{this, &geoCmpt, &volCmpt})
-            obj->ForEachProperty([&](const std::string &name, const Property &prop) {
-                auto val = prop.GetValue();
-                switch (val.type) {
-                case Reflectable::ESupportedType::Int:
-                    qDebug() << QString::fromStdString(name) << ": " << val.val.asInt;
-                    break;
-                case Reflectable::ESupportedType::Bool:
-                    qDebug() << QString::fromStdString(name) << ": " << val.val.asBool;
-                    break;
-                case Reflectable::ESupportedType::Float:
-                    qDebug() << QString::fromStdString(name) << ": " << val.val.asFloat;
-                    break;
-                case Reflectable::ESupportedType::Double:
-                    qDebug() << QString::fromStdString(name) << ": " << val.val.asDouble;
-                    break;
-                default:
-                    assert(false);
-                }
-            });
+        osg::ref_ptr<osg::CullFace> cf = new osg::CullFace(osg::CullFace::BACK);
+        stateSet->setAttributeAndModes(cf);
+
+        stateSet->setAttributeAndModes(program, osg::StateAttribute::ON);
+        stateSet->setMode(GL_BLEND, osg::StateAttribute::ON);
+        stateSet->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+
+        sphere->setCullCallback(new EyePositionUpdateCallback(eyePos));
+
+        grp->addChild(sphere);
     }
 };
 

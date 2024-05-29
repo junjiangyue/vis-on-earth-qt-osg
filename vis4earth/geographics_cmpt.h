@@ -8,10 +8,6 @@
 #include <vis4earth/math.h>
 #include <vis4earth/qt_osg_reflectable.h>
 
-namespace Ui {
-class GeographicsComponent;
-}
-
 namespace VIS4Earth {
 
 class GeographicsComponent : public QtOSGReflectableWidget {

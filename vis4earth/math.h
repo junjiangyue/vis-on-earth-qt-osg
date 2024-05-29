@@ -4,6 +4,7 @@
 #include <array>
 
 #include <osg/Math>
+#include <osg/Vec3>
 
 namespace VIS4Earth {
 namespace Math {
@@ -17,6 +18,15 @@ std::array<FloatTy, 3> BLHToEarth(FloatTy longtitude, FloatTy latitude, FloatTy 
     height *= std::cos(latitude);
     ret[1] = height * std::sin(longtitude);
     ret[0] = height * std::cos(longtitude);
+    return ret;
+}
+
+inline osg::Vec3 BLHToEarthOSGVec3(float longtitude, float latitude, float height) {
+    osg::Vec3 ret;
+    ret.z() = height * std::sin(latitude);
+    height *= std::cos(latitude);
+    ret.y() = height * std::sin(longtitude);
+    ret.x() = height * std::cos(longtitude);
     return ret;
 }
 

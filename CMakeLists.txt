@@ -12,7 +12,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package("Qt5" COMPONENTS "Core" "Widgets" "Gui" REQUIRED)
+find_package("Qt5" COMPONENTS "Core" "Widgets" "Gui" "Charts" REQUIRED)
 # </dep: Qt>
 
 # <dep: OSG>
@@ -57,8 +57,8 @@ message(STATUS "OSG_LIBS: ${OSG_LIBS}")
 add_compile_definitions(
 	VIS4EARTH_SHADER_PREFIX="${CMAKE_CURRENT_LIST_DIR}/vis4earth/shader/"
 )
-file(GLOB_RECURSE VIS4EARTH_HEADER_SRC "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.h")
-file(GLOB_RECURSE VIS4EARTH_UI_SRC "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.ui")
+file(GLOB_RECURSE VIS4EARTH_HEADER_SRCS "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.h")
+file(GLOB_RECURSE VIS4EARTH_UI_SRCS "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.ui")
 # </lib: VIS4Earth>
 
 # <app>
@@ -76,24 +76,23 @@ foreach(APP_PATH ${APP_PATHS})
 	get_filename_component(APP ${APP_PATH} NAME)
 	message(STATUS "Found app: ${APP}")
 
-	set(TARGET_NAME ${APP})
 	file(GLOB HEDAER_SRCS "${APP_PATH}/*.h")
 	file(GLOB SRCS "${APP_PATH}/*.cpp")
 	file(GLOB UI_SRCS "${APP_PATH}/*.ui")
 	add_executable(
 		${APP}
-		${UI_SRCS} ${VIS4EARTH_UI_SRC} # Necessary! For UIC
-		${HEDAER_SRCS} ${VIS4EARTH_HEADER_SRC} # Necessary! For header only target, Qt needs to MOC its headers
+		${UI_SRCS} ${VIS4EARTH_UI_SRCS} # Necessary! For UIC
+		${HEDAER_SRCS} ${VIS4EARTH_HEADER_SRCS} # Necessary! For header only target, Qt needs to MOC its headers
 		${SRCS}
 	)
 	target_include_directories(
-		${TARGET_NAME}
+		${APP}
 		PRIVATE
 		${CMAKE_CURRENT_LIST_DIR}
 		${OSG_INC_DIR}
 	)
 	target_link_directories(
-		${TARGET_NAME}
+		${APP}
 		PRIVATE
 		${OSG_LIB_DIR}
 	)
@@ -103,6 +102,7 @@ foreach(APP_PATH ${APP_PATHS})
 		"Qt5::Core"
 		"Qt5::Widgets"
 		"Qt5::Gui"
+		"Qt5::Charts"
 		${OSG_LIBS}
 	)
 endforeach()
