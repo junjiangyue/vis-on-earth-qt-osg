@@ -41,7 +41,7 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
                     float lon = ui.doubleSpinBox_lightPosX_float_VIS4EarthReflectable->value();
                     float lat = ui.doubleSpinBox_lightPosY_float_VIS4EarthReflectable->value();
                     float h = ui.doubleSpinBox_lightPosZ_float_VIS4EarthReflectable->value();
-                    auto xyz = Math::BLHToEarth(Math::Deg2Rad(lon), Math::Deg2Rad(lat),
+                    auto xyz = Math::BLHToEarth(Math::DegToRad(lon), Math::DegToRad(lat),
                                                 static_cast<float>(osg::WGS_84_RADIUS_POLAR) + h);
 
                     if (std::strcmp(name.c_str(), "lightPosX") == 0)
@@ -89,13 +89,15 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
                             updateGeometry(i);
                 });
 
-        connect(&volCmpt, &VolumeComponent::TransferFunctionChanged, [&]() {
+        auto changeTF = [&]() {
             auto stateSet = geode->getOrCreateStateSet();
             stateSet->setTextureAttributeAndModes(0, volCmpt.GetTransferFunction(0),
                                                   osg::StateAttribute::ON);
             stateSet->setTextureAttributeAndModes(1, volCmpt.GetTransferFunction(1),
                                                   osg::StateAttribute::ON);
-        });
+        };
+        connect(&volCmpt, &VolumeComponent::TransferFunctionChanged, changeTF);
+        changeTF();
 
         debugProperties({this, &volCmpt, &geoCmpt});
     }

@@ -35,7 +35,7 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
                     float lon = ui.doubleSpinBox_lightPosX_float_VIS4EarthReflectable->value();
                     float lat = ui.doubleSpinBox_lightPosY_float_VIS4EarthReflectable->value();
                     float h = ui.doubleSpinBox_lightPosZ_float_VIS4EarthReflectable->value();
-                    auto xyz = Math::BLHToEarth(Math::Deg2Rad(lon), Math::Deg2Rad(lat),
+                    auto xyz = Math::BLHToEarth(Math::DegToRad(lon), Math::DegToRad(lat),
                                                 static_cast<float>(osg::WGS_84_RADIUS_POLAR) + h);
 
                     if (std::strcmp(name.c_str(), "lightPosX") == 0)
@@ -94,7 +94,8 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
                     osg::Vec3(1.f / voxPerVol[0], 1.f / voxPerVol[1], 1.f / voxPerVol[2]));
             }
         });
-        connect(&volCmpt, &VolumeComponent::TransferFunctionChanged, [&]() {
+
+        auto changeTF = [&]() {
             auto stateSet = sphere->getOrCreateStateSet();
             stateSet->setTextureAttributeAndModes(2, volCmpt.GetPreIntegratedTransferFunction(0),
                                                   osg::StateAttribute::ON);
@@ -104,7 +105,9 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
                                                   osg::StateAttribute::ON);
             stateSet->setTextureAttributeAndModes(5, volCmpt.GetTransferFunction(1),
                                                   osg::StateAttribute::ON);
-        });
+        };
+        connect(&volCmpt, &VolumeComponent::TransferFunctionChanged, changeTF);
+        changeTF();
 
         auto changeVol = [&]() {
             static uint32_t currTimeID = 0;

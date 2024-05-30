@@ -46,7 +46,7 @@ class TransferFunctionData {
         if (tf.pnts.empty())
             return "Invalid file content.";
 
-        tf.fromPointsToFlatData();
+        tf.needUpdateFlatData = true;
         return tf;
     }
 
@@ -55,13 +55,42 @@ class TransferFunctionData {
             return;
 
         filterTy = type;
-        fromPointsToFlatData();
+        needUpdateFlatData = true;
     }
 
     const std::map<uint8_t, std::array<float, 4>> &GetPoints() const { return pnts; }
-    const std::array<std::array<float, 4>, 256> &GetFlatData() const { return flatDat; }
+    const std::array<std::array<float, 4>, 256> &GetFlatData() const {
+        fromPointsToFlatData();
+        return flatDat;
+    }
+
+    void ReplaceOrSetPoint(uint8_t oldScalar, uint8_t newScalar,
+                           const std::array<float, 4> &newRGBA) {
+        needUpdateFlatData = true;
+
+        auto itr = pnts.find(oldScalar);
+        if (itr != pnts.end())
+            if (oldScalar != newScalar)
+                pnts.erase(oldScalar);
+            else {
+                itr->second = newRGBA;
+                return;
+            }
+
+        itr = pnts.find(newScalar);
+        if (itr == pnts.end())
+            pnts.emplace(std::make_pair(newScalar, newRGBA));
+        else
+            pnts.at(newScalar) = newRGBA;
+    }
+    void DeletePoint(uint8_t scalar) {
+        auto eraseCnt = pnts.erase(scalar);
+        needUpdateFlatData |= eraseCnt != 0;
+    }
 
     osg::ref_ptr<osg::Texture1D> ToOSGTexture() const {
+        fromPointsToFlatData();
+
         osg::ref_ptr<osg::Image> img = new osg::Image;
         img->allocateImage(256, 1, 1, GL_RGBA, GL_FLOAT);
         img->setInternalTextureFormat(GL_RGBA);
@@ -78,6 +107,8 @@ class TransferFunctionData {
     }
 
     osg::ref_ptr<osg::Texture2D> ToPreIntegratedOSGTexture() const {
+        fromPointsToFlatData();
+
         osg::ref_ptr<osg::Image> img = new osg::Image;
         img->allocateImage(256, 256, 1, GL_RGBA, GL_FLOAT);
         img->setInternalTextureFormat(GL_RGBA);
@@ -137,10 +168,14 @@ class TransferFunctionData {
 
   private:
     EFilterType filterTy;
+    mutable bool needUpdateFlatData = false;
     std::map<uint8_t, std::array<float, 4>> pnts;
-    std::array<std::array<float, 4>, 256> flatDat;
+    mutable std::array<std::array<float, 4>, 256> flatDat;
 
-    void fromPointsToFlatData() {
+    void fromPointsToFlatData() const {
+        if (!needUpdateFlatData)
+            return;
+
         auto pntItr = pnts.begin();
         auto lftPntItr = pntItr;
         auto lft2Rht = 1.f;
@@ -166,6 +201,8 @@ class TransferFunctionData {
             } else
                 assign((i - lftPntItr->first) / lft2Rht);
         }
+
+        needUpdateFlatData = false;
     }
 };
 } // namespace VIS4Earth

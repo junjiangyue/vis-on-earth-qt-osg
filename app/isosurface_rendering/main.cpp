@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include <QtWidgets/qapplication.h>
+#include <QtWidgets/QApplication>
 
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>

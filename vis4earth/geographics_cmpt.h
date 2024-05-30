@@ -20,7 +20,7 @@ class GeographicsComponent : public QtOSGReflectableWidget {
             auto &prop = properties.at(name);
             prop->SetConvertor([](Reflectable::Type val) -> Reflectable::Type {
                 assert(val.type == Reflectable::ESupportedType::Float);
-                return Reflectable::Type(Math::Deg2Rad(val.val.asFloat));
+                return Reflectable::Type(Math::DegToRad(val.val.asFloat));
             });
         }
         for (auto name : {"heightMin", "heightMax"}) {

@@ -9,7 +9,7 @@
 namespace VIS4Earth {
 namespace Math {
 
-template <typename FloatTy> FloatTy Deg2Rad(FloatTy deg) { return deg * osg::PI / 180.; };
+template <typename FloatTy> FloatTy DegToRad(FloatTy deg) { return deg * osg::PI / 180.; };
 
 template <typename FloatTy>
 std::array<FloatTy, 3> BLHToEarth(FloatTy longtitude, FloatTy latitude, FloatTy height) {

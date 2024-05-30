@@ -28,11 +28,25 @@ class VolumeComponent : public QtOSGReflectableWidget {
                     QWidget *parent = nullptr)
         : keepCPUData(keepCPUData), keepVolSmoothed(keepVolSmoothed),
           QtOSGReflectableWidget(ui, parent) {
+        {
+            auto gridLayout = reinterpret_cast<QGridLayout *>(ui.groupBox_tf->layout());
+
+            auto insertRow = reinterpret_cast<QGridLayout *>(ui.groupBox_tf->layout())->rowCount();
+            auto insertSapn =
+                reinterpret_cast<QGridLayout *>(ui.groupBox_tf->layout())->columnCount();
+            for (int i = 0; i < 2; ++i) {
+                tfEditors[i] = new TransferFunctionEditor();
+                gridLayout->addWidget(tfEditors[i], insertRow, 0, insertSapn, insertSapn);
+            }
+        }
+
         connect(ui.pushButton_loadRAWVolume, &QPushButton::clicked, this,
                 &VolumeComponent::loadRAWVolume);
         connect(ui.pushButton_loadTF, &QPushButton::clicked, this, &VolumeComponent::loadTF);
 
         auto changeVolID = [&](int idx) {
+            tfEditors[idx]->raise();
+
             if (GetVolumeTimeNumber(idx) == 0)
                 return;
 
@@ -40,22 +54,20 @@ class VolumeComponent : public QtOSGReflectableWidget {
             ui.spinBox_voxPerVolX->setValue(vol->getImage()->s());
             ui.spinBox_voxPerVolY->setValue(vol->getImage()->t());
             ui.spinBox_voxPerVolZ->setValue(vol->getImage()->r());
-
-            reinterpret_cast<QGridLayout *>(ui.groupBox_tf->layout())
-                ->addWidget(&tfEditors[idx], 2, 0, 2, 2);
         };
         connect(ui.comboBox_currVolID, QOverload<int>::of(&QComboBox::currentIndexChanged),
                 changeVolID);
         changeVolID(ui.comboBox_currVolID->currentIndex());
 
         connect(ui.comboBox_smoothType, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                [&](int) { resmoothVolume(); });
+                [&](int) { smoothVolume(); });
         connect(ui.comboBox_smoothDim, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                [&](int) { resmoothVolume(); });
+                [&](int) { smoothVolume(); });
 
         for (int i = 0; i < 2; ++i)
-            connect(&tfEditors[i], &TransferFunctionEditor::TransferFunctionChanged, this,
-                    &VolumeComponent::resampleTF);
+            connect(tfEditors[i], &TransferFunctionEditor::TransferFunctionChanged, this,
+                    &VolumeComponent::sampleTF);
+        sampleTF();
     }
 
     const Ui::VolumeComponent &GetUI() const { return ui; }
@@ -109,7 +121,7 @@ class VolumeComponent : public QtOSGReflectableWidget {
     bool keepVolSmoothed;
 
     Ui::VolumeComponent ui;
-    std::array<TransferFunctionEditor, 2> tfEditors;
+    std::array<TransferFunctionEditor *, 2> tfEditors;
     std::array<osg::ref_ptr<osg::Texture1D>, 2> multiTFs;
     std::array<osg::ref_ptr<osg::Texture2D>, 2> multiTFPreInts;
     std::array<std::vector<osg::ref_ptr<osg::Texture3D>>, 2> multiTimeVaryingVols;
@@ -129,25 +141,14 @@ class VolumeComponent : public QtOSGReflectableWidget {
 
         auto volID = ui.comboBox_currVolID->currentIndex();
         auto &vols = multiTimeVaryingVols[volID];
-        auto &volSmootheds = multiTimeVaryingVolSmootheds[volID];
         auto &volCPUs = multiTimeVaryingVolCPUs[volID];
-        auto &volCPUSmootheds = multiTimeVaryingVolCPUSmootheds[volID];
 
         vols.clear();
         vols.reserve(filePaths.size());
-        if (keepVolSmoothed) {
-            volSmootheds.clear();
-            volSmootheds.reserve(filePaths.size());
-        }
         if (keepCPUData) {
             volCPUs.clear();
             volCPUs.reserve(filePaths.size());
         }
-        if (keepCPUData && keepVolSmoothed) {
-            volCPUSmootheds.clear();
-            volCPUSmootheds.reserve(filePaths.size());
-        }
-
         for (const auto &filePath : filePaths) {
             auto volDat = RAWVolumeData::LoadFromFile(RAWVolumeData::FromFileParameters{
                 voxPerVol, ESupportedVoxelType::UInt8, filePath.toStdString()});
@@ -159,34 +160,41 @@ class VolumeComponent : public QtOSGReflectableWidget {
             vols.emplace_back(volDat.result.dat.ToOSGTexture());
             if (keepCPUData)
                 volCPUs.emplace_back(volDat.result.dat);
-
-            if (keepVolSmoothed) {
-                auto volDatSmoothed = volDat.result.dat.GetSmoothed(RAWVolumeData::SmoothParameters{
-                    static_cast<RAWVolumeData::ESmoothType>(ui.comboBox_smoothType->currentIndex()),
-                    static_cast<RAWVolumeData::ESmoothDimension>(
-                        ui.comboBox_smoothDim->currentIndex())});
-                volSmootheds.emplace_back(volDat.result.dat.ToOSGTexture());
-
-                if (keepCPUData)
-                    volCPUSmootheds.emplace_back(volDatSmoothed);
-            }
         }
 
-        emit VolumeChanged();
+        smoothVolume();
     }
 
-    void resmoothVolume() {
-        if (!keepCPUData || !keepVolSmoothed)
-            return;
+    void smoothVolume() {
+        auto smooth = [&](uint32_t volID) {
+            auto &vols = multiTimeVaryingVols[volID];
+            auto &volCPUs = multiTimeVaryingVolCPUs[volID];
+            auto &volSmootheds = multiTimeVaryingVolSmootheds[volID];
+            auto &volCPUSmootheds = multiTimeVaryingVolCPUSmootheds[volID];
 
-        auto resmooth = [&](uint32_t volID, uint32_t timeID) {
-            multiTimeVaryingVolCPUSmootheds[volID][timeID] =
-                multiTimeVaryingVolCPUs[volID][timeID].GetSmoothed(RAWVolumeData::SmoothParameters{
-                    static_cast<RAWVolumeData::ESmoothType>(ui.comboBox_smoothType->currentIndex()),
-                    static_cast<RAWVolumeData::ESmoothDimension>(
-                        ui.comboBox_smoothDim->currentIndex())});
-            multiTimeVaryingVolSmootheds[volID][timeID] =
-                multiTimeVaryingVolCPUs[volID][timeID].ToOSGTexture();
+            if (keepVolSmoothed) {
+                volSmootheds.clear();
+                volSmootheds.reserve(vols.size());
+            }
+            if (keepCPUData && keepVolSmoothed) {
+                volCPUSmootheds.clear();
+                volCPUSmootheds.reserve(vols.size());
+            }
+
+            for (uint32_t timeID = 0; timeID < vols.size(); ++timeID) {
+                if (keepVolSmoothed) {
+                    auto volDatSmoothed =
+                        volCPUs[timeID].GetSmoothed(RAWVolumeData::SmoothParameters{
+                            static_cast<RAWVolumeData::ESmoothType>(
+                                ui.comboBox_smoothType->currentIndex()),
+                            static_cast<RAWVolumeData::ESmoothDimension>(
+                                ui.comboBox_smoothDim->currentIndex())});
+                    volSmootheds.emplace_back(volDatSmoothed.ToOSGTexture());
+
+                    if (keepCPUData)
+                        volCPUSmootheds.emplace_back(volDatSmoothed);
+                }
+            }
         };
 
         for (uint32_t vi = 0; vi < 2; ++vi) {
@@ -194,8 +202,7 @@ class VolumeComponent : public QtOSGReflectableWidget {
             if (tNum == 0)
                 continue;
 
-            for (uint32_t ti = 0; ti < tNum; ++ti)
-                resmooth(vi, ti);
+            smooth(vi);
         }
 
         emit VolumeChanged();
@@ -214,18 +221,21 @@ class VolumeComponent : public QtOSGReflectableWidget {
             return;
         }
 
-        tfEditors[ui.comboBox_smoothType->currentIndex()].SetTransferFunctionData(tfDat.result.dat);
+        tfEditors[ui.comboBox_smoothType->currentIndex()]->SetTransferFunctionData(
+            tfDat.result.dat);
     }
 
-    void resampleTF() {
-        auto resample = [&](uint32_t volID) {
-            multiTFs[volID] = tfEditors[volID].GetTransferFunctionData().ToOSGTexture();
+    void saveTF() {}
+
+    void sampleTF() {
+        auto sample = [&](uint32_t volID) {
+            multiTFs[volID] = tfEditors[volID]->GetTransferFunctionData().ToOSGTexture();
             multiTFPreInts[volID] =
-                tfEditors[volID].GetTransferFunctionData().ToPreIntegratedOSGTexture();
+                tfEditors[volID]->GetTransferFunctionData().ToPreIntegratedOSGTexture();
         };
 
         for (uint32_t vi = 0; vi < 2; ++vi)
-            resample(vi);
+            sample(vi);
 
         emit TransferFunctionChanged();
     }
