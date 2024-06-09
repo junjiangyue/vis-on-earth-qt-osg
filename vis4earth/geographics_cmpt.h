@@ -49,6 +49,7 @@ class GeographicsComponent : public QtOSGReflectableWidget {
             h = h * cos(lat);
             dir.y() = h * sin(lon);
             dir.x() = h * cos(lon);
+            dir *= -1.f;
             dir.normalize();
 
             osg::Matrix3 rotMat;
@@ -79,7 +80,7 @@ class GeographicsComponent : public QtOSGReflectableWidget {
                 QOverload<double>::of(&QDoubleSpinBox::valueChanged), onGeographicsChanged);
         connect(ui.doubleSpinBox_heightMin_float_VIS4EarthReflectable,
                 QOverload<double>::of(&QDoubleSpinBox::valueChanged), onGeographicsChanged);
-        connect(ui.doubleSpinBox_heightMin_float_VIS4EarthReflectable,
+        connect(ui.doubleSpinBox_heightMax_float_VIS4EarthReflectable,
                 QOverload<double>::of(&QDoubleSpinBox::valueChanged), onGeographicsChanged);
         onGeographicsChanged(0.);
     }

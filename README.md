@@ -64,6 +64,8 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
 - [x] 直接体绘制（基于传输函数的多体混合绘制）
 - [x] 直接体绘制（预积分传输函数）
 - [x] 直接体绘制（Blinn-Phong局部光照）
+- [x] Marching Cube 等值面绘制
+- [x] Marching Square 等值线绘制
 
 ## 展示
 

@@ -54,7 +54,14 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
 
         initOSGResource();
 
-        auto genIsosurface = [&]() {
+        auto updateGeom = [&]() {
+            vertSmootheds->clear();
+            normSmootheds->clear();
+            for (int i = 0; i < 2; ++i)
+                if (volCmpt.GetVolumeTimeNumber(i) != 0)
+                    updateGeometry(i);
+        };
+        auto genIsosurface = [&, updateGeom]() {
             isoval = ui.horizontalSlider_isoval->value();
             useVolSmoothed = ui.checkBox_useVolSmoothed->isChecked();
             meshSmoothType =
@@ -71,22 +78,18 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
                     continue;
                 marchingCube(i);
             }
-            for (int i = 0; i < 2; ++i)
-                if (volCmpt.GetVolumeTimeNumber(i) != 0)
-                    updateGeometry(i);
+
+            updateGeom();
         };
         connect(ui.horizontalSlider_isoval, &QSlider::sliderMoved,
                 [&](int val) { ui.label_isoval->setText(QString::number(val)); });
         connect(ui.horizontalSlider_isoval, &QSlider::valueChanged, genIsosurface);
         connect(ui.checkBox_useVolSmoothed, &QCheckBox::stateChanged, genIsosurface);
         connect(&volCmpt, &VolumeComponent::VolumeChanged, genIsosurface);
-        connect(&geoCmpt, &GeographicsComponent::GeographicsChanged, genIsosurface);
         connect(ui.comboBox_meshSmoothType, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                [&](int idx) {
+                [&, updateGeom](int idx) {
                     meshSmoothType = static_cast<EMeshSmoothType>(idx);
-                    for (int i = 0; i < 2; ++i)
-                        if (volCmpt.GetVolumeTimeNumber(i) != 0)
-                            updateGeometry(i);
+                    updateGeom();
                 });
 
         auto changeTF = [&]() {
@@ -118,9 +121,9 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
     osg::ref_ptr<osg::Geode> geode;
     osg::ref_ptr<osg::Program> program;
     osg::ref_ptr<osg::Vec3Array> verts;
-    osg::ref_ptr<osg::Vec3Array> smoothedVerts;
+    osg::ref_ptr<osg::Vec3Array> vertSmootheds;
     osg::ref_ptr<osg::Vec3Array> norms;
-    osg::ref_ptr<osg::Vec3Array> smoothedNorms;
+    osg::ref_ptr<osg::Vec3Array> normSmootheds;
     osg::ref_ptr<osg::Vec2Array> uvs;
 
     osg::ref_ptr<osg::Uniform> eyePos;
@@ -133,15 +136,16 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
         geom = new osg::Geometry();
         geode = new osg::Geode();
         verts = new osg::Vec3Array();
-        smoothedVerts = new osg::Vec3Array();
+        vertSmootheds = new osg::Vec3Array();
         norms = new osg::Vec3Array();
-        smoothedNorms = new osg::Vec3Array();
+        normSmootheds = new osg::Vec3Array();
         uvs = new osg::Vec2Array();
         program = new osg::Program();
 
         auto stateSet = geode->getOrCreateStateSet();
         eyePos = new osg::Uniform("eyePos", osg::Vec3());
         stateSet->addUniform(eyePos);
+        stateSet->addUniform(geoCmpt.GetRotateMatrix());
         for (auto obj : std::array<QtOSGReflectableWidget *, 3>{this, &geoCmpt, &volCmpt})
             obj->ForEachProperty([&](const std::string &name, const Property &prop) {
                 stateSet->addUniform(prop.GetUniform());
@@ -181,27 +185,10 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
                                              volCmpt.GetUI().spinBox_voxPerVolZ->value()};
         auto voxPerVolYxX = static_cast<size_t>(voxPerVol[1]) * voxPerVol[0];
 
-        auto lonMin = geoCmpt.GetPropertyOSGValue<float>("longtitudeMin").val;
-        auto lonMax = geoCmpt.GetPropertyOSGValue<float>("longtitudeMax").val;
-        auto latMin = geoCmpt.GetPropertyOSGValue<float>("latitudeMin").val;
-        auto latMax = geoCmpt.GetPropertyOSGValue<float>("latitudeMax").val;
-        auto hMin = geoCmpt.GetPropertyOSGValue<float>("heightMin").val;
-        auto hMax = geoCmpt.GetPropertyOSGValue<float>("heightMax").val;
-        auto lonExt = lonMax - lonMin;
-        auto latExt = latMax - latMin;
-        auto hExt = hMax - hMin;
-
         auto sample = [&](const osg::Vec3i &pos) -> T {
             if (useVolSmoothed)
                 return volCmpt.GetVolumeCPUSmoothed(volID, 0).Sample<T>(pos.x(), pos.y(), pos.z());
             return volCmpt.GetVolumeCPU(volID, 0).Sample<T>(pos.x(), pos.y(), pos.z());
-        };
-        auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-            float lon = lonMin + v3.x() * lonExt;
-            float lat = latMin + v3.y() * latExt;
-            float h = hMin + v3.z() * hExt;
-
-            return Math::BLHToEarthOSGVec3(lon, lat, h);
         };
 
         struct HashEdge {
@@ -300,10 +287,8 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
                                           startPos.z() + (ei >= 8   ? omegas[ei]
                                                           : ei >= 4 ? 1.f
                                                                     : 0.f));
-                            pos.x() /= voxPerVol[0];
-                            pos.y() /= voxPerVol[1];
-                            pos.z() /= voxPerVol[2];
-                            pos = vec3ToSphere(pos);
+                            for (uint8_t i = 0; i < 3; ++i)
+                                pos[i] /= voxPerVol[i];
 
                             float scalar;
                             switch (ei) {
@@ -385,47 +370,45 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
         auto laplacianSmooth = [&]() {
             for (GLuint vIdx = 0; vIdx < verts->size(); ++vIdx) {
                 auto itr = multiEdges[volID].lower_bound(std::array<GLuint, 2>{vIdx, 0});
-                assert(itr != multiEdges[volID].end());
+                assert(itr != multiEdges[volID].end() && (*itr)[0] == vIdx);
 
-                auto &smoothedVert = (*smoothedVerts)[vIdx];
-                auto &smoothedNorm = (*smoothedNorms)[vIdx];
+                auto vertSmoothed = (*verts)[vIdx];
+                auto normSmoothed = (*norms)[vIdx];
                 int lnkNum = 1;
                 while (itr != multiEdges[volID].end() && (*itr)[0] == vIdx) {
-                    smoothedVert += (*verts)[(*itr)[1]];
-                    smoothedNorm += (*norms)[(*itr)[1]];
+                    vertSmoothed += (*verts)[(*itr)[1]];
+                    normSmoothed += (*norms)[(*itr)[1]];
                     ++itr;
                     ++lnkNum;
                 }
-                smoothedVert /= lnkNum;
-                smoothedNorm /= lnkNum;
+                vertSmoothed /= lnkNum;
+                normSmoothed.normalize();
+
+                vertSmootheds->push_back(vertSmoothed);
+                normSmootheds->push_back(normSmoothed);
             }
         };
         auto curvatureSmooth = [&]() {
             for (GLuint vIdx = 0; vIdx < verts->size(); ++vIdx) {
                 auto itr = multiEdges[volID].lower_bound(std::array<GLuint, 2>{vIdx, 0});
-                assert(itr != multiEdges[volID].end());
+                assert(itr != multiEdges[volID].end() && (*itr)[0] == vIdx);
 
-                auto &smoothedVert = (*smoothedVerts)[vIdx];
-                auto &norm = (*smoothedNorms)[vIdx];
+                auto vertSmoothed = (*verts)[vIdx];
+                auto norm = (*norms)[vIdx];
                 auto projLen = 0.f;
                 while (itr != multiEdges[volID].end() && (*itr)[0] == vIdx) {
-                    auto dlt = (*verts)[(*itr)[1]] - smoothedVert;
+                    auto dlt = (*verts)[(*itr)[1]] - vertSmoothed;
                     projLen = dlt * norm;
                     ++itr;
                 }
+                vertSmoothed = vertSmoothed + norm * projLen;
 
-                smoothedVert = smoothedVert + norm * projLen;
+                vertSmootheds->push_back(vertSmoothed);
             }
+
+            normSmootheds->insert(normSmootheds->end(), norms->begin(), norms->end());
         };
 
-        if (meshSmoothType != EMeshSmoothType::None)
-            switch (meshSmoothType) {
-            case EMeshSmoothType::Laplacian:
-            case EMeshSmoothType::Curvature:
-                smoothedVerts->assign(verts->begin(), verts->end());
-                smoothedNorms->assign(norms->begin(), norms->end());
-                break;
-            }
         switch (meshSmoothType) {
         case EMeshSmoothType::Laplacian:
             laplacianSmooth();
@@ -438,8 +421,8 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
         switch (meshSmoothType) {
         case EMeshSmoothType::Laplacian:
         case EMeshSmoothType::Curvature:
-            geom->setVertexArray(smoothedVerts);
-            geom->setNormalArray(smoothedNorms);
+            geom->setVertexArray(vertSmootheds);
+            geom->setNormalArray(normSmootheds);
             break;
         default:
             geom->setVertexArray(verts);
@@ -449,6 +432,11 @@ class IsosurfaceRenderer : public QtOSGReflectableWidget {
 
         geom->setNormalBinding(osg::Geometry::BIND_PER_VERTEX);
 
+        geom->setInitialBound([]() -> osg::BoundingBox {
+            osg::Vec3 max(osg::WGS_84_RADIUS_POLAR, osg::WGS_84_RADIUS_POLAR,
+                          osg::WGS_84_RADIUS_POLAR);
+            return osg::BoundingBox(-max, max);
+        }()); // 必须，否则不显示
         geom->getPrimitiveSetList().clear();
         geom->addPrimitiveSet(
             new osg::DrawElementsUInt(GL_TRIANGLES, vertIndices.size(), vertIndices.data()));

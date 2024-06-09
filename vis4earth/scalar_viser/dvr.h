@@ -155,7 +155,7 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
 
     osg::ref_ptr<osg::Group> GetGroup() const { return grp; }
 
-  private:
+  protected:
     osg::ref_ptr<osg::Group> grp;
     osg::ref_ptr<osg::ShapeDrawable> sphere;
     osg::ref_ptr<osg::Program> program;
@@ -169,7 +169,7 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
     GeographicsComponent geoCmpt;
     VolumeComponent volCmpt;
 
-    void initOSGResource() {
+    virtual void initOSGResource() {
         grp = new osg::Group();
         sphere = new osg::ShapeDrawable();
         program = new osg::Program;
