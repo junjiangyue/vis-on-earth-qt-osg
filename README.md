@@ -11,6 +11,11 @@
 
 ```cpp
 // dvr.h
+
+namespace Ui {
+class DirectVolumeRenderer;
+}
+
 class DirectVolumeRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
 
@@ -23,7 +28,7 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
         });
     }
   private:
-    Ui::DirectVolumeRenderer ui;
+    Ui::DirectVolumeRenderer *ui;
     osg::ref_ptr<osg::ShapeDrawable> sphere;
     // ...
 };
@@ -33,20 +38,45 @@ class DirectVolumeRenderer : public QtOSGReflectableWidget {
 
 ```cpp
 // dvr.h
+
 class DirectVolumeRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
 
   public:
-    DirectVolumeRenderer(QWidget *parent = nullptr) : QtOSGReflectableWidget(ui, parent) {
-        layout()->addWidget(&geoCmpt);
-        layout()->addWidget(&volCmpt);
-        // ...
-    }
+    DirectVolumeRenderer(QWidget *parent = nullptr);
   private:
     // ...
     GeographicsComponent geoCmpt;
     VolumeComponent volCmpt;
 };
+```
+
+```cpp
+// components_ui_export.h
+
+#include <ui_geographics_cmpt.h>
+#include <ui_volume_cmpt.h>
+```
+
+```cpp
+// dvr.cpp
+
+/*
+* Hack，避免Qt报xxx.ui与xxx.cpp不在同一目录的错误。不能直接写：
+* #include <ui_geographics_cmpt.h>
+* #include <ui_volume_cmpt.h>
+*/
+#include <vis4earth/components_ui_export.h>
+
+DirectVolumeRenderer::DirectVolumeRenderer(QWidget *parent = nullptr)
+ : QtOSGReflectableWidget(ui, parent) {
+    ui->scrollAreaWidgetContents_main->layout()->addWidget(&geoCmpt);
+    ui->scrollAreaWidgetContents_main->layout()->addWidget(&volCmpt);
+    // ...
+    connect(geoCmpt.GetUI()->doubleSpinBox_heightMax_float_VIS4EarthReflectable,
+            QOverload<double>::of(&QDoubleSpinBox::valueChanged), onHeightChanged);
+    // ...
+}
 ```
 
 ## 经过测试的依赖
