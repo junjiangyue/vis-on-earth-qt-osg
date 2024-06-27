@@ -135,8 +135,9 @@ class QtOSGReflectableWidget : public CCusBaseDlg {
 
   public:
     template <typename UITy>
-    explicit QtOSGReflectableWidget(UITy &ui, QWidget *parent = nullptr) : CCusBaseDlg(parent) {
-        ui.setupUi(this);
+    explicit QtOSGReflectableWidget(UITy *&ui, QWidget *parent = nullptr) : CCusBaseDlg(parent) {
+        ui = new UITy;
+        ui->setupUi(this);
 
         syncPropertiesFromQtToOSG(this);
     }

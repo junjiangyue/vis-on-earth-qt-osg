@@ -57,8 +57,35 @@ message(STATUS "OSG_LIBS: ${OSG_LIBS}")
 add_compile_definitions(
 	VIS4EARTH_SHADER_PREFIX="${CMAKE_CURRENT_LIST_DIR}/vis4earth/shader/"
 )
+file(GLOB_RECURSE VIS4EARTH_SRCS "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.cpp")
 file(GLOB_RECURSE VIS4EARTH_HEADER_SRCS "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.h")
 file(GLOB_RECURSE VIS4EARTH_UI_SRCS "${CMAKE_CURRENT_LIST_DIR}/vis4earth/*.ui")
+add_library(
+	"vis4earth"
+	${VIS4EARTH_SRCS}
+	${VIS4EARTH_HEADER_SRCS}
+	${VIS4EARTH_UI_SRCS}
+)
+target_include_directories(
+	"vis4earth"
+	PUBLIC
+	${OSG_INC_DIR}
+	${CMAKE_CURRENT_LIST_DIR}
+)
+target_link_directories(
+	"vis4earth"
+	PUBLIC
+	${OSG_LIB_DIR}
+)
+target_link_libraries(
+	"vis4earth"
+	PUBLIC
+	"Qt5::Core"
+	"Qt5::Widgets"
+	"Qt5::Gui"
+	"Qt5::Charts"
+	${OSG_LIBS}
+)
 # </lib: VIS4Earth>
 
 # <app>
@@ -81,29 +108,14 @@ foreach(APP_PATH ${APP_PATHS})
 	file(GLOB UI_SRCS "${APP_PATH}/*.ui")
 	add_executable(
 		${APP}
-		${UI_SRCS} ${VIS4EARTH_UI_SRCS} # Necessary! For UIC
-		${HEDAER_SRCS} ${VIS4EARTH_HEADER_SRCS} # Necessary! For header only target, Qt needs to MOC its headers
+		${UI_SRCS} # Necessary! For UIC
+		${HEDAER_SRCS} # Necessary! For header only target, Qt needs to MOC its headers
 		${SRCS}
-	)
-	target_include_directories(
-		${APP}
-		PRIVATE
-		${CMAKE_CURRENT_LIST_DIR}
-		${OSG_INC_DIR}
-	)
-	target_link_directories(
-		${APP}
-		PRIVATE
-		${OSG_LIB_DIR}
 	)
 	target_link_libraries(
 		${APP}
 		PRIVATE
-		"Qt5::Core"
-		"Qt5::Widgets"
-		"Qt5::Gui"
-		"Qt5::Charts"
-		${OSG_LIBS}
+		"vis4earth"
 	)
 endforeach()
 # </app>

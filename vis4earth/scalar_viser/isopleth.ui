@@ -11,7 +11,7 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>等值面绘制</string>
+   <string>等值线绘制</string>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
