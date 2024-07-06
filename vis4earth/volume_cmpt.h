@@ -65,6 +65,11 @@ class VolumeComponent : public QtOSGReflectableWidget {
             return nullptr;
         return multiTFs[volID];
     }
+    const TransferFunctionData &GetTransferFunctionCPU(uint32_t volID) const {
+        if (volID > 1)
+            return {};
+        return tfEditors[volID]->GetTransferFunctionData();
+    }
     osg::ref_ptr<osg::Texture2D> GetPreIntegratedTransferFunction(uint32_t volID) const {
         if (volID > 1)
             return nullptr;

@@ -1,12 +1,12 @@
 ﻿#ifndef VIS4EARTH_SCALAR_VISER_DVR_H
 #define VIS4EARTH_SCALAR_VISER_DVR_H
 
-#include <qtcore/qtimer>
+#include <QtCore/QTimer>
 
-#include <osg/coordinatesystemnode>
-#include <osg/cullface>
-#include <osg/group>
-#include <osg/shapedrawable>
+#include <osg/CoordinateSystemnode>
+#include <osg/Cullface>
+#include <osg/Group>
+#include <osg/ShapeDrawable>
 
 #include <vis4earth/geographics_cmpt.h>
 #include <vis4earth/osg_util.h>
