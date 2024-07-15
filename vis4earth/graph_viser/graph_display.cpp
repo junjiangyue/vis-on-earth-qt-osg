@@ -246,9 +246,9 @@ void VIS4Earth::GraphRenderer::showGraph() {
     myGraph = nodeLayouter.getLayoutedGraph();
     auto existGraph = getGraph("GraphLayout");
     if (!existGraph) {
-        auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-        lonRng[0] += lonOffs;
-        lonRng[1] += lonOffs;
+    auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+    lonRng[0] += lonOffs;
+    lonRng[1] += lonOffs;
     }
     auto nodes = std::make_shared<std::map<std::string, Node>>();
     auto edges = std::make_shared<std::vector<Edge>>();

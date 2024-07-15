@@ -222,8 +222,9 @@ class NodeLayouter {
                     translation *= 0.5f;
                     newPos = nodes[n1_id].pos + translation;
                 }
-                // 更新坐标
-                nodes[n1_id].pos = newPos;
+                    // 更新坐标
+                    nodes[n1_id].pos = newPos;
+                }
             }
             glm::vec3 zero = glm::vec3(0, 0, 0);
             nodes[n1_id].force = zero;
