@@ -2,6 +2,7 @@
 
 #include <ui_graph_layout.h>
 
+#include <osgText/Font>
 #include <osgText/Text>
 
 using namespace VIS4Earth;
@@ -187,7 +188,7 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
             VIS4Earth::GraphRenderer::Node node;
             node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
             node.color = colors[i];
-            node.id = itr->second.id;
+            node.id = itr->first;
 
             nodes->emplace(std::make_pair(itr->first, node));
             ++i;
@@ -246,9 +247,9 @@ void VIS4Earth::GraphRenderer::showGraph() {
     myGraph = nodeLayouter.getLayoutedGraph();
     auto existGraph = getGraph("GraphLayout");
     if (!existGraph) {
-    auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-    lonRng[0] += lonOffs;
-    lonRng[1] += lonOffs;
+        auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+        lonRng[0] += lonOffs;
+        lonRng[1] += lonOffs;
     }
     auto nodes = std::make_shared<std::map<std::string, Node>>();
     auto edges = std::make_shared<std::vector<Edge>>();
@@ -651,21 +652,25 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         matr->setColorMode(osg::Material::DIFFUSE);
         states->setAttributeAndModes(matr, osg::StateAttribute::ON);
         states->setMode(GL_LIGHTING, osg::StateAttribute::ON);
-
-        // TODO:显示文字
+        // osg::setNotifyLevel(osg::DEBUG_INFO);
+        //  TODO:显示文字
         grp->addChild(sphere);
-        auto text = new osgText::Text;
-        // text->setFont("fonts/arial.ttf"); // 设置字体
-        text->setCharacterSize(2.5f); // 设置字体大小
-        text->setPosition(p +
-                          osg::Vec3(0.0f, 0.0f, 1.5f)); // 设置文字位置为点的位置稍微向上移动一些
-        text->setText(itr->second.id);                  // 设置文字内容为点的ID
+
+        osg::ref_ptr<osgText::Text> text = new osgText::Text;
+        text->setText(itr->first);
+        text->setFont("Fonts/simhei.ttf"); // 设置字体
+        text->setAxisAlignment(osgText::Text::SCREEN);
+        text->setCharacterSize(nodeGeomSize); // 设置字体大小
+        text->setPosition(
+            p +
+            osg::Vec3(0.0f, 0.0f, 0.25f * nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
+                                                          // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
 
-        auto textGeode = new osg::Geode;
-        textGeode->addDrawable(text);
+        osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
+        textGeode->addDrawable(text.get());
 
-        grp->addChild(textGeode);
+        grp->addChild(textGeode.get());
 
         osgNodes.emplace(std::make_pair(itr->first, sphere));
     }
