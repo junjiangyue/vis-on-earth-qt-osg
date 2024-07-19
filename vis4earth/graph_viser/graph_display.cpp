@@ -580,7 +580,56 @@ void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value) {
                        .arg(coordRange.minY);
     coordRangeLabel->setText(text);
 }
+// 检查两个矩形是否重叠，并返回重叠的距离
+osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
+    float overlapY = std::min(bb1.yMax(), bb2.yMax()) - std::max(bb1.yMin(), bb2.yMin());
+    float overlapZ = std::min(bb1.zMax(), bb2.zMax()) - std::max(bb1.zMin(), bb2.zMin());
+    return osg::Vec3(0.0f, overlapY, overlapZ);
+}
 
+// 检查两个矩形是否重叠
+bool checkOverlap(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
+    return !(bb1.zMax() < bb2.zMin() || bb1.zMin() > bb2.zMax() || bb1.yMax() < bb2.yMin() ||
+             bb1.yMin() > bb2.yMax());
+}
+
+// 调整文字位置以避免重叠
+void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize) {
+    for (size_t i = 0; i < texts.size(); ++i) {
+        osg::BoundingBox bb1 = texts[i]->getBoundingBox();
+        for (size_t j = 0; j < i; ++j) {
+            osg::BoundingBox bb2 = texts[j]->getBoundingBox();
+            if (checkOverlap(bb1, bb2)) {
+                osg::Vec3 overlap = calculateOverlapDistance(bb1, bb2);
+                osg::Vec3 pos1 = texts[i]->getPosition();
+                osg::Vec3 pos2 = texts[j]->getPosition();
+
+                // y 代表上下，z 代表左右
+                if (pos1.y() < pos2.y()) {
+                    pos1.y() -= overlap.y() / 2;
+                    pos2.y() += overlap.y() / 2;
+                } else {
+                    pos1.y() += overlap.y() / 2;
+                    pos2.y() -= overlap.y() / 2;
+                }
+
+                if (pos1.z() < pos2.z()) {
+                    pos1.z() -= overlap.z() / 2;
+                    pos2.z() += overlap.z() / 2;
+                } else {
+                    pos1.z() += overlap.z() / 2;
+                    pos2.z() -= overlap.z() / 2;
+                }
+
+                texts[i]->setPosition(pos1);
+                texts[j]->setPosition(pos2);
+
+                bb1 = texts[i]->getBoundingBox();
+                bb2 = texts[j]->getBoundingBox();
+            }
+        }
+    }
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     grp->removeChildren(0, grp->getNumChildren());
 
@@ -626,7 +675,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     auto tessl = new osg::TessellationHints;
     tessl->setDetailRatio(1.f);
     std::map<std::string, osg::ShapeDrawable *> osgNodes;
-
+    std::vector<osg::ref_ptr<osgText::Text>> textNodes;
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         osg::Vec4 color = osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f); // Set color to blue
         // osg::Vec4 color = osg::Vec4(itr->second.color, 1.f);
@@ -653,7 +702,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         states->setAttributeAndModes(matr, osg::StateAttribute::ON);
         states->setMode(GL_LIGHTING, osg::StateAttribute::ON);
         // osg::setNotifyLevel(osg::DEBUG_INFO);
-        //  TODO:显示文字
+
         grp->addChild(sphere);
 
         osg::ref_ptr<osgText::Text> text = new osgText::Text;
@@ -661,19 +710,21 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         text->setFont("Fonts/simhei.ttf"); // 设置字体
         text->setAxisAlignment(osgText::Text::SCREEN);
         text->setCharacterSize(nodeGeomSize); // 设置字体大小
-        text->setPosition(
-            p +
-            osg::Vec3(0.0f, 0.0f, 0.25f * nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-                                                          // 设置文字内容为点的ID
+
+        // TODO: 加入文字避让
+        text->setPosition(p + osg::Vec3(0.25f * nodeGeomSize, -0.25f * nodeGeomSize,
+                                        0.0f)); // 设置文字位置为点的位置稍微向上移动一些
+                                                // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
 
         osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
         textGeode->addDrawable(text.get());
-
+        textNodes.push_back(text);
         grp->addChild(textGeode.get());
 
         osgNodes.emplace(std::make_pair(itr->first, sphere));
     }
+    adjustTextPosition(textNodes, nodeGeomSize);
 
     auto segVerts = new osg::Vec3Array;
     auto segCols = new osg::Vec4Array;
