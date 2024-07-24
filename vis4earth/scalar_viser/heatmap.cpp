@@ -175,14 +175,17 @@ void VIS4Earth::HeatmapRenderer::updateGeometry() {
 }
 
 VIS4Earth::Heatmap2DDrawCallback::Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer,
-                                                        Ui::HeatmapRenderer *&ui,
-                                                        osg::ref_ptr<osg::Texture2D> &volSliceTex,
+                                                        Ui::HeatmapRenderer *ui,
+                                                        osg::ref_ptr<osg::Texture2D> volSliceTex,
                                                         VolumeComponent &volCmpt, QImage &heatmap2D)
     : heatmapRenderer(heatmapRenderer), ui(ui), volSliceTex(volSliceTex), volCmpt(volCmpt),
       heatmap2D(heatmap2D) {
-    computeShader = new ComputeShader(
-        (GetDataPathPrefix() + VIS4EARTH_SHADER_PREFIX "scalar_viser/heatmap_compute.glsl")
-            .c_str());
+    program = new osg::Program();
+
+    osg::ref_ptr<osg::Shader> computeShader = osg::Shader::readShaderFile(
+        osg::Shader::COMPUTE,
+        GetDataPathPrefix() + VIS4EARTH_SHADER_PREFIX "scalar_viser/heatmap_2D_cmpt.glsl");
+    program->addShader(computeShader);
 }
 
 void VIS4Earth::Heatmap2DDrawCallback::drawImplementation(osg::RenderInfo &renderInfo,
@@ -203,8 +206,9 @@ void VIS4Earth::Heatmap2DDrawCallback::drawImplementation(osg::RenderInfo &rende
     auto tf = volCmpt.GetTransferFunction(0);
     auto ext = renderInfo.getState()->get<osg::GLExtensions>();
 
-    computeShader->compile(ext);
-    computeShader->use(ext);
+    program->compileGLObjects(*state);
+    program->apply(*state);
+    auto handle = state->getLastAppliedProgramObject()->getHandle();
 
     // set uniforms
     GLuint volumeTex, tfTex;
@@ -214,14 +218,14 @@ void VIS4Earth::Heatmap2DDrawCallback::drawImplementation(osg::RenderInfo &rende
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, volSliceTex->getImage()->s(),
                  volSliceTex->getImage()->t(), 0, GL_RED, GL_UNSIGNED_BYTE,
                  volSliceTex->getImage()->data());
-    computeShader->setInt(ext, "volume", 1);
+    ext->glUniform1i(ext->glGetUniformLocation(handle, "volume"), 1);
 
     tfTex = tf->getTextureObject(state->getContextID())->id();
     ext->glActiveTexture(GL_TEXTURE0 + 2);
     glBindTexture(GL_TEXTURE_1D, tfTex);
     glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA, tf->getImage()->s(), 0, GL_RGBA, GL_FLOAT,
                  tf->getImage()->data());
-    computeShader->setInt(ext, "transferFunction", 2);
+    ext->glUniform1i(ext->glGetUniformLocation(handle, "transferFunction"), 2);
 
     // set output image
     GLuint heatmapTex;
