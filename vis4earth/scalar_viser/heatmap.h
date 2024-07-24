@@ -10,6 +10,8 @@
 #include <vis4earth/qt_osg_reflectable.h>
 #include <vis4earth/volume_cmpt.h>
 
+#pragma comment(lib, "opengl32.lib")
+
 namespace Ui {
 class HeatmapRenderer;
 }
@@ -25,6 +27,8 @@ class HeatmapRenderer : public QtOSGReflectableWidget {
     HeatmapRenderer(QWidget *parent = nullptr);
 
     osg::ref_ptr<osg::Group> GetGroup() const { return grp; }
+
+    void emitUpdateHeatmap2DSignal() { emit updateHeatmap2DSignal(); }
 
   protected:
     osg::ref_ptr<osg::Group> grp;
@@ -45,6 +49,28 @@ class HeatmapRenderer : public QtOSGReflectableWidget {
     void initOSGResource();
     void updateHeatmap2D();
     void updateGeometry();
+
+  signals:
+    void updateHeatmap2DSignal();
+};
+
+class Heatmap2DDrawCallback : public QObject, public osg::Drawable::DrawCallback {
+    Q_OBJECT
+  public:
+    Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer, Ui::HeatmapRenderer *ui,
+                          osg::ref_ptr<osg::Texture2D> volSliceTex, VolumeComponent &volCmpt,
+                          QImage &heatmap2D);
+    void drawImplementation(osg::RenderInfo &renderInfo,
+                            const osg::Drawable *drawable) const override;
+
+  protected:
+    HeatmapRenderer *heatmapRenderer;
+    Ui::HeatmapRenderer *ui;
+    osg::ref_ptr<osg::Texture2D> volSliceTex;
+    VolumeComponent &volCmpt;
+    QImage &heatmap2D;
+
+    osg::ref_ptr<osg::Program> program;
 };
 
 } // namespace VIS4Earth
