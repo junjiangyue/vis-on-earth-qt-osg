@@ -67,8 +67,7 @@ VIS4Earth::HeatmapRenderer::HeatmapRenderer(QWidget *parent)
     connect(&volCmpt, &VolumeComponent::TransferFunctionChanged, changeTF);
     changeTF();
 
-    connect(this, &HeatmapRenderer::updateHeatmap2DSignal, this, &HeatmapRenderer::updateHeatmap2D);
-
+    connect(this, &HeatmapRenderer::Heatmap2DUpdated, this, &HeatmapRenderer::displayHeatmap2D);
     updateGeometry();
 
     debugProperties({this, &volCmpt, &geoCmpt});
@@ -115,12 +114,15 @@ void VIS4Earth::HeatmapRenderer::initOSGResource() {
     stateSet->setAttributeAndModes(program, osg::StateAttribute::ON);
 
     geom->setUseDisplayList(false);
-    geom->setDrawCallback(new Heatmap2DDrawCallback(this, ui, volSliceTex, volCmpt, heatmap2D));
+    geom->setDrawCallback(new Heatmap2DDrawCallback(this));
     geode->addDrawable(geom);
     grp->addChild(geode);
 }
 
-void VIS4Earth::HeatmapRenderer::updateHeatmap2D() {
+void VIS4Earth::HeatmapRenderer::displayHeatmap2D() {
+    if (heatmap2D.isNull())
+        return;
+
     auto pixmap = QPixmap::fromImage(heatmap2D);
     if (!ui->graphicsView_2DView->scene())
         ui->graphicsView_2DView->setScene(new QGraphicsScene);
@@ -174,14 +176,9 @@ void VIS4Earth::HeatmapRenderer::updateGeometry() {
         new osg::DrawElementsUInt(GL_TRIANGLES, vertIndices.size(), vertIndices.data()));
 }
 
-VIS4Earth::Heatmap2DDrawCallback::Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer,
-                                                        Ui::HeatmapRenderer *ui,
-                                                        osg::ref_ptr<osg::Texture2D> volSliceTex,
-                                                        VolumeComponent &volCmpt, QImage &heatmap2D)
-    : heatmapRenderer(heatmapRenderer), ui(ui), volSliceTex(volSliceTex), volCmpt(volCmpt),
-      heatmap2D(heatmap2D) {
+VIS4Earth::Heatmap2DDrawCallback::Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer)
+    : heatmapRenderer(heatmapRenderer) {
     program = new osg::Program();
-
     osg::ref_ptr<osg::Shader> computeShader = osg::Shader::readShaderFile(
         osg::Shader::COMPUTE,
         GetDataPathPrefix() + VIS4EARTH_SHADER_PREFIX "scalar_viser/heatmap_2D_cmpt.glsl");
@@ -190,21 +187,37 @@ VIS4Earth::Heatmap2DDrawCallback::Heatmap2DDrawCallback(HeatmapRenderer *heatmap
 
 void VIS4Earth::Heatmap2DDrawCallback::drawImplementation(osg::RenderInfo &renderInfo,
                                                           const osg::Drawable *drawable) const {
-    auto state = renderInfo.getState();
     drawable->drawImplementation(renderInfo);
 
+    auto state = renderInfo.getState();
+    auto ext = renderInfo.getState()->get<osg::GLExtensions>();
+
+    const auto *ui = heatmapRenderer->ui;
+    const auto &volCmpt = heatmapRenderer->volCmpt;
+    auto &heatmap2D = heatmapRenderer->heatmap2D;
+    auto volSliceTex = heatmapRenderer->volSliceTex;
+    auto tf = volCmpt.GetTransferFunction(0);
+
     if (heatmap2D.width() != ui->spinBox_resX->value() ||
-        heatmap2D.height() != ui->spinBox_resY->value())
+        heatmap2D.height() != ui->spinBox_resY->value()) {
         heatmap2D =
             QImage(ui->spinBox_resX->value(), ui->spinBox_resY->value(), QImage::Format_RGBA8888);
 
-    if (!volCmpt.GetVolume(0, 0)) {
-        heatmapRenderer->emitUpdateHeatmap2DSignal();
-        return;
+        if (heatmapTex != 0)
+            glDeleteTextures(1, &heatmapTex);
+        glGenTextures(1, &heatmapTex);
+        ext->glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, heatmapTex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, heatmap2D.width(), heatmap2D.height(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, nullptr);
     }
 
-    auto tf = volCmpt.GetTransferFunction(0);
-    auto ext = renderInfo.getState()->get<osg::GLExtensions>();
+    if (!volCmpt.GetVolume(0, 0)) {
+        emit heatmapRenderer->Heatmap2DUpdated();
+        return;
+    }
 
     program->compileGLObjects(*state);
     program->apply(*state);
@@ -215,35 +228,25 @@ void VIS4Earth::Heatmap2DDrawCallback::drawImplementation(osg::RenderInfo &rende
     volumeTex = volSliceTex->getTextureObject(state->getContextID())->id();
     ext->glActiveTexture(GL_TEXTURE0 + 1);
     glBindTexture(GL_TEXTURE_2D, volumeTex);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, volSliceTex->getImage()->s(),
-                 volSliceTex->getImage()->t(), 0, GL_RED, GL_UNSIGNED_BYTE,
-                 volSliceTex->getImage()->data());
     ext->glUniform1i(ext->glGetUniformLocation(handle, "volume"), 1);
 
     tfTex = tf->getTextureObject(state->getContextID())->id();
     ext->glActiveTexture(GL_TEXTURE0 + 2);
     glBindTexture(GL_TEXTURE_1D, tfTex);
-    glTexImage1D(GL_TEXTURE_1D, 0, GL_RGBA, tf->getImage()->s(), 0, GL_RGBA, GL_FLOAT,
-                 tf->getImage()->data());
     ext->glUniform1i(ext->glGetUniformLocation(handle, "transferFunction"), 2);
 
     // set output image
-    GLuint heatmapTex;
-    glGenTextures(1, &heatmapTex);
     ext->glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, heatmapTex);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, heatmap2D.width(), heatmap2D.height(), 0, GL_RGBA,
-                 GL_UNSIGNED_BYTE, nullptr);
     ext->glBindImageTexture(0, heatmapTex, 0, GL_FALSE, 0, GL_WRITE_ONLY_ARB, GL_RGBA8UI_EXT);
 
     // compute
-    ext->glDispatchCompute(heatmap2D.width(), heatmap2D.height(), 1);
+    auto grpNumX = (heatmap2D.width() + 16 - 1) / 16;
+    auto grpNumY = (heatmap2D.height() + 16 - 1) / 16;
+    ext->glDispatchCompute(grpNumX, grpNumY, 1);
     ext->glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, heatmap2D.bits());
 
-    glDeleteTextures(1, &heatmapTex);
-    heatmapRenderer->emitUpdateHeatmap2DSignal();
+    emit heatmapRenderer->Heatmap2DUpdated();
 }

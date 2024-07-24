@@ -19,6 +19,8 @@ class HeatmapRenderer;
 namespace VIS4Earth {
 
 class HeatmapRenderer : public QtOSGReflectableWidget {
+    friend class Heatmap2DDrawCallback;
+
     Q_OBJECT
 
   public:
@@ -27,8 +29,6 @@ class HeatmapRenderer : public QtOSGReflectableWidget {
     HeatmapRenderer(QWidget *parent = nullptr);
 
     osg::ref_ptr<osg::Group> GetGroup() const { return grp; }
-
-    void emitUpdateHeatmap2DSignal() { emit updateHeatmap2DSignal(); }
 
   protected:
     osg::ref_ptr<osg::Group> grp;
@@ -44,32 +44,33 @@ class HeatmapRenderer : public QtOSGReflectableWidget {
     Ui::HeatmapRenderer *ui;
     GeographicsComponent geoCmpt;
     VolumeComponent volCmpt;
+
     QImage heatmap2D;
 
     void initOSGResource();
-    void updateHeatmap2D();
+    void displayHeatmap2D();
     void updateGeometry();
 
   signals:
-    void updateHeatmap2DSignal();
+    void Heatmap2DUpdated();
 };
 
 class Heatmap2DDrawCallback : public QObject, public osg::Drawable::DrawCallback {
     Q_OBJECT
   public:
-    Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer, Ui::HeatmapRenderer *ui,
-                          osg::ref_ptr<osg::Texture2D> volSliceTex, VolumeComponent &volCmpt,
-                          QImage &heatmap2D);
+    Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer);
+    ~Heatmap2DDrawCallback() {
+        if (heatmapTex != 0)
+            glDeleteTextures(1, &heatmapTex);
+    }
+
     void drawImplementation(osg::RenderInfo &renderInfo,
                             const osg::Drawable *drawable) const override;
 
-  protected:
-    HeatmapRenderer *heatmapRenderer;
-    Ui::HeatmapRenderer *ui;
-    osg::ref_ptr<osg::Texture2D> volSliceTex;
-    VolumeComponent &volCmpt;
-    QImage &heatmap2D;
+  private:
+    HeatmapRenderer *heatmapRenderer = nullptr;
 
+    mutable GLuint heatmapTex = 0;
     osg::ref_ptr<osg::Program> program;
 };
 
