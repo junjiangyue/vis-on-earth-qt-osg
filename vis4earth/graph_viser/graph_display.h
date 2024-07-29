@@ -56,12 +56,14 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::Vec3 pos;
         osg::Vec3 color;
         std::string id;
+        bool visible = true; // 默认可见
     };
 
     struct Edge {
         std::string from;
         std::string to;
         std::vector<osg::Vec3> subDivs;
+        bool visible = true; // 默认可见
     };
     struct CoordRange {
         float minX;

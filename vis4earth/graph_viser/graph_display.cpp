@@ -677,6 +677,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     std::map<std::string, osg::ShapeDrawable *> osgNodes;
     std::vector<osg::ref_ptr<osgText::Text>> textNodes;
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
+        if (!itr->second.visible)
+            continue;                                        // 只处理可见节点
         osg::Vec4 color = osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f); // Set color to blue
         // osg::Vec4 color = osg::Vec4(itr->second.color, 1.f);
         if (!restrictionOFF) {
@@ -730,6 +732,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     auto segCols = new osg::Vec4Array;
 
     for (auto &edge : *edges) {
+        if (!edge.visible)
+            continue; // 只处理可见边
+
         osg::Vec4 prevColor = osg::Vec4(nodes->at(edge.from).color, 1.f);
         auto dCol = osg::Vec4(nodes->at(edge.to).color, 1.f) - prevColor;
         dCol /= (edge.subDivs.size() == 1 ? 1 : edge.subDivs.size() - 1);
