@@ -44,7 +44,6 @@ class HeatmapRenderer : public QtOSGReflectableWidget {
     Ui::HeatmapRenderer *ui;
     GeographicsComponent geoCmpt;
     VolumeComponent volCmpt;
-
     QImage heatmap2D;
 
     void initOSGResource();
