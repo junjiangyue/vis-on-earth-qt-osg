@@ -64,6 +64,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::string to;
         std::vector<osg::Vec3> subDivs;
         bool visible = true; // 默认可见
+        bool isAdd = false;  // 默认不是后添加的边
     };
     struct CoordRange {
         float minX;
@@ -115,7 +116,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
             auto states = grp->getOrCreateStateSet();
             states->setMode(GL_DEPTH_TEST, osg::StateAttribute::ON);
         }
-
+        std::shared_ptr<std::map<std::string, Node>> getNodes() { return nodes; }
+        std::shared_ptr<std::vector<Edge>> getEdges() { return edges; }
         void update();
         void setRestriction(VIS4Earth::Area res);
         bool setLongitudeRange(float minLonDeg, float maxLonDeg);
@@ -148,6 +150,17 @@ class GraphRenderer : public QtOSGReflectableWidget {
         return &(itr->second);
     }
     std::map<std::string, PerGraphParam> &getGraphs() { return graphs; }
+
+    std::shared_ptr<std::map<std::string, Node>> getNodes(const std::string &graphName);
+    std::shared_ptr<std::vector<Edge>> getEdges(const std::string &graphName);
+    void update(const std::string &graphName);
+    void GraphRenderer::setEdges(const std::string &graphName,
+                                 std::shared_ptr<std::vector<Edge>> edges) {
+        auto it = graphs.find(graphName);
+        if (it != graphs.end()) {
+            it->second.edges = edges;
+        }
+    }
 
   protected:
     Ui::GraphRenderer *ui;

@@ -136,6 +136,30 @@ void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
                               std::forward_as_tuple(nodes, edges, &param));
     param.grp->addChild(opt.first->second.grp);
 }
+std::shared_ptr<std::map<std::string, GraphRenderer::Node>>
+GraphRenderer::getNodes(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        return itr->second.getNodes();
+    }
+    return nullptr;
+}
+
+std::shared_ptr<std::vector<GraphRenderer::Edge>>
+GraphRenderer::getEdges(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        return itr->second.getEdges();
+    }
+    return nullptr;
+}
+
+void GraphRenderer::update(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        itr->second.update();
+    }
+}
 void GraphRenderer::loadPointsCSV() {
     QString pointsFileName =
         QFileDialog::getOpenFileName(this, tr("Open Points CSV"), "", tr("CSV Files (*.csv)"));
@@ -696,6 +720,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
         p = vec3ToSphere(p);
         auto sphere = new osg::ShapeDrawable(new osg::Sphere(p, .25f * nodeGeomSize), tessl);
+        osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
+        centerData->push_back(itr->second.pos);
+        sphere->setUserData(centerData);
+
         sphere->setColor(color);
 
         auto states = grp->getOrCreateStateSet();

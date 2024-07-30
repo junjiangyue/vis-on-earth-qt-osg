@@ -7,6 +7,7 @@
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>
 
+#include <vis4earth/graph_viser/NodeClickHandler.h>
 #include <vis4earth/graph_viser/graph_display.h>
 
 int main(int argc, char **argv) {
@@ -21,8 +22,15 @@ int main(int argc, char **argv) {
     grp->addChild(VIS4Earth::CreateEarth());
 
     VIS4Earth::GraphRenderer *graphLayout = new VIS4Earth::GraphRenderer;
+
     grp->addChild(graphLayout->getGroup());
     graphLayout->show();
+
+    // 添加点击事件
+    VIS4Earth::NodeClickHandler *nodeClickHandler =
+        new VIS4Earth::NodeClickHandler(graphLayout, viewer);
+    // 将 NodeClickHandler 添加到 Viewer 的事件处理器中
+    viewer->addEventHandler(nodeClickHandler);
 
     viewer->setSceneData(grp);
     auto prevClk = clock();

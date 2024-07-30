@@ -34,6 +34,7 @@ list(
 	"osgGA"
 	"osgText"
 	"OpenThreads"
+	"osgUtil"
 )
 
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
