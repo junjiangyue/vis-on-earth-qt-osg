@@ -12,10 +12,7 @@ VIS4Earth::HeatmapRenderer::HeatmapRenderer(QWidget *parent)
 
     initOSGResource();
 
-    auto onResUpdated = [&]() {
-        updateGeometry();
-        updateHeatmap2D();
-    };
+    auto onResUpdated = [&]() { updateGeometry(); };
     connect(ui->spinBox_resX, &QSpinBox::editingFinished, onResUpdated);
     connect(ui->spinBox_resY, &QSpinBox::editingFinished, onResUpdated);
 
@@ -56,13 +53,9 @@ VIS4Earth::HeatmapRenderer::HeatmapRenderer(QWidget *parent)
         volHeight->set(h);
 
         genHeatmapTex();
-        updateHeatmap2D();
     });
     connect(ui->spinBox_height_int_VIS4EarthReflectable,
-            QOverload<int>::of(&QSpinBox::valueChanged), [&, genHeatmapTex]() {
-                genHeatmapTex();
-                updateHeatmap2D();
-            });
+            QOverload<int>::of(&QSpinBox::valueChanged), [&, genHeatmapTex]() { genHeatmapTex(); });
     connect(ui->comboBox_texFilterMode, QOverload<int>::of(&QComboBox::currentIndexChanged),
             genHeatmapTex);
 
@@ -70,12 +63,11 @@ VIS4Earth::HeatmapRenderer::HeatmapRenderer(QWidget *parent)
         auto stateSet = geode->getOrCreateStateSet();
         stateSet->setTextureAttributeAndModes(0, volCmpt.GetTransferFunction(0),
                                               osg::StateAttribute::ON);
-
-        updateHeatmap2D();
     };
     connect(&volCmpt, &VolumeComponent::TransferFunctionChanged, changeTF);
     changeTF();
 
+    connect(this, &HeatmapRenderer::Heatmap2DUpdated, this, &HeatmapRenderer::displayHeatmap2D);
     updateGeometry();
 
     debugProperties({this, &volCmpt, &geoCmpt});
@@ -121,34 +113,15 @@ void VIS4Earth::HeatmapRenderer::initOSGResource() {
     stateSet->setMode(GL_DEPTH_TEST, osg::StateAttribute::ON);
     stateSet->setAttributeAndModes(program, osg::StateAttribute::ON);
 
+    geom->setUseDisplayList(false);
+    geom->setDrawCallback(new Heatmap2DDrawCallback(this));
     geode->addDrawable(geom);
     grp->addChild(geode);
 }
 
-void VIS4Earth::HeatmapRenderer::updateHeatmap2D() {
-    if (heatmap2D.width() != ui->spinBox_resX->value() ||
-        heatmap2D.height() != ui->spinBox_resY->value())
-        heatmap2D =
-            QImage(ui->spinBox_resX->value(), ui->spinBox_resY->value(), QImage::Format_RGB32);
-
-    if (!volCmpt.GetVolume(0, 0))
+void VIS4Earth::HeatmapRenderer::displayHeatmap2D() {
+    if (heatmap2D.isNull())
         return;
-
-    auto &vol = volCmpt.GetVolumeCPU(0, 0);
-    auto &tfFlatDat = volCmpt.GetTransferFunctionCPU(0).GetFlatData();
-    std::array<float, 3> scale{1.f * (vol.GetVoxelPerVolume()[0] - 1) / heatmap2D.width(),
-                               1.f * (vol.GetVoxelPerVolume()[1] - 1) / heatmap2D.height(),
-                               1.f * (vol.GetVoxelPerVolume()[2] - 1) /
-                                   volCmpt.GetVolume(0, 0)->getImage()->r()};
-    int z = ui->spinBox_height_int_VIS4EarthReflectable->value() * scale[2];
-    for (int y = 0; y < heatmap2D.height(); ++y) {
-        auto pxPtr = reinterpret_cast<QRgb *>(heatmap2D.scanLine(heatmap2D.height() - 1 - y));
-        for (int x = 0; x < heatmap2D.width(); ++x, ++pxPtr) {
-            auto scalar = vol.Sample<uint8_t>(scale[0] * x, scale[1] * y, z);
-            auto &rgba = tfFlatDat[scalar];
-            *pxPtr = qRgb(rgba[0] * 255.f, rgba[1] * 255.f, rgba[2] * 255.f);
-        }
-    }
 
     auto pixmap = QPixmap::fromImage(heatmap2D);
     if (!ui->graphicsView_2DView->scene())
@@ -201,4 +174,79 @@ void VIS4Earth::HeatmapRenderer::updateGeometry() {
     geom->getPrimitiveSetList().clear();
     geom->addPrimitiveSet(
         new osg::DrawElementsUInt(GL_TRIANGLES, vertIndices.size(), vertIndices.data()));
+}
+
+VIS4Earth::Heatmap2DDrawCallback::Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer)
+    : heatmapRenderer(heatmapRenderer) {
+    program = new osg::Program();
+    osg::ref_ptr<osg::Shader> computeShader = osg::Shader::readShaderFile(
+        osg::Shader::COMPUTE,
+        GetDataPathPrefix() + VIS4EARTH_SHADER_PREFIX "scalar_viser/heatmap_2D_cmpt.glsl");
+    program->addShader(computeShader);
+}
+
+void VIS4Earth::Heatmap2DDrawCallback::drawImplementation(osg::RenderInfo &renderInfo,
+                                                          const osg::Drawable *drawable) const {
+    drawable->drawImplementation(renderInfo);
+
+    auto state = renderInfo.getState();
+    auto ext = renderInfo.getState()->get<osg::GLExtensions>();
+
+    const auto *ui = heatmapRenderer->ui;
+    const auto &volCmpt = heatmapRenderer->volCmpt;
+    auto &heatmap2D = heatmapRenderer->heatmap2D;
+    auto volSliceTex = heatmapRenderer->volSliceTex;
+    auto tf = volCmpt.GetTransferFunction(0);
+
+    if (heatmap2D.width() != ui->spinBox_resX->value() ||
+        heatmap2D.height() != ui->spinBox_resY->value()) {
+        heatmap2D =
+            QImage(ui->spinBox_resX->value(), ui->spinBox_resY->value(), QImage::Format_RGBA8888);
+
+        if (heatmapTex != 0)
+            glDeleteTextures(1, &heatmapTex);
+        glGenTextures(1, &heatmapTex);
+        ext->glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, heatmapTex);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, heatmap2D.width(), heatmap2D.height(), 0, GL_RGBA,
+                     GL_UNSIGNED_BYTE, nullptr);
+    }
+
+    if (!volCmpt.GetVolume(0, 0)) {
+        emit heatmapRenderer->Heatmap2DUpdated();
+        return;
+    }
+
+    program->compileGLObjects(*state);
+    program->apply(*state);
+    auto handle = state->getLastAppliedProgramObject()->getHandle();
+
+    // set uniforms
+    GLuint volumeTex, tfTex;
+    volumeTex = volSliceTex->getTextureObject(state->getContextID())->id();
+    ext->glActiveTexture(GL_TEXTURE0 + 1);
+    glBindTexture(GL_TEXTURE_2D, volumeTex);
+    ext->glUniform1i(ext->glGetUniformLocation(handle, "volume"), 1);
+
+    tfTex = tf->getTextureObject(state->getContextID())->id();
+    ext->glActiveTexture(GL_TEXTURE0 + 2);
+    glBindTexture(GL_TEXTURE_1D, tfTex);
+    ext->glUniform1i(ext->glGetUniformLocation(handle, "transferFunction"), 2);
+
+    // set output image
+    ext->glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, heatmapTex);
+    ext->glBindImageTexture(0, heatmapTex, 0, GL_FALSE, 0, GL_WRITE_ONLY_ARB, GL_RGBA8UI_EXT);
+
+    // compute
+    auto grpNumX = (heatmap2D.width() + 16 - 1) / 16;
+    auto grpNumY = (heatmap2D.height() + 16 - 1) / 16;
+    ext->glDispatchCompute(grpNumX, grpNumY, 1);
+    ext->glMemoryBarrier(GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, heatmap2D.bits());
+
+    emit heatmapRenderer->Heatmap2DUpdated();
 }

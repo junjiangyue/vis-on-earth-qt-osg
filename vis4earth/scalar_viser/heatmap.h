@@ -10,6 +10,8 @@
 #include <vis4earth/qt_osg_reflectable.h>
 #include <vis4earth/volume_cmpt.h>
 
+#pragma comment(lib, "opengl32.lib")
+
 namespace Ui {
 class HeatmapRenderer;
 }
@@ -17,6 +19,8 @@ class HeatmapRenderer;
 namespace VIS4Earth {
 
 class HeatmapRenderer : public QtOSGReflectableWidget {
+    friend class Heatmap2DDrawCallback;
+
     Q_OBJECT
 
   public:
@@ -43,8 +47,30 @@ class HeatmapRenderer : public QtOSGReflectableWidget {
     QImage heatmap2D;
 
     void initOSGResource();
-    void updateHeatmap2D();
+    void displayHeatmap2D();
     void updateGeometry();
+
+  signals:
+    void Heatmap2DUpdated();
+};
+
+class Heatmap2DDrawCallback : public QObject, public osg::Drawable::DrawCallback {
+    Q_OBJECT
+  public:
+    Heatmap2DDrawCallback(HeatmapRenderer *heatmapRenderer);
+    ~Heatmap2DDrawCallback() {
+        if (heatmapTex != 0)
+            glDeleteTextures(1, &heatmapTex);
+    }
+
+    void drawImplementation(osg::RenderInfo &renderInfo,
+                            const osg::Drawable *drawable) const override;
+
+  private:
+    HeatmapRenderer *heatmapRenderer = nullptr;
+
+    mutable GLuint heatmapTex = 0;
+    osg::ref_ptr<osg::Program> program;
 };
 
 } // namespace VIS4Earth
