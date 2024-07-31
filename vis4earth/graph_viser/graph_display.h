@@ -89,6 +89,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         float minLatitude, maxLatitude;
         float minHeight, maxHeight;
         float nodeGeomSize;
+        float textSize;
         bool volStartFromLonZero;
 
         std::shared_ptr<std::map<std::string, Node>> nodes;
@@ -129,6 +130,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void setGraphStartFromLongitudeZero(bool flag) { volStartFromLonZero = flag; }
 
         void setNodeGeometrySize(float sz) { nodeGeomSize = sz; }
+        void setTextGeometrySize(float sz) { textSize = sz; }
 
       private:
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
@@ -194,6 +196,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     void setMinY(double value);
     void setMaxY(double value);
+    void onArrowFlowButtonClicked();
     void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value);
 
     void VIS4Earth::GraphRenderer::onNumberOfIterationsChanged(int value);
@@ -224,6 +227,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void VIS4Earth::GraphRenderer::onEdgePercentageThresholdChanged(double value);
 
     void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value);
+
+    void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value);
 };
 
 } // namespace VIS4Earth

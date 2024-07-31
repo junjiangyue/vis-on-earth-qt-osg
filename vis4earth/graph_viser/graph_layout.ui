@@ -88,9 +88,64 @@
                         </property>
                       </widget>
                     </item>
+                    <item row="4" column="0">
+                      <widget class="QLabel" name="fontSizeLabel">
+                        <property name="text">
+                          <string>字体大小: 12</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item row="4" column="2">
+                      <widget class="QSlider" name="fontSizeSlider">
+                        <property name="minimum">
+                          <number>8</number>
+                        </property>
+                        <property name="maximum">
+                          <number>32</number>
+                        </property>
+                        <property name="value">
+                          <number>12</number>
+                        </property>
+                        <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
+                        </property>
+                      </widget>
+                    </item>
                   </layout>
                 </widget>
               </item>
+              <!-- New Flow Visualization Group Box -->
+              <item>
+                <widget class="QGroupBox" name="groupBoxFlowVisualization">
+                  <property name="title">
+                    <string>流向可视化</string>
+                  </property>
+                  <layout class="QHBoxLayout" name="horizontalLayoutFlowVisualization">
+                    <item>
+                      <widget class="QPushButton" name="arrowFlowButton">
+                        <property name="text">
+                          <string>箭头流动</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QPushButton" name="highlightFlowButton">
+                        <property name="text">
+                          <string>高光光照流动</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item>
+                      <widget class="QPushButton" name="textureFlowButton">
+                        <property name="text">
+                          <string>纹理着色流动</string>
+                        </property>
+                      </widget>
+                    </item>
+                  </layout>
+                </widget>
+              </item>
+
               <item>
                 <layout class="QHBoxLayout" name="horizontalLayout">
                   <item>

@@ -184,9 +184,11 @@ std::string NodeClickHandler::getNodeIdFromSphere(osg::ShapeDrawable *sphere) {
 
     // 查找与 sphereCenter 匹配的节点 ID
     auto nodes = graphRenderer->getNodes("LoadedGraph");
-    for (const auto &node : *nodes) {
-        if ((node.second.pos - sphereCenter).length() < 0.01f) {
-            return node.first;
+    if (nodes) {
+        for (const auto &node : *nodes) {
+            if ((node.second.pos - sphereCenter).length() < 0.01f) {
+                return node.first;
+            }
         }
     }
     std::cout << "No matching node found" << std::endl;

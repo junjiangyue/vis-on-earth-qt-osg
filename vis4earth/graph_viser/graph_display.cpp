@@ -42,6 +42,8 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     // Connect the slider's valueChanged signal to the slot function
     connect(ui->sizeSlider, &QSlider::valueChanged, this, &GraphRenderer::onSizeSliderValueChanged);
+    connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
+            &GraphRenderer::onFontSizeSliderValueChanged);
     // 连接参数设置的信号到槽函数
     connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setAttraction);
@@ -123,6 +125,8 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxEdgePercentageThreshold,
             QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::onEdgePercentageThresholdChanged);
+    connect(ui->arrowFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onArrowFlowButtonClicked);
 }
 void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
                                         std::shared_ptr<std::map<std::string, Node>> nodes,
@@ -245,6 +249,7 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
                 static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
                 static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
             graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+            graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->update();
         }
         myGraph = graph;
@@ -321,6 +326,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
         graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
         graphParam->update();
@@ -404,6 +410,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
         graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
         graphParam->update();
@@ -485,6 +492,7 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
         graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
         graphParam->update();
@@ -498,6 +506,10 @@ void VIS4Earth::GraphRenderer::setMaxX(double value) { myRestriction.rightBound 
 void VIS4Earth::GraphRenderer::setMinY(double value) { myRestriction.bottomBound = value; }
 
 void VIS4Earth::GraphRenderer::setMaxY(double value) { myRestriction.upperBound = value; }
+
+void VIS4Earth::GraphRenderer::onArrowFlowButtonClicked() {
+    // TODO:绘制箭头流动
+}
 
 // 边绑定的参数
 void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value) {
@@ -592,7 +604,8 @@ void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value) {
         graphParam->setHeightFromCenterRange(
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
             static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setNodeGeometrySize(size * .02f *
+                                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->update();
     }
     // 初始化 UI
@@ -603,6 +616,17 @@ void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value) {
                        .arg(coordRange.maxY)
                        .arg(coordRange.minY);
     coordRangeLabel->setText(text);
+}
+
+void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
+    // Update the label text
+    ui->fontSizeLabel->setText(QString("字体大小: %1").arg(value));
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->setTextGeometrySize(value / 12.0 * .02f *
+                                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->update();
+    }
 }
 // 检查两个矩形是否重叠，并返回重叠的距离
 osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
@@ -739,7 +763,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         text->setText(itr->first);
         text->setFont("Fonts/simhei.ttf"); // 设置字体
         text->setAxisAlignment(osgText::Text::SCREEN);
-        text->setCharacterSize(nodeGeomSize); // 设置字体大小
+        if (textSize) {
+            text->setCharacterSize(textSize); // 设置字体大小
+        } else {
+            text->setCharacterSize(nodeGeomSize);
+        }
 
         // TODO: 加入文字避让
         text->setPosition(p + osg::Vec3(0.25f * nodeGeomSize, -0.25f * nodeGeomSize,
