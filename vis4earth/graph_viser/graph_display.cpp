@@ -799,25 +799,43 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         prevPos.x() = dltPos.x() == 0.f ? prevPos.x() : prevPos.x() / dltPos.x();
         prevPos.y() = dltPos.y() == 0.f ? prevPos.y() : prevPos.y() / dltPos.y();
         prevPos.z() = dltPos.z() == 0.f ? prevPos.z() : prevPos.z() / dltPos.z();
-        prevPos = vec3ToSphere(prevPos);
+        //prevPos = vec3ToSphere(prevPos);
 
-        for (size_t i = 1; i < edge.subDivs.size(); ++i) {
-            segVerts->push_back(prevPos);
-            segCols->push_back(prevColor);
+        osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
+        osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
+        for (size_t i = 0; i < edge.subDivs.size(); ++i) {
+            osg::Vec3 currentPos = edge.subDivs[i] - minPos;
+            currentPos.x() = dltPos.x() == 0.f ? currentPos.x() : currentPos.x() / dltPos.x();
+            currentPos.y() = dltPos.y() == 0.f ? currentPos.y() : currentPos.y() / dltPos.y();
+            currentPos.z() = dltPos.z() == 0.f ? currentPos.z() : currentPos.z() / dltPos.z();
+            //currentPos = vec3ToSphere(currentPos);
 
-            auto p = edge.subDivs[i] - minPos;
-            p.x() = dltPos.x() == 0.f ? p.x() : p.x() / dltPos.x();
-            p.y() = dltPos.y() == 0.f ? p.y() : p.y() / dltPos.y();
-            p.z() = dltPos.z() == 0.f ? p.z() : p.z() / dltPos.z();
-            p = vec3ToSphere(p);
+            osg::Vec4 currentColor = prevColor + dCol;
 
-            auto color = prevColor + dCol;
+            // 在 prevPos 和 currentPos 之间插入 5 个细分点
+            for (int j = 0; j <= 5; ++j) { // 包含起点和终点，共 6 个点
+                float t = static_cast<float>(j) / 5.0f;
 
-            segVerts->push_back(p);
-            segCols->push_back(color);
+                osg::Vec3 interpolatedPos;
+                interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
+                interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
+                interpolatedPos.z() = prevPos.z() * (1.0f - t) + currentPos.z() * t;
 
-            prevPos = p;
-            prevColor = color;
+                osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
+
+                if (j > 0 ) { // 从第二个插值点开始创建线段
+                    segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
+                    segCols->push_back(prevInterpolatedColor);
+                    segVerts->push_back(vec3ToSphere(interpolatedPos));
+                    segCols->push_back(interpolatedColor);
+                }
+
+                prevInterpolatedPos = interpolatedPos;
+                prevInterpolatedColor = interpolatedColor;
+            }
+
+            prevPos = currentPos;
+            prevColor = currentColor;
         }
     }
 
