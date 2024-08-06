@@ -13,16 +13,20 @@
 #include <unordered_set>
 #include <vector>
 
+#include <osg/AnimationPath>
 #include <osg/CoordinateSystemNode>
 #include <osg/CullFace>
 #include <osg/Geode>
 #include <osg/Geometry>
 #include <osg/LineWidth>
 #include <osg/Material>
+#include <osg/MatrixTransform>
 #include <osg/ShapeDrawable>
+#include <osgAnimation/AnimationManagerBase>
+#include <osgAnimation/BasicAnimationManager>
+#include <osgAnimation/StackedTransform>
 
 #include <qtcore/qtimer>
-// #include <ui_graph_layout.h>
 
 #include <vis4earth/geographics_cmpt.h>
 #include <vis4earth/graph_viser/edge_bundling.h>
@@ -37,6 +41,51 @@ class GraphRenderer;
 }
 
 namespace VIS4Earth {
+
+class ArrowCallback : public osg::NodeCallback {
+  public:
+    ArrowCallback(const osg::Vec3 &start, const osg::Vec3 &end, float length)
+        : _start(start), _end(end), _length(length), _progress(0.0f) {}
+
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
+        osg::Geode *geode = dynamic_cast<osg::Geode *>(node);
+        if (geode) {
+            osg::Geometry *geom = dynamic_cast<osg::Geometry *>(geode->getDrawable(0));
+            if (geom) {
+                osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(geom->getVertexArray());
+
+                _progress += 0.01f; // 进度增加速度，可以调整
+                if (_progress > 1.0f)
+                    _progress = 0.0f;
+
+                osg::Vec3 newEnd = _start * (1.0f - _progress) + _end * _progress;
+
+                (*vertices)[1] = newEnd; // 更新箭头尾部位置
+
+                // 更新箭头头部
+                osg::Vec3 direction = _end - _start;
+                direction.normalize();
+                osg::Vec3 arrowHead = newEnd - direction * 0.1f * _length;
+                osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f); // 垂直方向
+                osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f);
+
+                (*vertices)[2] = arrowHead + left * 0.05f * _length;
+                (*vertices)[4] = arrowHead + right * 0.05f * _length;
+
+                geom->dirtyDisplayList();
+                geom->dirtyBound();
+            }
+        }
+
+        traverse(node, nv);
+    }
+
+  private:
+    osg::Vec3 _start;
+    osg::Vec3 _end;
+    float _length;
+    float _progress;
+};
 
 class GraphRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
@@ -91,7 +140,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         float nodeGeomSize;
         float textSize;
         bool volStartFromLonZero;
-
+        bool arrowFlowEnabled = false; // 标志变量
         std::shared_ptr<std::map<std::string, Node>> nodes;
         std::shared_ptr<std::vector<Edge>> edges;
 
@@ -100,6 +149,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
       public:
         VIS4Earth::Area restriction;
         bool restrictionOFF = true;
+
         PerGraphParam(std::shared_ptr<std::map<std::string, Node>> nodes,
                       std::shared_ptr<std::vector<Edge>> edges, PerRendererParam *renderer)
             : nodes(std::move(nodes)), edges(std::move(edges)), grp(new osg::Group) {
@@ -120,6 +170,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::shared_ptr<std::map<std::string, Node>> getNodes() { return nodes; }
         std::shared_ptr<std::vector<Edge>> getEdges() { return edges; }
         void update();
+        void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
+                                  const osg::Vec4 &color);
+        void startArrowAnimation();
         void setRestriction(VIS4Earth::Area res);
         bool setLongitudeRange(float minLonDeg, float maxLonDeg);
 
@@ -197,6 +250,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void setMinY(double value);
     void setMaxY(double value);
     void onArrowFlowButtonClicked();
+    void onHighlightFlowButtonClicked();
+    void onTextureFlowButtonClicked();
     void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value);
 
     void VIS4Earth::GraphRenderer::onNumberOfIterationsChanged(int value);

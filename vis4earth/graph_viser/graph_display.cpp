@@ -125,9 +125,15 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxEdgePercentageThreshold,
             QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::onEdgePercentageThresholdChanged);
+    // 连接箭头流动
     connect(ui->arrowFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onArrowFlowButtonClicked);
+    connect(ui->highlightFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onHighlightFlowButtonClicked);
+    connect(ui->textureFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onTextureFlowButtonClicked);
 }
+
 void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
                                         std::shared_ptr<std::map<std::string, Node>> nodes,
                                         std::shared_ptr<std::vector<Edge>> edges) {
@@ -140,6 +146,7 @@ void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
                               std::forward_as_tuple(nodes, edges, &param));
     param.grp->addChild(opt.first->second.grp);
 }
+
 std::shared_ptr<std::map<std::string, GraphRenderer::Node>>
 GraphRenderer::getNodes(const std::string &graphName) {
     auto itr = graphs.find(graphName);
@@ -164,6 +171,7 @@ void GraphRenderer::update(const std::string &graphName) {
         itr->second.update();
     }
 }
+
 void GraphRenderer::loadPointsCSV() {
     QString pointsFileName =
         QFileDialog::getOpenFileName(this, tr("Open Points CSV"), "", tr("CSV Files (*.csv)"));
@@ -509,7 +517,14 @@ void VIS4Earth::GraphRenderer::setMaxY(double value) { myRestriction.upperBound 
 
 void VIS4Earth::GraphRenderer::onArrowFlowButtonClicked() {
     // TODO:绘制箭头流动
+    auto graphParam = getGraph("LoadedGraph");
+
+    graphParam->startArrowAnimation();
 }
+
+void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {}
+
+void VIS4Earth::GraphRenderer::onTextureFlowButtonClicked() {}
 
 // 边绑定的参数
 void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value) {
@@ -678,6 +693,158 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
         }
     }
 }
+
+void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Vec3 &start,
+                                                                   const osg::Vec3 &end,
+                                                                   const osg::Vec4 &color) {
+    std::cout << "Creating arrow animation from " << start.x() << " to " << end.x() << std::endl;
+    auto geom = new osg::Geometry;
+
+    // 计算箭头方向和长度
+    osg::Vec3 direction = end - start;
+    float length = direction.length();
+    direction.normalize();
+
+    // 计算插值点
+    const int numSubdivisions = 5; // 细分数量
+    osg::Vec3Array *vertices = new osg::Vec3Array;
+    osg::Vec4Array *colors = new osg::Vec4Array;
+
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        float t = static_cast<float>(i) / numSubdivisions;
+        osg::Vec3 interpolatedPos = start * (1.0f - t) + end * t;
+
+        vertices->push_back(interpolatedPos);
+        colors->push_back(color);
+    }
+
+    // 添加箭头的形状
+    osg::Vec3 arrowHead = end - direction * 0.1f; // 箭头头部长度为线段的10%
+    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.05f * length;
+    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.05f * length;
+
+    vertices->push_back(arrowHead + left);
+    vertices->push_back(end);
+    vertices->push_back(arrowHead + right);
+
+    geom->setVertexArray(vertices);
+    geom->setColorArray(colors, osg::Array::BIND_PER_VERTEX);
+
+    // 使用线段绘制箭头的主体
+    geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, vertices->size()));
+
+    auto geode = new osg::Geode;
+    geode->addDrawable(geom);
+
+    // 禁用光照
+    auto states = geom->getOrCreateStateSet();
+    states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    auto lw = new osg::LineWidth(2.f);
+    states->setAttribute(lw, osg::StateAttribute::ON);
+
+    grp->addChild(geode);
+
+    // 创建动画路径
+    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
+    animationPath->setLoopMode(osg::AnimationPath::LOOP);
+
+    // 插入关键帧
+    const double animationDuration = 3.0; // 动画持续时间
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
+        osg::AnimationPath::ControlPoint point(vertices->at(i));
+        animationPath->insert(time, point);
+    }
+
+    // 创建动画回调
+    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
+        new osg::AnimationPathCallback(animationPath);
+    auto arrowTransform = new osg::MatrixTransform;
+    arrowTransform->addChild(geode);
+    arrowTransform->setUpdateCallback(animationCallback);
+
+    grp->addChild(arrowTransform);
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
+    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
+    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
+    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+                     std::numeric_limits<float>::lowest());
+
+    auto updateMinMax = [&](const osg::Vec3 &p) {
+        minPos.x() = std::min(minPos.x(), p.x());
+        minPos.y() = std::min(minPos.y(), p.y());
+        minPos.z() = std::min(minPos.z(), p.z());
+
+        maxPos.x() = std::max(maxPos.x(), p.x());
+        maxPos.y() = std::max(maxPos.y(), p.y());
+        maxPos.z() = std::max(maxPos.z(), p.z());
+    };
+
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        float dlt = maxLongitude - minLongitude;
+        float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
+        float lon = minLongitude + x * dlt;
+        dlt = maxLatitude - minLatitude;
+        float lat = minLatitude + v3.y() * dlt;
+        dlt = maxHeight - minHeight;
+        float h = minHeight + v3.z() * dlt;
+
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat);
+        h = h * cosf(lat);
+        ret.y() = h * sinf(lon);
+        ret.x() = h * cosf(lon);
+
+        return ret;
+    };
+
+    for (auto &node : *nodes) {
+        updateMinMax(node.second.pos);
+    }
+    auto dltPos = maxPos - minPos;
+    if (arrowFlowEnabled) {
+        std::cout << "Arrow flow enabled" << std::endl;
+        // 开始箭头流动效果
+        for (auto &edge : *edges) {
+            if (!edge.visible)
+                continue; // 只处理可见边
+
+            osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
+
+            osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
+            osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
+
+            startPos.x() = dltPos.x() == 0.f ? startPos.x() : startPos.x() / dltPos.x();
+            startPos.y() = dltPos.y() == 0.f ? startPos.y() : startPos.y() / dltPos.y();
+            startPos.z() = dltPos.z() == 0.f ? startPos.z() : startPos.z() / dltPos.z();
+
+            endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
+            endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
+            endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
+
+            osg::Vec3 offset(0.0f, 0.0f, -64.3f); // 定义垂直方向的偏移量
+
+            std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
+            std::cout << "Start position: (" << startPos.x() << ", " << startPos.y() << ", "
+                      << startPos.z() << ")" << std::endl;
+            std::cout << "End position: (" << endPos.x() << ", " << endPos.y() << ", " << endPos.z()
+                      << ")" << std::endl;
+
+            createArrowAnimation(vec3ToSphere(startPos + offset), vec3ToSphere(endPos + offset),
+                                 color);
+        }
+    } else {
+        std::cout << "Arrow flow disabled" << std::endl;
+        // 停止箭头流动效果
+        // 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
+        grp->removeChildren(0, grp->getNumChildren());
+        update(); // 重新绘制图形，移除箭头效果
+    }
+}
+
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     grp->removeChildren(0, grp->getNumChildren());
 
@@ -799,7 +966,20 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         prevPos.x() = dltPos.x() == 0.f ? prevPos.x() : prevPos.x() / dltPos.x();
         prevPos.y() = dltPos.y() == 0.f ? prevPos.y() : prevPos.y() / dltPos.y();
         prevPos.z() = dltPos.z() == 0.f ? prevPos.z() : prevPos.z() / dltPos.z();
-        //prevPos = vec3ToSphere(prevPos);
+        // prevPos = vec3ToSphere(prevPos);
+
+        osg::Vec3 startPos = vec3ToSphere(prevPos); // 起点
+        osg::Vec3 endPos = edge.subDivs.back() - minPos;
+        endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
+        endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
+        endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z(); // 终点
+        endPos = vec3ToSphere(endPos);
+
+        std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
+        std::cout << "Start position (sphere): (" << startPos.x() << ", " << startPos.y() << ", "
+                  << startPos.z() << ")" << std::endl;
+        std::cout << "End position (sphere): (" << endPos.x() << ", " << endPos.y() << ", "
+                  << endPos.z() << ")" << std::endl;
 
         osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
         osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
@@ -808,7 +988,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             currentPos.x() = dltPos.x() == 0.f ? currentPos.x() : currentPos.x() / dltPos.x();
             currentPos.y() = dltPos.y() == 0.f ? currentPos.y() : currentPos.y() / dltPos.y();
             currentPos.z() = dltPos.z() == 0.f ? currentPos.z() : currentPos.z() / dltPos.z();
-            //currentPos = vec3ToSphere(currentPos);
+            // currentPos = vec3ToSphere(currentPos);
 
             osg::Vec4 currentColor = prevColor + dCol;
 
@@ -823,7 +1003,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
                 osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
 
-                if (j > 0 ) { // 从第二个插值点开始创建线段
+                if (j > 0) { // 从第二个插值点开始创建线段
                     segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
                     segCols->push_back(prevInterpolatedColor);
                     segVerts->push_back(vec3ToSphere(interpolatedPos));
@@ -838,23 +1018,24 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             prevColor = currentColor;
         }
     }
+    if (!arrowFlowEnabled) {
+        auto geom = new osg::Geometry;
+        geom->setVertexArray(segVerts);
+        geom->setColorArray(segCols);
+        geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
 
-    auto geom = new osg::Geometry;
-    geom->setVertexArray(segVerts);
-    geom->setColorArray(segCols);
-    geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+        auto states = geom->getOrCreateStateSet();
+        states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+        auto lw = new osg::LineWidth(2.f);
+        states->setAttribute(lw, osg::StateAttribute::ON);
 
-    auto states = geom->getOrCreateStateSet();
-    states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-    auto lw = new osg::LineWidth(2.f);
-    states->setAttribute(lw, osg::StateAttribute::ON);
+        geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
 
-    geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
+        auto geode = new osg::Geode;
+        geode->addDrawable(geom);
 
-    auto geode = new osg::Geode;
-    geode->addDrawable(geom);
-
-    grp->addChild(geode);
+        grp->addChild(geode);
+    }
 }
 
 void VIS4Earth::GraphRenderer::PerGraphParam::setRestriction(VIS4Earth::Area res) {

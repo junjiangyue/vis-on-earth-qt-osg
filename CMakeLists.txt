@@ -35,6 +35,7 @@ list(
 	"osgText"
 	"OpenThreads"
 	"osgUtil"
+	"osgAnimation"
 )
 
 message(STATUS "CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
