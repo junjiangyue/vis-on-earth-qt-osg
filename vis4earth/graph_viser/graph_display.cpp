@@ -952,64 +952,63 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createHighlightAnimation(
 
     grp->addChild(transform);
 }
-
-void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
-    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
-    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                     std::numeric_limits<float>::max());
-    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
-                     std::numeric_limits<float>::lowest());
-
-    auto updateMinMax = [&](const osg::Vec3 &p) {
-        minPos.x() = std::min(minPos.x(), p.x());
-        minPos.y() = std::min(minPos.y(), p.y());
-        minPos.z() = std::min(minPos.z(), p.z());
-
-        maxPos.x() = std::max(maxPos.x(), p.x());
-        maxPos.y() = std::max(maxPos.y(), p.y());
-        maxPos.z() = std::max(maxPos.z(), p.z());
-    };
-
-    for (auto &node : *nodes) {
-        updateMinMax(node.second.pos);
+class HighlightFlowCallback : public osg::NodeCallback {
+  public:
+    HighlightFlowCallback(osg::Geometry *geom, float speed)
+        : _geom(geom), _speed(speed), _startTime(std::chrono::high_resolution_clock::now()) {
+        // 备份原始颜色
+        _originalColors =
+            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
     }
-    auto dltPos = maxPos - minPos;
-    if (arrowFlowEnabled) {
-        std::cout << "Arrow flow enabled" << std::endl;
-        // 开始箭头流动效果
-        for (auto &edge : *edges) {
-            if (!edge.visible)
-                continue; // 只处理可见边
 
-            osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
+        auto now = std::chrono::high_resolution_clock::now();
+        double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
+        float t = static_cast<float>(elapsedTime * _speed);
 
-            osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
-            osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
+        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
+        if (colors && vertices) {
+            float highlightPos = fmod(t, 1.0f) * vertices->size(); // 高光点位置
 
-            startPos.x() = dltPos.x() == 0.f ? startPos.x() : startPos.x() / dltPos.x();
-            startPos.y() = dltPos.y() == 0.f ? startPos.y() : startPos.y() / dltPos.y();
-            startPos.z() = dltPos.z() == 0.f ? startPos.z() : startPos.z() / dltPos.z();
+            for (size_t i = 0; i < colors->size(); ++i) {
+                float dist = fabs(static_cast<float>(i) - highlightPos);
+                dist = std::min(dist, static_cast<float>(vertices->size()) - dist); // 环绕效果
+                float intensity = std::max(0.0f, 1.0f - dist / 10.0f); // 距离越近，高光越强
 
-            endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
-            endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
-            endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
+                osg::Vec4 &color = (*colors)[i];
+                color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
+                        (*_originalColors)[i] * (1.0f - intensity);
+            }
+            _geom->dirtyDisplayList(); // 确保更新渲染
+            _geom->dirtyBound();
 
-            osg::Vec3 offset(0.0f, 0.0f, -64.58f); // 定义垂直方向的偏移量
-
-            std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
-            std::cout << "Start position: (" << startPos.x() << ", " << startPos.y() << ", "
-                      << startPos.z() << ")" << std::endl;
-            std::cout << "End position: (" << endPos.x() << ", " << endPos.y() << ", " << endPos.z()
-                      << ")" << std::endl;
-
-            createHighlightAnimation(startPos, endPos, color, osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f));
+            // 如果高光点到达终点，重置时间
+            if (highlightPos >= vertices->size() - 1) {
+                _startTime = std::chrono::high_resolution_clock::now();
+            }
         }
-    } else {
-        std::cout << "Arrow flow disabled" << std::endl;
-        // 停止箭头流动效果
-        // 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
-        grp->removeChildren(0, grp->getNumChildren());
-        update(); // 重新绘制图形，移除箭头效果
+
+        traverse(node, nv); // 继续遍历
+    }
+
+  private:
+    osg::ref_ptr<osg::Geometry> _geom;
+    osg::ref_ptr<osg::Vec4Array> _originalColors;
+    float _speed;
+    std::chrono::high_resolution_clock::time_point _startTime;
+};
+void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
+    if (lineGeode && lineGeometry) {
+        if (isAnimating) {
+            // 当前正在动画中，结束动画
+            lineGeode->setUpdateCallback(nullptr);
+            isAnimating = false;
+        } else {
+            // 当前没有动画，开始动画
+            lineGeode->setUpdateCallback(new HighlightFlowCallback(lineGeometry, 0.01f));
+            isAnimating = true;
+        }
     }
 }
 

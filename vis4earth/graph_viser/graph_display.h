@@ -43,6 +43,7 @@ class GraphRenderer;
 }
 
 namespace VIS4Earth {
+
 class GraphRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
   public:
