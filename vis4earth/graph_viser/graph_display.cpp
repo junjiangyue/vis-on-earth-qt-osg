@@ -516,15 +516,19 @@ void VIS4Earth::GraphRenderer::setMinY(double value) { myRestriction.bottomBound
 void VIS4Earth::GraphRenderer::setMaxY(double value) { myRestriction.upperBound = value; }
 
 void VIS4Earth::GraphRenderer::onArrowFlowButtonClicked() {
-    // TODO:绘制箭头流动
     auto graphParam = getGraph("LoadedGraph");
-
     graphParam->startArrowAnimation();
 }
 
-void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {}
+void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startHighlightAnimation();
+}
 
-void VIS4Earth::GraphRenderer::onTextureFlowButtonClicked() {}
+void VIS4Earth::GraphRenderer::onTextureFlowButtonClicked() {
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startTextureAnimation();
+}
 
 // 边绑定的参数
 void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value) {
@@ -697,91 +701,6 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
 void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Vec3 &start,
                                                                    const osg::Vec3 &end,
                                                                    const osg::Vec4 &color) {
-    std::cout << "Creating arrow animation from " << start.x() << " to " << end.x() << std::endl;
-    auto geom = new osg::Geometry;
-
-    // 计算箭头方向和长度
-    osg::Vec3 direction = end - start;
-    float length = direction.length();
-    direction.normalize();
-
-    // 计算插值点
-    const int numSubdivisions = 5; // 细分数量
-    osg::Vec3Array *vertices = new osg::Vec3Array;
-    osg::Vec4Array *colors = new osg::Vec4Array;
-
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        float t = static_cast<float>(i) / numSubdivisions;
-        osg::Vec3 interpolatedPos = start * (1.0f - t) + end * t;
-
-        vertices->push_back(interpolatedPos);
-        colors->push_back(color);
-    }
-
-    // 添加箭头的形状
-    osg::Vec3 arrowHead = end - direction * 0.1f; // 箭头头部长度为线段的10%
-    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.05f * length;
-    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.05f * length;
-
-    vertices->push_back(arrowHead + left);
-    vertices->push_back(end);
-    vertices->push_back(arrowHead + right);
-
-    geom->setVertexArray(vertices);
-    geom->setColorArray(colors, osg::Array::BIND_PER_VERTEX);
-
-    // 使用线段绘制箭头的主体
-    geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, vertices->size()));
-
-    auto geode = new osg::Geode;
-    geode->addDrawable(geom);
-
-    // 禁用光照
-    auto states = geom->getOrCreateStateSet();
-    states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-    auto lw = new osg::LineWidth(2.f);
-    states->setAttribute(lw, osg::StateAttribute::ON);
-
-    grp->addChild(geode);
-
-    // 创建动画路径
-    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
-    animationPath->setLoopMode(osg::AnimationPath::LOOP);
-
-    // 插入关键帧
-    const double animationDuration = 3.0; // 动画持续时间
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
-        osg::AnimationPath::ControlPoint point(vertices->at(i));
-        animationPath->insert(time, point);
-    }
-
-    // 创建动画回调
-    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
-        new osg::AnimationPathCallback(animationPath);
-    auto arrowTransform = new osg::MatrixTransform;
-    arrowTransform->addChild(geode);
-    arrowTransform->setUpdateCallback(animationCallback);
-
-    grp->addChild(arrowTransform);
-}
-
-void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
-    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
-    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                     std::numeric_limits<float>::max());
-    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
-                     std::numeric_limits<float>::lowest());
-
-    auto updateMinMax = [&](const osg::Vec3 &p) {
-        minPos.x() = std::min(minPos.x(), p.x());
-        minPos.y() = std::min(minPos.y(), p.y());
-        minPos.z() = std::min(minPos.z(), p.z());
-
-        maxPos.x() = std::max(maxPos.x(), p.x());
-        maxPos.y() = std::max(maxPos.y(), p.y());
-        maxPos.z() = std::max(maxPos.z(), p.z());
-    };
 
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
         float dlt = maxLongitude - minLongitude;
@@ -799,6 +718,116 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
         ret.x() = h * cosf(lon);
 
         return ret;
+    };
+    std::cout << "Creating arrow animation from " << start.x() << " to " << end.x() << std::endl;
+
+    // 计算箭头方向和长度
+    osg::Vec3 direction = end - start;
+    float length = direction.length();
+    direction.normalize();
+
+    // 计算插值点
+    const int numSubdivisions = 5; // 细分数量
+    osg::Vec3Array *lineVertices = new osg::Vec3Array;
+    osg::Vec4Array *lineColors = new osg::Vec4Array;
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        float t = static_cast<float>(i) / numSubdivisions;
+        osg::Vec3 interpolatedPos = start * (1.0f - t) + end * t;
+
+        lineVertices->push_back(vec3ToSphere(interpolatedPos));
+        lineColors->push_back(color);
+    }
+
+    // 绘制线段
+    auto lineGeom = new osg::Geometry;
+    lineGeom->setVertexArray(lineVertices);
+    lineGeom->setColorArray(lineColors, osg::Array::BIND_PER_VERTEX);
+    lineGeom->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::LINE_STRIP, 0, lineVertices->size()));
+
+    auto lineGeode = new osg::Geode;
+    lineGeode->addDrawable(lineGeom);
+
+    // 禁用光照
+    auto lineStates = lineGeom->getOrCreateStateSet();
+    lineStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    auto lw = new osg::LineWidth(2.f);
+    lineStates->setAttribute(lw, osg::StateAttribute::ON);
+
+    grp->addChild(lineGeode);
+
+    // 创建箭头的几何体
+    osg::Vec3 arrowHeadBase = end - direction * 0.05f; // 箭头头部基点
+    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.03f * length;
+    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.03f * length;
+
+    osg::Vec3Array *arrowVertices = new osg::Vec3Array;
+    osg::Vec4Array *arrowColors = new osg::Vec4Array;
+
+    // 定义箭头三角形的三个顶点
+    arrowVertices->push_back(vec3ToSphere(end));                   // 箭头顶点
+    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + left));  // 左边
+    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + right)); // 右边
+
+    arrowColors->push_back(color);
+    arrowColors->push_back(color);
+    arrowColors->push_back(color);
+
+    auto arrowGeom = new osg::Geometry;
+    arrowGeom->setVertexArray(arrowVertices);
+    arrowGeom->setColorArray(arrowColors, osg::Array::BIND_PER_VERTEX);
+    arrowGeom->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES, 0, arrowVertices->size()));
+
+    auto arrowGeode = new osg::Geode;
+    arrowGeode->addDrawable(arrowGeom);
+
+    // 禁用光照
+    auto arrowStates = arrowGeom->getOrCreateStateSet();
+    arrowStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    auto lwArrow = new osg::LineWidth(2.f);
+    arrowStates->setAttribute(lwArrow, osg::StateAttribute::ON);
+
+    // 创建动画路径
+    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
+    animationPath->setLoopMode(osg::AnimationPath::LOOP);
+
+    // 插入关键帧
+    const double animationDuration = 5.0; // 动画持续时间
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
+        osg::AnimationPath::ControlPoint point(lineVertices->at(i));
+        animationPath->insert(time, point);
+    }
+
+    // 创建动画回调
+    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
+        new osg::AnimationPathCallback(animationPath);
+
+    // 创建动画 transform
+    auto transform = new osg::MatrixTransform;
+    transform->addChild(lineGeode);
+    transform->addChild(arrowGeode);
+    transform->setUpdateCallback(animationCallback);
+
+    grp->addChild(transform);
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
+    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
+    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
+    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+                     std::numeric_limits<float>::lowest());
+
+    auto updateMinMax = [&](const osg::Vec3 &p) {
+        minPos.x() = std::min(minPos.x(), p.x());
+        minPos.y() = std::min(minPos.y(), p.y());
+        minPos.z() = std::min(minPos.z(), p.z());
+
+        maxPos.x() = std::max(maxPos.x(), p.x());
+        maxPos.y() = std::max(maxPos.y(), p.y());
+        maxPos.z() = std::max(maxPos.z(), p.z());
     };
 
     for (auto &node : *nodes) {
@@ -825,7 +854,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
             endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
             endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
 
-            osg::Vec3 offset(0.0f, 0.0f, -64.3f); // 定义垂直方向的偏移量
+            osg::Vec3 offset(0.0f, 0.0f, -64.6f); // 定义垂直方向的偏移量
 
             std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
             std::cout << "Start position: (" << startPos.x() << ", " << startPos.y() << ", "
@@ -833,8 +862,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
             std::cout << "End position: (" << endPos.x() << ", " << endPos.y() << ", " << endPos.z()
                       << ")" << std::endl;
 
-            createArrowAnimation(vec3ToSphere(startPos + offset), vec3ToSphere(endPos + offset),
-                                 color);
+            createArrowAnimation(startPos + offset, endPos + offset, color);
         }
     } else {
         std::cout << "Arrow flow disabled" << std::endl;
@@ -842,6 +870,196 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
         // 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
         grp->removeChildren(0, grp->getNumChildren());
         update(); // 重新绘制图形，移除箭头效果
+    }
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::createHighlightAnimation(
+    const osg::Vec3 &start, const osg::Vec3 &end, const osg::Vec4 &baseColor,
+    const osg::Vec4 &highlightColor) {
+
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        float dlt = maxLongitude - minLongitude;
+        float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
+        float lon = minLongitude + x * dlt;
+        dlt = maxLatitude - minLatitude;
+        float lat = minLatitude + v3.y() * dlt;
+        dlt = maxHeight - minHeight;
+        float h = minHeight + v3.z() * dlt;
+
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat);
+        h = h * cosf(lat);
+        ret.y() = h * sinf(lon);
+        ret.x() = h * cosf(lon);
+
+        return ret;
+    };
+    std::cout << "Creating highlight animation from " << start.x() << " to " << end.x()
+              << std::endl;
+
+    // 计算路径长度和方向
+    osg::Vec3 direction = end - start;
+    float length = direction.length();
+
+    // 计算插值点
+    const int numSubdivisions = 5; // 细分数量
+    osg::Vec3Array *lineVertices = new osg::Vec3Array;
+    osg::Vec4Array *lineColors = new osg::Vec4Array;
+
+    osg::Vec3 offset(0.0f, 0.0f, -64.58f); // 定义垂直方向的偏移量
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        float t = static_cast<float>(i) / numSubdivisions;
+        osg::Vec3 interpolatedPos = start * (1.0f - t) + (end)*t;
+        lineVertices->push_back(vec3ToSphere(interpolatedPos + offset));
+        osg::Vec4 interpolatedColor = osg::Vec4(1.0, 1.0, 1.0, 1.0) * (1.0f - t) + baseColor * t;
+        lineColors->push_back(interpolatedColor);
+    }
+    // 绘制短线条
+    auto lineGeom = new osg::Geometry;
+    lineGeom->setVertexArray(lineVertices);
+    lineGeom->setColorArray(lineColors, osg::Array::BIND_PER_VERTEX);
+    lineGeom->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, lineVertices->size()));
+
+    auto lineGeode = new osg::Geode;
+    lineGeode->addDrawable(lineGeom);
+
+    // 禁用光照
+    auto lineStates = lineGeom->getOrCreateStateSet();
+    lineStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    auto lw = new osg::LineWidth(2.f);
+    lineStates->setAttribute(lw, osg::StateAttribute::ON);
+
+    // 创建动画路径
+    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
+    animationPath->setLoopMode(osg::AnimationPath::LOOP);
+
+    const double animationDuration = 5.0; // 动画持续时间
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
+        osg::AnimationPath::ControlPoint point(lineVertices->at(i));
+        animationPath->insert(time, point);
+    }
+
+    // 创建动画回调
+    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
+        new osg::AnimationPathCallback(animationPath);
+
+    // 创建动画 transform
+    auto transform = new osg::MatrixTransform;
+    transform->addChild(lineGeode);
+    transform->setUpdateCallback(animationCallback);
+
+    grp->addChild(transform);
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
+    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
+    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                     std::numeric_limits<float>::max());
+    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
+                     std::numeric_limits<float>::lowest());
+
+    auto updateMinMax = [&](const osg::Vec3 &p) {
+        minPos.x() = std::min(minPos.x(), p.x());
+        minPos.y() = std::min(minPos.y(), p.y());
+        minPos.z() = std::min(minPos.z(), p.z());
+
+        maxPos.x() = std::max(maxPos.x(), p.x());
+        maxPos.y() = std::max(maxPos.y(), p.y());
+        maxPos.z() = std::max(maxPos.z(), p.z());
+    };
+
+    for (auto &node : *nodes) {
+        updateMinMax(node.second.pos);
+    }
+    auto dltPos = maxPos - minPos;
+    if (arrowFlowEnabled) {
+        std::cout << "Arrow flow enabled" << std::endl;
+        // 开始箭头流动效果
+        for (auto &edge : *edges) {
+            if (!edge.visible)
+                continue; // 只处理可见边
+
+            osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
+
+            osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
+            osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
+
+            startPos.x() = dltPos.x() == 0.f ? startPos.x() : startPos.x() / dltPos.x();
+            startPos.y() = dltPos.y() == 0.f ? startPos.y() : startPos.y() / dltPos.y();
+            startPos.z() = dltPos.z() == 0.f ? startPos.z() : startPos.z() / dltPos.z();
+
+            endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
+            endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
+            endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
+
+            osg::Vec3 offset(0.0f, 0.0f, -64.58f); // 定义垂直方向的偏移量
+
+            std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
+            std::cout << "Start position: (" << startPos.x() << ", " << startPos.y() << ", "
+                      << startPos.z() << ")" << std::endl;
+            std::cout << "End position: (" << endPos.x() << ", " << endPos.y() << ", " << endPos.z()
+                      << ")" << std::endl;
+
+            createHighlightAnimation(startPos, endPos, color, osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        }
+    } else {
+        std::cout << "Arrow flow disabled" << std::endl;
+        // 停止箭头流动效果
+        // 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
+        grp->removeChildren(0, grp->getNumChildren());
+        update(); // 重新绘制图形，移除箭头效果
+    }
+}
+
+class ColorFlowCallback : public osg::NodeCallback {
+  public:
+    ColorFlowCallback(osg::Geometry *geom, float speed)
+        : _geom(geom), _speed(speed), _startTime(std::chrono::high_resolution_clock::now()) {}
+
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
+        if (nv->getVisitorType() == osg::NodeVisitor::UPDATE_VISITOR) {
+            // 计算动画时间
+            auto now = std::chrono::high_resolution_clock::now();
+            double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
+            float t = static_cast<float>(elapsedTime * _speed);
+
+            // 更新颜色
+            osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+            if (colors) {
+                for (size_t i = 0; i < colors->size(); ++i) {
+                    osg::Vec4 &color = (*colors)[i];
+                    float offset = static_cast<float>(i) * 0.1f;  // 基于顶点索引的偏移
+                    color.r() = (sinf(t + offset) + 1.0f) * 0.5f; // 动态红色分量
+                    color.g() = (cosf(t + offset) + 1.0f) * 0.5f; // 动态绿色分量
+                    color.b() = (sinf(t + offset + 3.14f / 2) + 1.0f) * 0.5f; // 动态蓝色分量
+                }
+                _geom->dirtyDisplayList(); // 确保更新渲染
+                _geom->dirtyBound();
+            }
+        }
+
+        traverse(node, nv); // 继续遍历
+    }
+
+  private:
+    osg::ref_ptr<osg::Geometry> _geom;
+    float _speed;
+    std::chrono::high_resolution_clock::time_point _startTime;
+};
+void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
+
+    if (lineGeode && lineGeometry) {
+        if (isAnimating) {
+            // 当前正在动画中，结束动画
+            lineGeode->setUpdateCallback(nullptr);
+            isAnimating = false;
+        } else {
+            // 当前没有动画，开始动画
+            lineGeode->setUpdateCallback(new ColorFlowCallback(lineGeometry, 1.f));
+            isAnimating = true;
+        }
     }
 }
 
@@ -1033,6 +1251,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
         auto geode = new osg::Geode;
         geode->addDrawable(geom);
+
+        // 保存 Geode 和 Geometry
+        lineGeode = geode;
+        lineGeometry = geom;
 
         grp->addChild(geode);
     }
