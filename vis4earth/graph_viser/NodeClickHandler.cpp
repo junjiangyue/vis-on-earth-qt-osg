@@ -54,28 +54,33 @@ bool NodeClickHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIAction
 void NodeClickHandler::collapseNode(const std::string &nodeId) {
     auto nodes = graphRenderer->getNodes("LoadedGraph");
     auto neighbors = getNeighbors(nodeId);
+    // 获取当前节点的等级
+    int currentNodeLevel = nodes->at(nodeId).level;
 
     // 连接邻居的邻居并隐藏邻居
     for (const auto &neighbor : neighbors) {
-        auto neighborNeighbors = getNeighbors(neighbor);
-        for (const auto &nn : neighborNeighbors) {
-            if (nn != nodeId) {
-                // 创建新边，从 nodeId 到 nn，并设置细分点
-                GraphRenderer::Edge newEdge;
-                newEdge.from = nodeId;
-                newEdge.to = nn;
-                newEdge.isAdd = true;
+        // 仅当邻居节点的等级低于当前节点时才进行收缩
+        if (currentNodeLevel == 0 || nodes->at(neighbor).level < currentNodeLevel) {
+            auto neighborNeighbors = getNeighbors(neighbor);
+            for (const auto &nn : neighborNeighbors) {
+                if (nn != nodeId) {
+                    // 创建新边，从 nodeId 到 nn，并设置细分点
+                    GraphRenderer::Edge newEdge;
+                    newEdge.from = nodeId;
+                    newEdge.to = nn;
+                    newEdge.isAdd = true;
 
-                // 设置细分点
-                auto it = nodes->find(nodeId);
-                newEdge.subDivs.emplace_back(it->second.pos);
-                it = nodes->find(nn);
-                newEdge.subDivs.emplace_back(it->second.pos);
+                    // 设置细分点
+                    auto it = nodes->find(nodeId);
+                    newEdge.subDivs.emplace_back(it->second.pos);
+                    it = nodes->find(nn);
+                    newEdge.subDivs.emplace_back(it->second.pos);
 
-                graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
+                    graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
+                }
             }
+            setNodeVisible(neighbor, false);
         }
-        setNodeVisible(neighbor, false);
     }
 
     graphRenderer->update("LoadedGraph");

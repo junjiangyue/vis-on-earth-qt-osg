@@ -1,4 +1,4 @@
-#ifndef VIS4EARTH_GRAPH_VISER_GRAPH_LOADER_H
+﻿#ifndef VIS4EARTH_GRAPH_VISER_GRAPH_LOADER_H
 #define VIS4EARTH_GRAPH_VISER_GRAPH_LOADER_H
 
 #include <fstream>
@@ -10,7 +10,7 @@
 
 namespace VIS4Earth {
 
- class GraphLoader {
+class GraphLoader {
   private:
     FILE *filePointer;
     int fileState;
@@ -198,7 +198,8 @@ namespace VIS4Earth {
     };
 
     // read csv file to graph
-    static VIS4Earth::Graph LoadFromFile(const std::string &nodesFile, const std::string &edgesFile) {
+    static VIS4Earth::Graph LoadFromFile(const std::string &nodesFile,
+                                         const std::string &edgesFile) {
         VIS4Earth::GraphLoader f;
         int rows = 0;
         char line[1024] = {""};
@@ -212,10 +213,20 @@ namespace VIS4Earth {
         char labelCh[128] = {""};
         double x, y;
         std::unordered_map<std::string, Node> read_nodes;
+        int nodeLevel = 0;    // Default value if level is not present
+        bool hasLevel = true; // Flag to indicate if level is present in the file
+
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
-            sscanf(line, "%s %lg %lg", labelCh, &x, &y);
-            read_nodes.insert(std::pair<std::string, Node>(std::string(labelCh), Node(x, y)));
+
+            if (hasLevel) {
+                sscanf(line, "%s %lg %lg %d", labelCh, &x, &y, &nodeLevel);
+            } else {
+                sscanf(line, "%s %lg %lg", labelCh, &x, &y);
+                nodeLevel = 0; // Default level if not present
+            }
+            read_nodes.insert(
+                std::pair<std::string, Node>(std::string(labelCh), Node(x, y, nodeLevel)));
         }
         f.Close();
 

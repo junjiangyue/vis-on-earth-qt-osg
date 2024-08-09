@@ -225,6 +225,7 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
             node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
             node.color = colors[i];
             node.id = itr->first;
+            node.level = itr->second.level;
 
             nodes->emplace(std::make_pair(itr->first, node));
             ++i;
