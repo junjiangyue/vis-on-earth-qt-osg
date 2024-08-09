@@ -873,142 +873,97 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
     }
 }
 
-void VIS4Earth::GraphRenderer::PerGraphParam::createHighlightAnimation(
-    const osg::Vec3 &start, const osg::Vec3 &end, const osg::Vec4 &baseColor,
-    const osg::Vec4 &highlightColor) {
+class TimeController : public osg::Referenced {
+  public:
+    TimeController() : startTime(osg::Timer::instance()->tick()) {}
 
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        float dlt = maxLongitude - minLongitude;
-        float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
-        float lon = minLongitude + x * dlt;
-        dlt = maxLatitude - minLatitude;
-        float lat = minLatitude + v3.y() * dlt;
-        dlt = maxHeight - minHeight;
-        float h = minHeight + v3.z() * dlt;
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat);
-        h = h * cosf(lat);
-        ret.y() = h * sinf(lon);
-        ret.x() = h * cosf(lon);
-
-        return ret;
-    };
-    std::cout << "Creating highlight animation from " << start.x() << " to " << end.x()
-              << std::endl;
-
-    // 计算路径长度和方向
-    osg::Vec3 direction = end - start;
-    float length = direction.length();
-
-    // 计算插值点
-    const int numSubdivisions = 5; // 细分数量
-    osg::Vec3Array *lineVertices = new osg::Vec3Array;
-    osg::Vec4Array *lineColors = new osg::Vec4Array;
-
-    osg::Vec3 offset(0.0f, 0.0f, -64.58f); // 定义垂直方向的偏移量
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        float t = static_cast<float>(i) / numSubdivisions;
-        osg::Vec3 interpolatedPos = start * (1.0f - t) + (end)*t;
-        lineVertices->push_back(vec3ToSphere(interpolatedPos + offset));
-        osg::Vec4 interpolatedColor = osg::Vec4(1.0, 1.0, 1.0, 1.0) * (1.0f - t) + baseColor * t;
-        lineColors->push_back(interpolatedColor);
-    }
-    // 绘制短线条
-    auto lineGeom = new osg::Geometry;
-    lineGeom->setVertexArray(lineVertices);
-    lineGeom->setColorArray(lineColors, osg::Array::BIND_PER_VERTEX);
-    lineGeom->addPrimitiveSet(
-        new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, lineVertices->size()));
-
-    auto lineGeode = new osg::Geode;
-    lineGeode->addDrawable(lineGeom);
-
-    // 禁用光照
-    auto lineStates = lineGeom->getOrCreateStateSet();
-    lineStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-    auto lw = new osg::LineWidth(2.f);
-    lineStates->setAttribute(lw, osg::StateAttribute::ON);
-
-    // 创建动画路径
-    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
-    animationPath->setLoopMode(osg::AnimationPath::LOOP);
-
-    const double animationDuration = 5.0; // 动画持续时间
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
-        osg::AnimationPath::ControlPoint point(lineVertices->at(i));
-        animationPath->insert(time, point);
+    float getTime() {
+        return osg::Timer::instance()->delta_s(startTime, osg::Timer::instance()->tick());
     }
 
-    // 创建动画回调
-    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
-        new osg::AnimationPathCallback(animationPath);
-
-    // 创建动画 transform
-    auto transform = new osg::MatrixTransform;
-    transform->addChild(lineGeode);
-    transform->setUpdateCallback(animationCallback);
-
-    grp->addChild(transform);
-}
+  private:
+    osg::Timer_t startTime;
+};
 class HighlightFlowCallback : public osg::NodeCallback {
   public:
-    HighlightFlowCallback(osg::Geometry *geom, float speed)
-        : _geom(geom), _speed(speed), _startTime(std::chrono::high_resolution_clock::now()) {
-        // 备份原始颜色
+    HighlightFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
+                          const std::vector<std::pair<int, int>> &edgeRanges)
+        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
+        // 保存原始颜色数组
         _originalColors =
             new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
     }
 
-    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
-        auto now = std::chrono::high_resolution_clock::now();
-        double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
-        float t = static_cast<float>(elapsedTime * _speed);
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        float t = _timeController->getTime() * _speed;
 
         osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
         osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
         if (colors && vertices) {
-            float highlightPos = fmod(t, 1.0f) * vertices->size(); // 高光点位置
+            for (const auto &range : _edgeRanges) {
+                int startIdx = range.first;
+                int endIdx = range.second;
 
-            for (size_t i = 0; i < colors->size(); ++i) {
-                float dist = fabs(static_cast<float>(i) - highlightPos);
-                dist = std::min(dist, static_cast<float>(vertices->size()) - dist); // 环绕效果
-                float intensity = std::max(0.0f, 1.0f - dist / 10.0f); // 距离越近，高光越强
+                // 计算高光的位置
+                float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx) + startIdx;
 
-                osg::Vec4 &color = (*colors)[i];
-                color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
-                        (*_originalColors)[i] * (1.0f - intensity);
+                for (int i = startIdx; i < endIdx; ++i) {
+                    // 计算高光与当前顶点的距离
+                    float dist = fabs(static_cast<float>(i) - highlightPos);
+                    // 控制高光范围，使其更加集中
+                    float intensity =
+                        std::max(0.0f, 1.0f - dist / 2.0f); // 调整 2.0f 以改变高光的范围
+
+                    osg::Vec4 &color = (*colors)[i];
+                    color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
+                            (*_originalColors)[i] * (1.0f - intensity);
+                }
             }
-            _geom->dirtyDisplayList(); // 确保更新渲染
+
+            // 标记几何体更新
+            _geom->dirtyDisplayList();
             _geom->dirtyBound();
-
-            // 如果高光点到达终点，重置时间
-            if (highlightPos >= vertices->size() - 1) {
-                _startTime = std::chrono::high_resolution_clock::now();
-            }
         }
 
-        traverse(node, nv); // 继续遍历
+        traverse(node, nv);
     }
 
   private:
     osg::ref_ptr<osg::Geometry> _geom;
     osg::ref_ptr<osg::Vec4Array> _originalColors;
     float _speed;
-    std::chrono::high_resolution_clock::time_point _startTime;
+    osg::ref_ptr<TimeController> _timeController;
+    std::vector<std::pair<int, int>> _edgeRanges;
 };
+
 void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
-    if (lineGeode && lineGeometry) {
-        if (isAnimating) {
-            // 当前正在动画中，结束动画
+    if (isAnimating) {
+        // 停止动画
+        if (lineGeode) {
             lineGeode->setUpdateCallback(nullptr);
-            isAnimating = false;
-        } else {
-            // 当前没有动画，开始动画
-            lineGeode->setUpdateCallback(new HighlightFlowCallback(lineGeometry, 0.01f));
-            isAnimating = true;
         }
+        isAnimating = false;
+        update(); // 重新绘制图形
+    } else {
+        // 开始动画
+        if (lineGeode && lineGeometry) {
+            std::vector<std::pair<int, int>> edgeRanges;
+            int currentIndex = 0;
+
+            for (auto &edge : *edges) {
+                if (!edge.visible)
+                    continue;
+
+                int numVerts = (edge.subDivs.size() + 1) * 6 - 1; // 每个细分段有6个顶点
+                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
+                currentIndex += numVerts;
+            }
+
+            osg::ref_ptr<TimeController> newTimeController = new TimeController();
+            lineGeode->setUpdateCallback(new HighlightFlowCallback(
+                lineGeometry, 0.49f, newTimeController.get(), edgeRanges));
+        }
+        isAnimating = true;
     }
 }
 
@@ -1029,10 +984,12 @@ class ColorFlowCallback : public osg::NodeCallback {
             if (colors) {
                 for (size_t i = 0; i < colors->size(); ++i) {
                     osg::Vec4 &color = (*colors)[i];
-                    float offset = static_cast<float>(i) * 0.1f;  // 基于顶点索引的偏移
-                    color.r() = (sinf(t + offset) + 1.0f) * 0.5f; // 动态红色分量
-                    color.g() = (cosf(t + offset) + 1.0f) * 0.5f; // 动态绿色分量
-                    color.b() = (sinf(t + offset + 3.14f / 2) + 1.0f) * 0.5f; // 动态蓝色分量
+                    float offset = static_cast<float>(i) * 0.1f; // 基于顶点索引的偏移
+
+                    // 基于时间 t 和 offset 计算色相值（Hue）
+                    float hue =
+                        fmod((t + offset) * 60.0f, 360.0f); // 60度变化对应红-黄-绿-蓝-紫-红的循环
+                    color = hslToRgb(hue, 0.5f, 0.5f); // 使用饱和度 0.5 和亮度 0.5 的 HSL 转 RGB
                 }
                 _geom->dirtyDisplayList(); // 确保更新渲染
                 _geom->dirtyBound();
@@ -1043,6 +1000,42 @@ class ColorFlowCallback : public osg::NodeCallback {
     }
 
   private:
+    // HSL 转 RGB 的辅助函数
+    osg::Vec4 hslToRgb(float h, float s, float l) {
+        float c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
+        float x = c * (1.0f - fabs(fmod(h / 60.0f, 2) - 1.0f));
+        float m = l - c / 2.0f;
+
+        float r, g, b;
+        if (h >= 0 && h < 60) {
+            r = c;
+            g = x;
+            b = 0;
+        } else if (h >= 60 && h < 120) {
+            r = x;
+            g = c;
+            b = 0;
+        } else if (h >= 120 && h < 180) {
+            r = 0;
+            g = c;
+            b = x;
+        } else if (h >= 180 && h < 240) {
+            r = 0;
+            g = x;
+            b = c;
+        } else if (h >= 240 && h < 300) {
+            r = x;
+            g = 0;
+            b = c;
+        } else {
+            r = c;
+            g = 0;
+            b = x;
+        }
+
+        return osg::Vec4(r + m, g + m, b + m, 1.0f);
+    }
+
     osg::ref_ptr<osg::Geometry> _geom;
     float _speed;
     std::chrono::high_resolution_clock::time_point _startTime;
@@ -1054,6 +1047,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
             // 当前正在动画中，结束动画
             lineGeode->setUpdateCallback(nullptr);
             isAnimating = false;
+            update(); // 重新绘制图形
         } else {
             // 当前没有动画，开始动画
             lineGeode->setUpdateCallback(new ColorFlowCallback(lineGeometry, 1.f));

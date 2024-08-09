@@ -135,8 +135,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
                                   const osg::Vec4 &color);
         void startArrowAnimation();
-        void createHighlightAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
-                                      const osg::Vec4 &baseColor, const osg::Vec4 &highlightColor);
         void startHighlightAnimation();
         void startTextureAnimation();
         void setRestriction(VIS4Earth::Area res);
@@ -218,38 +216,38 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void onArrowFlowButtonClicked();
     void onHighlightFlowButtonClicked();
     void onTextureFlowButtonClicked();
-    void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value);
+    void onGlobalSpringConstantChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onNumberOfIterationsChanged(int value);
-    void VIS4Earth::GraphRenderer::onRemainingIterationsChanged(int value);
+    void onNumberOfIterationsChanged(int value);
+    void onRemainingIterationsChanged(int value);
 
-    void VIS4Earth::GraphRenderer::onCyclesLeftChanged(int value);
+    void onCyclesLeftChanged(int value);
 
-    void VIS4Earth::GraphRenderer::onCompatibilityThresholdChanged(double value);
+    void onCompatibilityThresholdChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onSmoothWidthChanged(double value);
+    void onSmoothWidthChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onDisplacementChanged(double value);
+    void onDisplacementChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onEdgeDistanceChanged(double value);
+    void onEdgeDistanceChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onGravitationIsOnToggled(bool checked);
+    void onGravitationIsOnToggled(bool checked);
 
-    void VIS4Earth::GraphRenderer::onGravitationCenterXChanged(double value);
+    void onGravitationCenterXChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onGravitationCenterYChanged(double value);
+    void onGravitationCenterYChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onGravitationCenterZChanged(double value);
+    void onGravitationCenterZChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onGravitationExponentChanged(double value);
+    void onGravitationExponentChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onEdgeWeightThresholdChanged(double value);
+    void onEdgeWeightThresholdChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onEdgePercentageThresholdChanged(double value);
+    void onEdgePercentageThresholdChanged(double value);
 
-    void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value);
+    void onSizeSliderValueChanged(int value);
 
-    void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value);
+    void onFontSizeSliderValueChanged(int value);
 };
 
 } // namespace VIS4Earth
