@@ -250,13 +250,13 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
                 edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
             }
         }
-        
+
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
         // 更新图渲染
         auto graphParam = getGraph("LoadedGraph");
         if (graphParam) {
-            
+
             graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
             graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
             graphParam->setHeightFromCenterRange(
@@ -656,17 +656,15 @@ void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
 }
 void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
     // 将滑块的值转换为百分比
-    int percentage = (value * 20); // 5对应100%，0对应0%，因此乘以20
+    int percentage = (value * 10);
 
     // 更新resolutionLabel的文本
     ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
-        graphParam->setLevelGraph(value);
+        graphParam->setLevelGraph(10 - value);
         graphParam->update();
     }
-
-
 }
 // 检查两个矩形是否重叠，并返回重叠的距离
 osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
@@ -845,7 +843,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
                 if (!edge.visible)
                     continue;
 
-                int numVerts = (edge.subDivs.size() + 1) * 6 - 1; // 每个细分段有6个顶点
+                int numVerts = (edge.subDivs.size() + 1) * 6 + 1; // 每个细分段有6个顶点
                 edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
                 currentIndex += numVerts;
             }
@@ -928,7 +926,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
                 if (!edge.visible)
                     continue;
 
-                int numVerts = (edge.subDivs.size() + 1) * 6 - 1; // 每个细分段有6个顶点
+                int numVerts = (edge.subDivs.size() + 1) * 6 + 1; // 每个细分段有6个顶点
                 edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
                 currentIndex += numVerts;
             }
@@ -1263,10 +1261,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::setLevelGraph(int level) {
 void VIS4Earth::GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
     std::shared_ptr<std::map<std::string, Node>> &initialNodes,
     std::shared_ptr<std::vector<Edge>> &initialEdges) {
-    int numLevels = 6;
+    int numLevels = 11;
     std::vector<GraphLevel> mylevels(numLevels);
 
-     // 第0层次是原始图
+    // 第0层次是原始图
     mylevels[0].nodes =
         std::make_shared<std::map<std::string, Node>>(*initialNodes); // 直接复制initialNodes
     mylevels[0].edges = std::make_shared<std::vector<Edge>>(*initialEdges); // 直接复制initialEdges
@@ -1285,9 +1283,42 @@ void VIS4Earth::GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
 void VIS4Earth::GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousLevel,
                                                                 GraphLevel &currentLevel) {
 
+    int newLevel = previousLevel.nodes->begin()->second.level + 1;
+
+    // Lambda: 计算当前层次的合并阈值，阈值随层次增大
+    auto calculateThreshold = [newLevel](const GraphLevel &prevLevel) {
+        std::vector<float> distances;
+
+        // 计算所有节点之间的距离并存储到向量中
+        for (auto it1 = prevLevel.nodes->begin(); it1 != prevLevel.nodes->end(); ++it1) {
+            auto it2 = it1;
+            for (++it2; it2 != prevLevel.nodes->end(); ++it2) {
+                osg::Vec3 diff = it1->second.pos - it2->second.pos;
+                distances.push_back(diff.length());
+            }
+        }
+
+        // 如果没有足够的距离数据，返回一个较大的默认值
+        if (distances.size() < 2) {
+            return std::numeric_limits<float>::max();
+        }
+
+        // 排序距离
+        std::sort(distances.begin(), distances.end());
+
+        // 使用距离的中位数作为阈值
+        float medianDistance = distances[distances.size() / 2];
+
+        // 动态调节阈值，使其随层次逐渐增大
+        float dynamicFactor = 0.2f + 0.25f * (newLevel - 1); // 可以根据需要调整0.1f的增长速率
+        return medianDistance * dynamicFactor;
+    };
+
+    // 计算当前层次的合并阈值
+    float mergeThreshold = calculateThreshold(previousLevel);
+
     std::map<std::string, std::string> mergedNodeMapping; // 记录原始节点ID到新节点ID的映射
     std::set<std::string> processedNodes;
-    int newLevel = previousLevel.nodes->begin()->second.level + 1;
 
     // Lambda: 计算两个节点之间的距离
     auto calculateDistance = [](const Node &node1, const Node &node2) {
@@ -1295,61 +1326,90 @@ void VIS4Earth::GraphRenderer::PerGraphParam::performClustering(const GraphLevel
         return diff.length();
     };
 
-    // Lambda: 合并两个节点
-    auto mergeNodes = [newLevel](const Node &node1, const Node &node2) {
+    // Lambda: 合并两个节点，优先将度数少的节点并入度数多的节点
+    auto mergeNodes = [newLevel](const Node &nodeWithLessDegree, const Node &nodeWithMoreDegree,
+                                 int degree1, int degree2) {
         Node mergedNode;
-        mergedNode.pos = (node1.pos + node2.pos) / 2.0;
-        mergedNode.color = (node1.color + node2.color) / 2.0;
-        mergedNode.id = node1.id + "_" + node2.id;
+
+        // 计算权重，度数大的节点权重大
+        float weight1 = static_cast<float>(degree1) / (degree1 + degree2);
+        float weight2 = static_cast<float>(degree2) / (degree1 + degree2);
+
+        // 使用权重计算新节点位置，更靠近度数较大的节点
+        mergedNode.pos = (nodeWithLessDegree.pos * weight1) + (nodeWithMoreDegree.pos * weight2);
+
+        // 颜色同样可以按照权重混合
+        mergedNode.color =
+            (nodeWithLessDegree.color * weight1) + (nodeWithMoreDegree.color * weight2);
+
+        // 新节点的ID来自度数更大的节点
+        mergedNode.id = nodeWithMoreDegree.id + ".";
+
+        // 设置节点层级
         mergedNode.level = newLevel;
+
         return mergedNode;
     };
 
-    // Lambda: 更新边的连接关系
-    auto updateEdges = [](std::vector<Edge> &newEdges, const Edge &oldEdge,
-                          const std::map<std::string, std::string> &mergedNodeMapping) {
-        Edge newEdge = oldEdge;
+    // 计算每个节点的度数，并将节点按度数排序
+    std::vector<std::pair<std::string, int>> nodeDegreeList;
+    for (const auto &nodePair : *previousLevel.nodes) {
+        const std::string &nodeId = nodePair.first;
+        int degree = std::count_if(
+            previousLevel.edges->begin(), previousLevel.edges->end(),
+            [&nodeId](const Edge &edge) { return edge.from == nodeId || edge.to == nodeId; });
+        nodeDegreeList.emplace_back(nodeId, degree);
+    }
 
-        if (mergedNodeMapping.find(oldEdge.from) != mergedNodeMapping.end()) {
-            newEdge.from = mergedNodeMapping.at(oldEdge.from);
-        }
-        if (mergedNodeMapping.find(oldEdge.to) != mergedNodeMapping.end()) {
-            newEdge.to = mergedNodeMapping.at(oldEdge.to);
-        }
+    // 按节点的度数从小到大排序
+    std::sort(nodeDegreeList.begin(), nodeDegreeList.end(),
+              [](const std::pair<std::string, int> &a, const std::pair<std::string, int> &b) {
+                  return a.second < b.second;
+              });
 
-        if (newEdge.from != newEdge.to) {
-            newEdges.push_back(newEdge);
-        }
-    };
-
-    // 遍历所有节点，执行聚类
-    for (auto it1 = previousLevel.nodes->begin(); it1 != previousLevel.nodes->end(); ++it1) {
-        const std::string &id1 = it1->first;
+    // 遍历所有节点，按度数从小到大的顺序执行聚类
+    for (const auto &nodePair : nodeDegreeList) {
+        const std::string &id1 = nodePair.first;
         if (processedNodes.find(id1) != processedNodes.end()) {
             continue; // 跳过已处理的节点
         }
 
-        auto it2 = it1;
         float minDistance = std::numeric_limits<float>::max();
         std::string closestNodeId;
 
-        // 找到与 it1 最近的节点
-        for (++it2; it2 != previousLevel.nodes->end(); ++it2) {
-            const std::string &id2 = it2->first;
-            if (processedNodes.find(id2) != processedNodes.end()) {
+        // 找到与 id1 最近的节点
+        for (const auto &nodePair2 : nodeDegreeList) {
+            const std::string &id2 = nodePair2.first;
+            if (id1 == id2 || processedNodes.find(id2) != processedNodes.end()) {
                 continue;
             }
 
-            float distance = calculateDistance(it1->second, it2->second);
-            if (distance < minDistance) {
+            float distance =
+                calculateDistance(previousLevel.nodes->at(id1), previousLevel.nodes->at(id2));
+            if (distance < minDistance && distance < mergeThreshold) {
                 minDistance = distance;
                 closestNodeId = id2;
             }
         }
 
         if (!closestNodeId.empty()) {
-            // 合并节点
-            Node mergedNode = mergeNodes(it1->second, previousLevel.nodes->at(closestNodeId));
+            int degree1 = nodePair.second;
+            int degree2 =
+                std::count_if(previousLevel.edges->begin(), previousLevel.edges->end(),
+                              [&closestNodeId](const Edge &edge) {
+                                  return edge.from == closestNodeId || edge.to == closestNodeId;
+                              });
+
+            // 判断度数大小，将度数少的节点并入度数多的节点
+            Node mergedNode;
+            if (degree1 <= degree2) {
+                mergedNode = mergeNodes(previousLevel.nodes->at(id1),
+                                        previousLevel.nodes->at(closestNodeId), degree1, degree2);
+            } else {
+                mergedNode = mergeNodes(previousLevel.nodes->at(closestNodeId),
+                                        previousLevel.nodes->at(id1), degree2, degree1);
+            }
+
             std::string newId = mergedNode.id;
             currentLevel.nodes->emplace(newId, mergedNode);
 
@@ -1362,13 +1422,37 @@ void VIS4Earth::GraphRenderer::PerGraphParam::performClustering(const GraphLevel
             processedNodes.insert(closestNodeId);
         } else {
             // 如果没有合并对，则将节点直接移至当前层次
-            currentLevel.nodes->emplace(id1, it1->second);
+            currentLevel.nodes->emplace(id1, previousLevel.nodes->at(id1));
             mergedNodeMapping[id1] = id1;
         }
     }
 
-    // 处理边连接
+    // 重新生成当前层次的边
     for (const auto &edge : *(previousLevel.edges)) {
-        updateEdges(*(currentLevel.edges), edge, mergedNodeMapping);
+        std::string newFrom = mergedNodeMapping[edge.from];
+        std::string newTo = mergedNodeMapping[edge.to];
+
+        if (newFrom != newTo) {
+            bool edgeExists = false;
+            for (const auto &existingEdge : *(currentLevel.edges)) {
+                if ((existingEdge.from == newFrom && existingEdge.to == newTo) ||
+                    (existingEdge.from == newTo && existingEdge.to == newFrom)) {
+                    edgeExists = true;
+                    break;
+                }
+            }
+
+            if (!edgeExists) {
+                Edge newEdge;
+                newEdge.from = newFrom;
+                newEdge.to = newTo;
+                newEdge.isAdd = true;
+
+                newEdge.subDivs.emplace_back(currentLevel.nodes->at(newFrom).pos);
+                newEdge.subDivs.emplace_back(currentLevel.nodes->at(newTo).pos);
+
+                currentLevel.edges->push_back(newEdge);
+            }
+        }
     }
 }

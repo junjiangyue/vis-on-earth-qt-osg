@@ -125,10 +125,11 @@
                           <number>0</number>
                         </property>
                         <property name="maximum">
-                          <number>5</number>
+                          <number>10</number>
                         </property>
                         <property name="value">
-                          <number>5</number> <!-- 默认显示最详细的图，即100%分辨率 -->
+                          <number>10</number>
+                          <!-- 默认显示最详细的图，即100%分辨率 -->
                         </property>
                         <property name="orientation">
                           <enum>Qt::Horizontal</enum>
