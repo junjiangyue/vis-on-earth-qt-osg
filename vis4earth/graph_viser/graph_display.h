@@ -90,6 +90,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     PerRendererParam param;
 
+    struct GraphLevel {
+        std::shared_ptr<std::map<std::string, Node>> nodes;
+        std::shared_ptr<std::vector<Edge>> edges;
+    };
+
     class PerGraphParam {
       private:
         float minLongitude, maxLongitude;
@@ -100,9 +105,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
         bool volStartFromLonZero;
         bool arrowFlowEnabled = false; // 标志变量
         bool isAnimating = false;
-        std::shared_ptr<std::map<std::string, Node>> nodes;
-        std::shared_ptr<std::vector<Edge>> edges;
-
+        std::shared_ptr<std::map<std::string, Node>> nodes; // 当前nodes
+        std::shared_ptr<std::vector<Edge>> edges; // 当前edges
+        std::vector<GraphLevel> levels; // 存放多层次的图
         osg::ref_ptr<osg::Group> grp;
 
       public:
@@ -130,7 +135,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::shared_ptr<std::vector<Edge>> getEdges() { return edges; }
         osg::ref_ptr<osg::Geode> lineGeode;
         osg::ref_ptr<osg::Geometry> lineGeometry;
-
+        
         void update();
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
                                   const osg::Vec4 &color);
@@ -148,6 +153,10 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         void setNodeGeometrySize(float sz) { nodeGeomSize = sz; }
         void setTextGeometrySize(float sz) { textSize = sz; }
+        void setLevelGraph(int level);
+        void generateHierarchicalGraphs(std::shared_ptr<std::map<std::string, Node>> &initialNodes,
+                                        std::shared_ptr<std::vector<Edge>> &initialEdges);
+        void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel);
 
       private:
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
@@ -248,6 +257,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void onSizeSliderValueChanged(int value);
 
     void onFontSizeSliderValueChanged(int value);
+
+    void onResolutionSliderValueChanged(int value);
 };
 
 } // namespace VIS4Earth

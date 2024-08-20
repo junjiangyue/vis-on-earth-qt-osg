@@ -44,6 +44,9 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->sizeSlider, &QSlider::valueChanged, this, &GraphRenderer::onSizeSliderValueChanged);
     connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
             &GraphRenderer::onFontSizeSliderValueChanged);
+    connect(ui->resolutionSlider, &QSlider::valueChanged, this,
+            &GraphRenderer::onResolutionSliderValueChanged);
+
     // 连接参数设置的信号到槽函数
     connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setAttraction);
@@ -247,11 +250,13 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
                 edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
             }
         }
+        
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
         // 更新图渲染
         auto graphParam = getGraph("LoadedGraph");
         if (graphParam) {
+            
             graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
             graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
             graphParam->setHeightFromCenterRange(
@@ -260,6 +265,7 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
             graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->update();
+            graphParam->generateHierarchicalGraphs(nodes, edges);
         }
         myGraph = graph;
         // 初始化 UI
@@ -648,6 +654,20 @@ void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
         graphParam->update();
     }
 }
+void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
+    // 将滑块的值转换为百分比
+    int percentage = (value * 20); // 5对应100%，0对应0%，因此乘以20
+
+    // 更新resolutionLabel的文本
+    ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->setLevelGraph(value);
+        graphParam->update();
+    }
+
+
+}
 // 检查两个矩形是否重叠，并返回重叠的距离
 osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
     float overlapY = std::min(bb1.yMax(), bb2.yMax()) - std::max(bb1.yMin(), bb2.yMin());
@@ -698,182 +718,6 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
         }
     }
 }
-
-void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Vec3 &start,
-                                                                   const osg::Vec3 &end,
-                                                                   const osg::Vec4 &color) {
-
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        float dlt = maxLongitude - minLongitude;
-        float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
-        float lon = minLongitude + x * dlt;
-        dlt = maxLatitude - minLatitude;
-        float lat = minLatitude + v3.y() * dlt;
-        dlt = maxHeight - minHeight;
-        float h = minHeight + v3.z() * dlt;
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat);
-        h = h * cosf(lat);
-        ret.y() = h * sinf(lon);
-        ret.x() = h * cosf(lon);
-
-        return ret;
-    };
-    std::cout << "Creating arrow animation from " << start.x() << " to " << end.x() << std::endl;
-
-    // 计算箭头方向和长度
-    osg::Vec3 direction = end - start;
-    float length = direction.length();
-    direction.normalize();
-
-    // 计算插值点
-    const int numSubdivisions = 5; // 细分数量
-    osg::Vec3Array *lineVertices = new osg::Vec3Array;
-    osg::Vec4Array *lineColors = new osg::Vec4Array;
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        float t = static_cast<float>(i) / numSubdivisions;
-        osg::Vec3 interpolatedPos = start * (1.0f - t) + end * t;
-
-        lineVertices->push_back(vec3ToSphere(interpolatedPos));
-        lineColors->push_back(color);
-    }
-
-    // 绘制线段
-    auto lineGeom = new osg::Geometry;
-    lineGeom->setVertexArray(lineVertices);
-    lineGeom->setColorArray(lineColors, osg::Array::BIND_PER_VERTEX);
-    lineGeom->addPrimitiveSet(
-        new osg::DrawArrays(osg::PrimitiveSet::LINE_STRIP, 0, lineVertices->size()));
-
-    auto lineGeode = new osg::Geode;
-    lineGeode->addDrawable(lineGeom);
-
-    // 禁用光照
-    auto lineStates = lineGeom->getOrCreateStateSet();
-    lineStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-    auto lw = new osg::LineWidth(2.f);
-    lineStates->setAttribute(lw, osg::StateAttribute::ON);
-
-    grp->addChild(lineGeode);
-
-    // 创建箭头的几何体
-    osg::Vec3 arrowHeadBase = end - direction * 0.05f; // 箭头头部基点
-    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.03f * length;
-    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.03f * length;
-
-    osg::Vec3Array *arrowVertices = new osg::Vec3Array;
-    osg::Vec4Array *arrowColors = new osg::Vec4Array;
-
-    // 定义箭头三角形的三个顶点
-    arrowVertices->push_back(vec3ToSphere(end));                   // 箭头顶点
-    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + left));  // 左边
-    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + right)); // 右边
-
-    arrowColors->push_back(color);
-    arrowColors->push_back(color);
-    arrowColors->push_back(color);
-
-    auto arrowGeom = new osg::Geometry;
-    arrowGeom->setVertexArray(arrowVertices);
-    arrowGeom->setColorArray(arrowColors, osg::Array::BIND_PER_VERTEX);
-    arrowGeom->addPrimitiveSet(
-        new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES, 0, arrowVertices->size()));
-
-    auto arrowGeode = new osg::Geode;
-    arrowGeode->addDrawable(arrowGeom);
-
-    // 禁用光照
-    auto arrowStates = arrowGeom->getOrCreateStateSet();
-    arrowStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-    auto lwArrow = new osg::LineWidth(2.f);
-    arrowStates->setAttribute(lwArrow, osg::StateAttribute::ON);
-
-    // 创建动画路径
-    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
-    animationPath->setLoopMode(osg::AnimationPath::LOOP);
-
-    // 插入关键帧
-    const double animationDuration = 5.0; // 动画持续时间
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
-        osg::AnimationPath::ControlPoint point(lineVertices->at(i));
-        animationPath->insert(time, point);
-    }
-
-    // 创建动画回调
-    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
-        new osg::AnimationPathCallback(animationPath);
-
-    // 创建动画 transform
-    auto transform = new osg::MatrixTransform;
-    transform->addChild(lineGeode);
-    transform->addChild(arrowGeode);
-    transform->setUpdateCallback(animationCallback);
-
-    grp->addChild(transform);
-}
-
-void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
-    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
-    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                     std::numeric_limits<float>::max());
-    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
-                     std::numeric_limits<float>::lowest());
-
-    auto updateMinMax = [&](const osg::Vec3 &p) {
-        minPos.x() = std::min(minPos.x(), p.x());
-        minPos.y() = std::min(minPos.y(), p.y());
-        minPos.z() = std::min(minPos.z(), p.z());
-
-        maxPos.x() = std::max(maxPos.x(), p.x());
-        maxPos.y() = std::max(maxPos.y(), p.y());
-        maxPos.z() = std::max(maxPos.z(), p.z());
-    };
-
-    for (auto &node : *nodes) {
-        updateMinMax(node.second.pos);
-    }
-    auto dltPos = maxPos - minPos;
-    if (arrowFlowEnabled) {
-        std::cout << "Arrow flow enabled" << std::endl;
-        // 开始箭头流动效果
-        for (auto &edge : *edges) {
-            if (!edge.visible)
-                continue; // 只处理可见边
-
-            osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
-
-            osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
-            osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
-
-            startPos.x() = dltPos.x() == 0.f ? startPos.x() : startPos.x() / dltPos.x();
-            startPos.y() = dltPos.y() == 0.f ? startPos.y() : startPos.y() / dltPos.y();
-            startPos.z() = dltPos.z() == 0.f ? startPos.z() : startPos.z() / dltPos.z();
-
-            endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
-            endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
-            endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
-
-            osg::Vec3 offset(0.0f, 0.0f, -64.6f); // 定义垂直方向的偏移量
-
-            std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
-            std::cout << "Start position: (" << startPos.x() << ", " << startPos.y() << ", "
-                      << startPos.z() << ")" << std::endl;
-            std::cout << "End position: (" << endPos.x() << ", " << endPos.y() << ", " << endPos.z()
-                      << ")" << std::endl;
-
-            createArrowAnimation(startPos + offset, endPos + offset, color);
-        }
-    } else {
-        std::cout << "Arrow flow disabled" << std::endl;
-        // 停止箭头流动效果
-        // 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
-        grp->removeChildren(0, grp->getNumChildren());
-        update(); // 重新绘制图形，移除箭头效果
-    }
-}
-
 class TimeController : public osg::Referenced {
   public:
     TimeController() : startTime(osg::Timer::instance()->tick()) {}
@@ -885,6 +729,135 @@ class TimeController : public osg::Referenced {
   private:
     osg::Timer_t startTime;
 };
+
+class ArrowFlowCallback : public osg::NodeCallback {
+  public:
+    ArrowFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
+                      const std::vector<std::pair<int, int>> &edgeRanges)
+        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
+        _originalColors =
+            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
+        _originalVertices =
+            new osg::Vec3Array(*dynamic_cast<osg::Vec3Array *>(geom->getVertexArray()));
+    }
+
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        float t = _timeController->getTime() * _speed;
+
+        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
+
+        if (colors && vertices) {
+            osg::ref_ptr<osg::Vec3Array> arrowVertices = new osg::Vec3Array;
+            osg::ref_ptr<osg::Vec4Array> arrowColors = new osg::Vec4Array;
+
+            for (const auto &range : _edgeRanges) {
+                int startIdx = range.first;
+                int endIdx = range.second;
+
+                // 计算高光和箭头的位置
+                float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx) + startIdx;
+
+                for (int i = startIdx; i < endIdx; ++i) {
+                    // 计算高光与当前顶点的距离
+                    float dist = fabs(static_cast<float>(i) - highlightPos);
+                    // 控制高光范围，使其更加集中
+                    float intensity = std::max(0.0f, 1.0f - dist / 2.0f);
+
+                    osg::Vec4 &color = (*colors)[i];
+                    color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
+                            (*_originalColors)[i] * (1.0f - intensity);
+
+                    // 如果箭头的位置接近当前位置并且有足够的顶点来计算箭头方向
+                    if (dist < 0.5f && i + 1 < endIdx) {
+                        addArrow(vertices, i, arrowVertices, arrowColors, intensity);
+                    }
+                }
+            }
+
+            // 添加箭头到已有的几何体中
+            _geom->setVertexArray(arrowVertices);
+            _geom->setColorArray(arrowColors);
+            _geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+            _geom->addPrimitiveSet(
+                new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES, 0, arrowVertices->size()));
+
+            // 标记几何体更新
+            _geom->dirtyDisplayList();
+            _geom->dirtyBound();
+        }
+
+        traverse(node, nv);
+    }
+
+  private:
+    osg::ref_ptr<osg::Geometry> _geom;
+    osg::ref_ptr<osg::Vec4Array> _originalColors;
+    osg::ref_ptr<osg::Vec3Array> _originalVertices;
+    float _speed;
+    osg::ref_ptr<TimeController> _timeController;
+    std::vector<std::pair<int, int>> _edgeRanges;
+
+    void addArrow(osg::Vec3Array *vertices, int index, osg::Vec3Array *arrowVertices,
+                  osg::Vec4Array *arrowColors, float intensity) {
+        // 边界检查，确保 index 和 index + 1 都在范围内
+        if (index + 1 >= vertices->size() || index >= vertices->size())
+            return;
+
+        // 计算箭头的三个顶点（假设箭头是等腰三角形）
+        osg::Vec3 &arrowTip = (*vertices)[index];
+        osg::Vec3 direction = (*vertices)[index + 1] - arrowTip;
+        direction.normalize();
+
+        osg::Vec3 arrowBase1 =
+            arrowTip - direction * 0.05f + osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.03f;
+        osg::Vec3 arrowBase2 =
+            arrowTip - direction * 0.05f - osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.03f;
+
+        osg::Vec4 arrowColor = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity;
+
+        // 添加箭头顶点和颜色
+        arrowVertices->push_back(arrowTip);
+        arrowVertices->push_back(arrowBase1);
+        arrowVertices->push_back(arrowBase2);
+
+        arrowColors->push_back(arrowColor);
+        arrowColors->push_back(arrowColor);
+        arrowColors->push_back(arrowColor);
+    }
+};
+
+void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
+    if (isAnimating) {
+        // 停止动画
+        if (lineGeode) {
+            lineGeode->setUpdateCallback(nullptr);
+        }
+        isAnimating = false;
+        update(); // 重新绘制图形
+    } else {
+        // 开始动画
+        if (lineGeode && lineGeometry) {
+            std::vector<std::pair<int, int>> edgeRanges;
+            int currentIndex = 0;
+
+            for (auto &edge : *edges) {
+                if (!edge.visible)
+                    continue;
+
+                int numVerts = (edge.subDivs.size() + 1) * 6 - 1; // 每个细分段有6个顶点
+                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
+                currentIndex += numVerts;
+            }
+
+            osg::ref_ptr<TimeController> newTimeController = new TimeController();
+            lineGeode->setUpdateCallback(
+                new ArrowFlowCallback(lineGeometry, 0.49f, newTimeController.get(), edgeRanges));
+        }
+        isAnimating = true;
+    }
+}
+
 class HighlightFlowCallback : public osg::NodeCallback {
   public:
     HighlightFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
@@ -1280,4 +1253,122 @@ bool VIS4Earth::GraphRenderer::PerGraphParam::setHeightFromCenterRange(float min
     minHeight = minH;
     maxHeight = maxH;
     return true;
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::setLevelGraph(int level) {
+    nodes = levels[level].nodes;
+    edges = levels[level].edges;
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
+    std::shared_ptr<std::map<std::string, Node>> &initialNodes,
+    std::shared_ptr<std::vector<Edge>> &initialEdges) {
+    int numLevels = 6;
+    std::vector<GraphLevel> mylevels(numLevels);
+
+     // 第0层次是原始图
+    mylevels[0].nodes =
+        std::make_shared<std::map<std::string, Node>>(*initialNodes); // 直接复制initialNodes
+    mylevels[0].edges = std::make_shared<std::vector<Edge>>(*initialEdges); // 直接复制initialEdges
+
+    // 生成其他层次
+    for (int level = 1; level < numLevels; ++level) {
+        mylevels[level].nodes = std::make_shared<std::map<std::string, Node>>();
+        mylevels[level].edges = std::make_shared<std::vector<Edge>>();
+
+        // 对前一个层次的图执行聚类
+        performClustering(mylevels[level - 1], mylevels[level]);
+    }
+    levels = mylevels;
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousLevel,
+                                                                GraphLevel &currentLevel) {
+
+    std::map<std::string, std::string> mergedNodeMapping; // 记录原始节点ID到新节点ID的映射
+    std::set<std::string> processedNodes;
+    int newLevel = previousLevel.nodes->begin()->second.level + 1;
+
+    // Lambda: 计算两个节点之间的距离
+    auto calculateDistance = [](const Node &node1, const Node &node2) {
+        osg::Vec3 diff = node1.pos - node2.pos;
+        return diff.length();
+    };
+
+    // Lambda: 合并两个节点
+    auto mergeNodes = [newLevel](const Node &node1, const Node &node2) {
+        Node mergedNode;
+        mergedNode.pos = (node1.pos + node2.pos) / 2.0;
+        mergedNode.color = (node1.color + node2.color) / 2.0;
+        mergedNode.id = node1.id + "_" + node2.id;
+        mergedNode.level = newLevel;
+        return mergedNode;
+    };
+
+    // Lambda: 更新边的连接关系
+    auto updateEdges = [](std::vector<Edge> &newEdges, const Edge &oldEdge,
+                          const std::map<std::string, std::string> &mergedNodeMapping) {
+        Edge newEdge = oldEdge;
+
+        if (mergedNodeMapping.find(oldEdge.from) != mergedNodeMapping.end()) {
+            newEdge.from = mergedNodeMapping.at(oldEdge.from);
+        }
+        if (mergedNodeMapping.find(oldEdge.to) != mergedNodeMapping.end()) {
+            newEdge.to = mergedNodeMapping.at(oldEdge.to);
+        }
+
+        if (newEdge.from != newEdge.to) {
+            newEdges.push_back(newEdge);
+        }
+    };
+
+    // 遍历所有节点，执行聚类
+    for (auto it1 = previousLevel.nodes->begin(); it1 != previousLevel.nodes->end(); ++it1) {
+        const std::string &id1 = it1->first;
+        if (processedNodes.find(id1) != processedNodes.end()) {
+            continue; // 跳过已处理的节点
+        }
+
+        auto it2 = it1;
+        float minDistance = std::numeric_limits<float>::max();
+        std::string closestNodeId;
+
+        // 找到与 it1 最近的节点
+        for (++it2; it2 != previousLevel.nodes->end(); ++it2) {
+            const std::string &id2 = it2->first;
+            if (processedNodes.find(id2) != processedNodes.end()) {
+                continue;
+            }
+
+            float distance = calculateDistance(it1->second, it2->second);
+            if (distance < minDistance) {
+                minDistance = distance;
+                closestNodeId = id2;
+            }
+        }
+
+        if (!closestNodeId.empty()) {
+            // 合并节点
+            Node mergedNode = mergeNodes(it1->second, previousLevel.nodes->at(closestNodeId));
+            std::string newId = mergedNode.id;
+            currentLevel.nodes->emplace(newId, mergedNode);
+
+            // 记录原始节点到新节点的映射
+            mergedNodeMapping[id1] = newId;
+            mergedNodeMapping[closestNodeId] = newId;
+
+            // 将节点标记为已处理
+            processedNodes.insert(id1);
+            processedNodes.insert(closestNodeId);
+        } else {
+            // 如果没有合并对，则将节点直接移至当前层次
+            currentLevel.nodes->emplace(id1, it1->second);
+            mergedNodeMapping[id1] = id1;
+        }
+    }
+
+    // 处理边连接
+    for (const auto &edge : *(previousLevel.edges)) {
+        updateEdges(*(currentLevel.edges), edge, mergedNodeMapping);
+    }
 }

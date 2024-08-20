@@ -68,7 +68,7 @@
                     <item row="3" column="0">
                       <widget class="QLabel" name="sizeLabel">
                         <property name="text">
-                          <string>分辨率: 100%</string>
+                          <string>大小: 100%</string>
                         </property>
                       </widget>
                     </item>
@@ -108,6 +108,36 @@
                         </property>
                         <property name="orientation">
                           <enum>Qt::Horizontal</enum>
+                        </property>
+                      </widget>
+                    </item>
+                    <!-- 新增的分辨率滑块 -->
+                    <item row="5" column="0">
+                      <widget class="QLabel" name="resolutionLabel">
+                        <property name="text">
+                          <string>分辨率: 100%</string>
+                        </property>
+                      </widget>
+                    </item>
+                    <item row="5" column="2">
+                      <widget class="QSlider" name="resolutionSlider">
+                        <property name="minimum">
+                          <number>0</number>
+                        </property>
+                        <property name="maximum">
+                          <number>5</number>
+                        </property>
+                        <property name="value">
+                          <number>5</number> <!-- 默认显示最详细的图，即100%分辨率 -->
+                        </property>
+                        <property name="orientation">
+                          <enum>Qt::Horizontal</enum>
+                        </property>
+                        <property name="tickInterval">
+                          <number>1</number>
+                        </property>
+                        <property name="tickPosition">
+                          <enum>QSlider::TicksBelow</enum>
                         </property>
                       </widget>
                     </item>
