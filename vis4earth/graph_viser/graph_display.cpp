@@ -135,6 +135,9 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             &GraphRenderer::onHighlightFlowButtonClicked);
     connect(ui->textureFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onTextureFlowButtonClicked);
+
+    connect(ui->starFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onStarFlowButtonClicked);
 }
 
 void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
@@ -535,6 +538,11 @@ void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {
 void VIS4Earth::GraphRenderer::onTextureFlowButtonClicked() {
     auto graphParam = getGraph("LoadedGraph");
     graphParam->startTextureAnimation();
+}
+
+void VIS4Earth::GraphRenderer::onStarFlowButtonClicked() {
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startStarAnimation();
 }
 
 // 边绑定的参数
@@ -1059,6 +1067,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
     } else {
         // 开始动画
         if (lineGeode && lineGeometry) {
+            // 禁用光照
+            auto arrowStates = lineGeometry->getOrCreateStateSet();
+            arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
+            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
             // 获取顶点数组
             osg::Vec3Array *vertices =
                 dynamic_cast<osg::Vec3Array *>(lineGeometry->getVertexArray());
@@ -1067,23 +1079,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
                 return;
             }
 
-            // 确认这个 Geometry 使用的是 LINES 类型
-            if (lineGeometry->getPrimitiveSet(0)->getMode() != osg::PrimitiveSet::LINES) {
-                std::cout << "Geometry is not using LINES primitive set!" << std::endl;
-                return;
-            }
-
-            // 打印每条线段的顶点
-            for (size_t i = 0; i < vertices->size(); i += 2) {
-                osg::Vec3 start = vertices->at(i);
-                osg::Vec3 end = vertices->at(i + 1);
-
-                std::cout << "Line segment " << i / 2 + 1 << ":" << std::endl;
-                std::cout << "  Start: (" << start.x() << ", " << start.y() << ", " << start.z()
-                          << ")" << std::endl;
-                std::cout << "  End:   (" << end.x() << ", " << end.y() << ", " << end.z() << ")"
-                          << std::endl;
-            }
             std::vector<std::pair<int, int>> edgeRanges;
             int currentIndex = 0;
 
@@ -1193,6 +1188,125 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
     }
 }
 
+class StarFlowCallback : public osg::NodeCallback {
+  public:
+    StarFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
+                     const std::vector<std::pair<int, int>> &edgeRanges)
+        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
+        // 保存原始颜色数组
+        _originalColors =
+            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
+    }
+
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        float t = _timeController->getTime() * _speed;
+
+        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
+        if (colors && vertices) {
+            for (const auto &range : _edgeRanges) {
+                int startIdx = range.first;
+                int endIdx = range.second;
+
+                // 计算高光的位置
+                float highlightPos = fmod(t, 1.0f) * (endIdx + 12.0f - startIdx) + startIdx;
+                // 拖尾长度的控制参数
+                float tailLengthFactor = 12.0f; // 拖尾长度控制
+                for (int i = startIdx; i < endIdx; ++i) {
+                    // 计算高光与当前顶点的距离
+                    float dist = static_cast<float>(i) - highlightPos;
+                    // 控制高光范围和拖尾效果
+                    float intensity = std::max(0.0f, 1.0f - fabs(dist) / tailLengthFactor);
+
+                    osg::Vec4 &color = (*colors)[i];
+
+                    if (dist == 0) {
+                        // 前端高亮白色部分
+                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) ;
+                    } else if (dist<0) {
+                        // 拖尾部分：从白色渐变到原始颜色
+                        color = osg::Vec4(
+                            1.0f * intensity + (*_originalColors)[i].r() * (1.0f - intensity),
+                            1.0f * intensity + (*_originalColors)[i].g() * (1.0f - intensity),
+                            1.0f * intensity + (*_originalColors)[i].b() * (1.0f - intensity),
+                            (*_originalColors)[i].a());
+                    } else {
+                        color = (* _originalColors)[i];
+                    }
+                }
+                // 处理 endIdx 之后的拖尾效果
+                for (int i = endIdx + 1; i < endIdx + tailLengthFactor && i < colors->size(); ++i) {
+                    // 计算超出 endIdx 的部分
+                    float dist = static_cast<float>(i) - highlightPos;
+                    float intensity =
+                        std::max(0.0f, 1.0f - (dist + (i - endIdx)) / tailLengthFactor);
+
+                    osg::Vec4 &color = (*colors)[i];
+                    color = osg::Vec4((*_originalColors)[endIdx - 1].r() * (1.0f - intensity),
+                                      (*_originalColors)[endIdx - 1].g() * (1.0f - intensity),
+                                      (*_originalColors)[endIdx - 1].b() * (1.0f - intensity),
+                                      (*_originalColors)[endIdx - 1].a() * intensity);
+                }
+            }
+
+            // 标记几何体更新
+            _geom->dirtyDisplayList();
+            _geom->dirtyBound();
+        }
+
+        traverse(node, nv);
+    }
+
+  private:
+    osg::ref_ptr<osg::Geometry> _geom;
+    osg::ref_ptr<osg::Vec4Array> _originalColors;
+    float _speed;
+    osg::ref_ptr<TimeController> _timeController;
+    std::vector<std::pair<int, int>> _edgeRanges;
+};
+void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
+
+    if (isAnimating) {
+        // 停止动画
+        if (lineGeode) {
+            lineGeode->setUpdateCallback(nullptr);
+        }
+        isAnimating = false;
+        update(); // 重新绘制图形
+    } else {
+        // 开始动画
+        if (lineGeode && lineGeometry) {
+            auto arrowStates = lineGeometry->getOrCreateStateSet();
+            arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
+            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+            // 获取顶点数组
+            osg::Vec3Array *vertices =
+                dynamic_cast<osg::Vec3Array *>(lineGeometry->getVertexArray());
+            if (!vertices) {
+                std::cout << "No vertices found!" << std::endl;
+                return;
+            }
+
+            std::vector<std::pair<int, int>> edgeRanges;
+            int currentIndex = 0;
+
+            for (auto &edge : *edges) {
+                if (!edge.visible)
+                    continue;
+
+                int numVerts = (edge.subDivs.size()) * 10;
+                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts-1));
+                currentIndex += numVerts;
+            }
+
+            osg::ref_ptr<TimeController> newTimeController = new TimeController();
+            lineGeode->setUpdateCallback(
+                new StarFlowCallback(
+                lineGeometry, 0.35f, newTimeController.get(), edgeRanges));
+        }
+        isAnimating = true;
+    }
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     grp->removeChildren(0, grp->getNumChildren());
 

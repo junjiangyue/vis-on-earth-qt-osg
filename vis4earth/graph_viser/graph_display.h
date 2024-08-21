@@ -145,6 +145,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void startArrowAnimation();
         void startHighlightAnimation();
         void startTextureAnimation();
+        void startStarAnimation();
         void setRestriction(VIS4Earth::Area res);
         bool setLongitudeRange(float minLonDeg, float maxLonDeg);
 
@@ -228,6 +229,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void onArrowFlowButtonClicked();
     void onHighlightFlowButtonClicked();
     void onTextureFlowButtonClicked();
+    void onStarFlowButtonClicked();
     void onGlobalSpringConstantChanged(double value);
 
     void onNumberOfIterationsChanged(int value);
