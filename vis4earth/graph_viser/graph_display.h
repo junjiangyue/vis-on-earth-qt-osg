@@ -23,6 +23,8 @@
 #include <osg/MatrixTransform>
 #include <osg/NodeCallback>
 #include <osg/Point>
+#include <osg/BlendFunc>
+#include <osg/Depth>
 #include <osg/ShapeDrawable>
 #include <osgAnimation/AnimationManagerBase>
 #include <osgAnimation/BasicAnimationManager>
@@ -135,6 +137,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::shared_ptr<std::vector<Edge>> getEdges() { return edges; }
         osg::ref_ptr<osg::Geode> lineGeode;
         osg::ref_ptr<osg::Geometry> lineGeometry;
+        osg::ref_ptr<osg::Geode> triangleGeode; // 新增用于保存三角形的 Geode
         
         void update();
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
