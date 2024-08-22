@@ -1086,14 +1086,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
                 if (!edge.visible)
                     continue;
 
-                int numVerts = (edge.subDivs.size() + 1) * 6 + 1; // 每个细分段有6个顶点
+                int numVerts = (edge.subDivs.size()) * 10; // 每个细分段有6个顶点
                 edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
                 currentIndex += numVerts;
             }
 
             osg::ref_ptr<TimeController> newTimeController = new TimeController();
             lineGeode->setUpdateCallback(new HighlightFlowCallback(
-                lineGeometry, 0.49f, newTimeController.get(), edgeRanges));
+                lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
         }
         isAnimating = true;
     }
@@ -1211,7 +1211,7 @@ class StarFlowCallback : public osg::NodeCallback {
                 // 计算高光的位置
                 float highlightPos = fmod(t, 1.0f) * (endIdx + 12.0f - startIdx) + startIdx;
                 // 拖尾长度的控制参数
-                float tailLengthFactor = 12.0f; // 拖尾长度控制
+                float tailLengthFactor = 6.0f; // 拖尾长度控制
                 for (int i = startIdx; i < endIdx; ++i) {
                     // 计算高光与当前顶点的距离
                     float dist = static_cast<float>(i) - highlightPos;
@@ -1302,7 +1302,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
             osg::ref_ptr<TimeController> newTimeController = new TimeController();
             lineGeode->setUpdateCallback(
                 new StarFlowCallback(
-                lineGeometry, 0.35f, newTimeController.get(), edgeRanges));
+                lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
         }
         isAnimating = true;
     }
