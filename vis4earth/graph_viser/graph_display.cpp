@@ -740,7 +740,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
                                                                    const osg::Vec3 &end,
                                                                    const osg::Vec4 &color) {
 
-     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
         float dlt = maxLongitude - minLongitude;
         float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
         float lon = minLongitude + x * dlt;
@@ -758,30 +758,30 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
         return ret;
     };
 
-     auto sphereToVec3 = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-         // 计算经度范围和纬度范围
-         float dlt = maxLongitude - minLongitude;
-         float lon = atan2(v3.y(), v3.x());
-         float lat = atan2(v3.z(), sqrt(v3.x() * v3.x() + v3.y() * v3.y()));
+    auto sphereToVec3 = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // 计算经度范围和纬度范围
+        float dlt = maxLongitude - minLongitude;
+        float lon = atan2(v3.y(), v3.x());
+        float lat = atan2(v3.z(), sqrt(v3.x() * v3.x() + v3.y() * v3.y()));
 
-         // 将经度和纬度转换到[0,1]范围
-         float normalizedLon = (lon - minLongitude) / dlt;
-         float normalizedLat = (lat - minLatitude) / (maxLatitude - minLatitude);
+        // 将经度和纬度转换到[0,1]范围
+        float normalizedLon = (lon - minLongitude) / dlt;
+        float normalizedLat = (lat - minLatitude) / (maxLatitude - minLatitude);
 
-         // 计算高度
-         float h2 = sqrt(v3.x() * v3.x() + v3.y() * v3.y() + v3.z() * v3.z());
-         float normalizedHeight = (h2 - minHeight) / (maxHeight - minHeight);
+        // 计算高度
+        float h2 = sqrt(v3.x() * v3.x() + v3.y() * v3.y() + v3.z() * v3.z());
+        float normalizedHeight = (h2 - minHeight) / (maxHeight - minHeight);
 
-         // 计算线性坐标
-         osg::Vec3 ret;
-         ret.x() = volStartFromLonZero == 0
-                       ? normalizedLon
-                       : (normalizedLon < .5f ? normalizedLon - .5f : normalizedLon + .5f);
-         ret.y() = normalizedLat;
-         ret.z() = normalizedHeight;
+        // 计算线性坐标
+        osg::Vec3 ret;
+        ret.x() = volStartFromLonZero == 0
+                      ? normalizedLon
+                      : (normalizedLon < .5f ? normalizedLon - .5f : normalizedLon + .5f);
+        ret.y() = normalizedLat;
+        ret.z() = normalizedHeight;
 
-         return ret;
-     };
+        return ret;
+    };
 
     // 计算箭头方向和长度
     osg::Vec3 direction = end - start;
@@ -794,17 +794,17 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     osg::Vec4Array *lineColors = new osg::Vec4Array;
     // 打印球面坐标
     std::cout << "start "
-              << ": (" << vec3ToSphere(start).x() << ", " << vec3ToSphere(start).y()  << ", "
-              << vec3ToSphere(start).z()  << ")" << std::endl;
+              << ": (" << vec3ToSphere(start).x() << ", " << vec3ToSphere(start).y() << ", "
+              << vec3ToSphere(start).z() << ")" << std::endl;
     // 打印球面坐标
     std::cout << "end "
               << ": (" << vec3ToSphere(end).x() << ", " << vec3ToSphere(end).y() << ", "
               << vec3ToSphere(end).z() << ")" << std::endl;
-    
-        //+osg::Vec3(0.0, 0.0, 8 * (1 - std::exp(-35 * std ::pow(length, 3)))); 
+
+    //+osg::Vec3(0.0, 0.0, 8 * (1 - std::exp(-35 * std ::pow(length, 3))));
     std::cout << "length: " << length << std::endl;
     osg::Vec3 sstart = vec3ToSphere(start);
-    osg::Vec3 send= vec3ToSphere(end);
+    osg::Vec3 send = vec3ToSphere(end);
     osg::Vec3 newStart = sstart - (send - sstart) * 0.9;
     osg::Vec3 newend = end + (send - sstart) * 0.1;
     newStart = sphereToVec3(newStart);
@@ -816,13 +816,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
 
         // 计算一个缩放因子，用来调整z值
         float scaleFactor = 1.0f - (2.0f * t - 1.0f) * (2.0f * t - 1.0f); // (1 - (2t - 1)^2)
-        float zOffset = 3.5f * length; // 你可以调整这个值来控制下沉的幅度
+        float zOffset = 3.5f * std::pow(length, 2); // 你可以调整这个值来控制下沉的幅度
 
         // 修改 z 值
         interpolatedPos.z() -= scaleFactor * zOffset;
         osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
-
-        // 计算颜色渐变
 
         // 添加顶点和颜色
         lineVertices->push_back(spherePos);
@@ -837,18 +835,19 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     osg::Vec4Array *arrowColors = new osg::Vec4Array;
 
     // 定义箭头三角形的三个顶点
-    arrowVertices->push_back(vec3ToSphere(end));                   // 箭头顶点
-    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + left));  // 左边
-    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + right)); // 右边
+    arrowVertices->push_back(vec3ToSphere(end));                  // 箭头顶点
+    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + left)); // 左边
+    arrowVertices->push_back(
+        vec3ToSphere(arrowHeadBase + right)); // 右边
                                               // 初始化颜色数组，alpha值为0（完全透明）
     for (int i = 0; i <= 2; ++i) {
         osg::Vec4 initialColor = color;
         initialColor.a() = 0.4f; // 开始时完全透明
         arrowColors->push_back(initialColor);
     }
-    //arrowColors->push_back(color);
-    //arrowColors->push_back(color);
-    //arrowColors->push_back(color);
+    // arrowColors->push_back(color);
+    // arrowColors->push_back(color);
+    // arrowColors->push_back(color);
 
     class ArrowAnimationCallback : public osg::NodeCallback {
       public:
@@ -913,7 +912,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     arrowStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
     arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
     arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-    
 
     // 创建动画路径
     osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
@@ -934,11 +932,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     // 创建动画 transform
     auto transform = new osg::MatrixTransform;
     transform->addChild(arrowGeode);
-    //transform->setUpdateCallback(animationCallback);
+    // transform->setUpdateCallback(animationCallback);
 
-     // 创建自定义回调来更新颜色
+    // 创建自定义回调来更新颜色
     osg::ref_ptr<ArrowAnimationCallback> colorCallback =
-        new ArrowAnimationCallback(arrowColors, arrowGeom,animationCallback);
+        new ArrowAnimationCallback(arrowColors, arrowGeom, animationCallback);
 
     // 添加回调
     transform->setUpdateCallback(colorCallback);
@@ -963,8 +961,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
         maxPos.z() = std::max(maxPos.z(), p.z());
     };
 
-   
-
     for (auto &node : *nodes) {
         updateMinMax(node.second.pos);
     }
@@ -979,9 +975,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
             osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
             osg::Vec3 startPos = edge.subDivs.front() - minPos;
 
-            //osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
+            // osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
             osg::Vec3 endPos = edge.subDivs.back() - minPos;
-            //osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
+            // osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
 
             startPos.x() = dltPos.x() == 0.f ? startPos.x() : startPos.x() / dltPos.x();
             startPos.y() = dltPos.y() == 0.f ? startPos.y() : startPos.y() / dltPos.y();
@@ -992,8 +988,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
             endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
 
             osg::Vec3 offset(0.0f, 0.0f, -64.6f); // 定义垂直方向的偏移量
-            createArrowAnimation(startPos + offset, endPos + offset,
-                                 color);
+            createArrowAnimation(startPos + offset, endPos + offset, color);
         }
     } else {
         std::cout << "Arrow flow disabled" << std::endl;
@@ -1111,6 +1106,9 @@ class ColorFlowCallback : public osg::NodeCallback {
             double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
             float t = static_cast<float>(elapsedTime * _speed);
 
+            // 计算渐变因子，确保在前几秒钟内逐渐改变颜色
+            float fadeFactor = std::min(t / 2, 1.0f); // 0 -> 1 over time
+
             // 更新颜色
             osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
             if (colors) {
@@ -1121,7 +1119,10 @@ class ColorFlowCallback : public osg::NodeCallback {
                     // 基于时间 t 和 offset 计算色相值（Hue）
                     float hue =
                         fmod((t + offset) * 60.0f, 360.0f); // 60度变化对应红-黄-绿-蓝-紫-红的循环
-                    color = hslToRgb(hue, 0.5f, 0.5f); // 使用饱和度 0.5 和亮度 0.5 的 HSL 转 RGB
+                    osg::Vec4 targetColor = hslToRgb(hue, 0.5f, 0.5f); // 使用 HSL 转 RGB
+
+                    // 使用 fadeFactor 实现渐变效果
+                    color = color * (1.0f - fadeFactor) + targetColor * fadeFactor;
                 }
                 _geom->dirtyDisplayList(); // 确保更新渲染
                 _geom->dirtyBound();
@@ -1222,8 +1223,8 @@ class StarFlowCallback : public osg::NodeCallback {
 
                     if (dist == 0) {
                         // 前端高亮白色部分
-                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) ;
-                    } else if (dist<0) {
+                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    } else if (dist < 0) {
                         // 拖尾部分：从白色渐变到原始颜色
                         color = osg::Vec4(
                             1.0f * intensity + (*_originalColors)[i].r() * (1.0f - intensity),
@@ -1231,7 +1232,7 @@ class StarFlowCallback : public osg::NodeCallback {
                             1.0f * intensity + (*_originalColors)[i].b() * (1.0f - intensity),
                             (*_originalColors)[i].a());
                     } else {
-                        color = (* _originalColors)[i];
+                        color = (*_originalColors)[i];
                     }
                 }
                 // 处理 endIdx 之后的拖尾效果
@@ -1295,14 +1296,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
                     continue;
 
                 int numVerts = (edge.subDivs.size()) * 10;
-                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts-1));
+                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts - 1));
                 currentIndex += numVerts;
             }
 
             osg::ref_ptr<TimeController> newTimeController = new TimeController();
             lineGeode->setUpdateCallback(
-                new StarFlowCallback(
-                lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
+                new StarFlowCallback(lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
         }
         isAnimating = true;
     }
