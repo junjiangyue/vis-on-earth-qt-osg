@@ -741,46 +741,46 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
                                                                    const osg::Vec4 &color) {
 
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        float dlt = maxLongitude - minLongitude;
-        float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
-        float lon = minLongitude + x * dlt;
-        dlt = maxLatitude - minLatitude;
-        float lat = minLatitude + v3.y() * dlt;
-        dlt = maxHeight - minHeight;
-        float h2 = minHeight + (v3.z()) * dlt;
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+
+        float h = 6371000.0f / 2 + v3.z(); // 固定为地球半径，单位为米
 
         osg::Vec3 ret;
-        ret.z() = h2 * sinf(lat);
-        h2 = h2 * cosf(lat);
-        ret.y() = h2 * sinf(lon);
-        ret.x() = h2 * cosf(lon);
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
+
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
 
         return ret;
     };
 
-    auto sphereToVec3 = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        // 计算经度范围和纬度范围
-        float dlt = maxLongitude - minLongitude;
-        float lon = atan2(v3.y(), v3.x());
-        float lat = atan2(v3.z(), sqrt(v3.x() * v3.x() + v3.y() * v3.y()));
+    auto sphereToVec3 = [&](const osg::Vec3 &sphere) -> osg::Vec3 {
+        // 固定的地球半径
+        float earthRadius = 6371000.0f / 2;
 
-        // 将经度和纬度转换到[0,1]范围
-        float normalizedLon = (lon - minLongitude) / dlt;
-        float normalizedLat = (lat - minLatitude) / (maxLatitude - minLatitude);
+        // 计算出地心到球面点的实际半径 h
+        float h =
+            sqrtf(sphere.x() * sphere.x() + sphere.y() * sphere.y() + sphere.z() * sphere.z());
 
-        // 计算高度
-        float h2 = sqrt(v3.x() * v3.x() + v3.y() * v3.y() + v3.z() * v3.z());
-        float normalizedHeight = (h2 - minHeight) / (maxHeight - minHeight);
+        // 根据高度计算地球表面的距离
+        float altitude = h - earthRadius;
 
-        // 计算线性坐标
-        osg::Vec3 ret;
-        ret.x() = volStartFromLonZero == 0
-                      ? normalizedLon
-                      : (normalizedLon < .5f ? normalizedLon - .5f : normalizedLon + .5f);
-        ret.y() = normalizedLat;
-        ret.z() = normalizedHeight;
+        // 计算纬度 lat = asin(z / h)
+        float lat = asinf(sphere.z() / h);
 
-        return ret;
+        // 计算经度 lon = atan2(y, x)
+        float lon = atan2f(sphere.y(), sphere.x());
+
+        // 将纬度和经度从弧度转换为角度
+        lat = osg::RadiansToDegrees(lat);
+        lon = osg::RadiansToDegrees(lon);
+
+        // 返回值为纬度、经度和高度
+        return osg::Vec3(lat, lon, altitude); // z 分量为高度
     };
 
     // 计算箭头方向和长度
@@ -789,26 +789,15 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     direction.normalize();
 
     // 计算插值点
-    const int numSubdivisions = 10; // 细分数量
+    const int numSubdivisions = 5; // 细分数量
     osg::Vec3Array *lineVertices = new osg::Vec3Array;
     osg::Vec4Array *lineColors = new osg::Vec4Array;
-    // 打印球面坐标
-    std::cout << "start "
-              << ": (" << vec3ToSphere(start).x() << ", " << vec3ToSphere(start).y() << ", "
-              << vec3ToSphere(start).z() << ")" << std::endl;
-    // 打印球面坐标
-    std::cout << "end "
-              << ": (" << vec3ToSphere(end).x() << ", " << vec3ToSphere(end).y() << ", "
-              << vec3ToSphere(end).z() << ")" << std::endl;
 
-    //+osg::Vec3(0.0, 0.0, 8 * (1 - std::exp(-35 * std ::pow(length, 3))));
     std::cout << "length: " << length << std::endl;
     osg::Vec3 sstart = vec3ToSphere(start);
     osg::Vec3 send = vec3ToSphere(end);
     osg::Vec3 newStart = sstart - (send - sstart) * 0.9;
-    osg::Vec3 newend = end + (send - sstart) * 0.1;
     newStart = sphereToVec3(newStart);
-    newend = sphereToVec3(newend);
     // 插值和渐变颜色处理
     for (int i = 0; i <= numSubdivisions; ++i) {
         float t = static_cast<float>(i) / numSubdivisions;
@@ -816,10 +805,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
 
         // 计算一个缩放因子，用来调整z值
         float scaleFactor = 1.0f - (2.0f * t - 1.0f) * (2.0f * t - 1.0f); // (1 - (2t - 1)^2)
-        float zOffset = 3.5f * std::pow(length, 2); // 你可以调整这个值来控制下沉的幅度
+        float zOffset = 600 * std::pow(length, 2); // 你可以调整这个值来控制下沉的幅度
 
         // 修改 z 值
-        interpolatedPos.z() -= scaleFactor * zOffset;
+        interpolatedPos.z() += scaleFactor * zOffset;
         osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
 
         // 添加顶点和颜色
@@ -827,9 +816,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     }
 
     // 创建箭头的几何体
-    osg::Vec3 arrowHeadBase = end - direction * 0.05f; // 箭头头部基点
-    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.03f * length;
-    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.03f * length;
+    osg::Vec3 arrowHeadBase = end - direction * 1.2f; // 箭头头部基点
+    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.8f;
+    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.8f;
 
     osg::Vec3Array *arrowVertices = new osg::Vec3Array;
     osg::Vec4Array *arrowColors = new osg::Vec4Array;
@@ -946,49 +935,18 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
 
 void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
     arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
-    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                     std::numeric_limits<float>::max());
-    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
-                     std::numeric_limits<float>::lowest());
 
-    auto updateMinMax = [&](const osg::Vec3 &p) {
-        minPos.x() = std::min(minPos.x(), p.x());
-        minPos.y() = std::min(minPos.y(), p.y());
-        minPos.z() = std::min(minPos.z(), p.z());
-
-        maxPos.x() = std::max(maxPos.x(), p.x());
-        maxPos.y() = std::max(maxPos.y(), p.y());
-        maxPos.z() = std::max(maxPos.z(), p.z());
-    };
-
-    for (auto &node : *nodes) {
-        updateMinMax(node.second.pos);
-    }
-    auto dltPos = maxPos - minPos;
     if (arrowFlowEnabled) {
         std::cout << "Arrow flow enabled" << std::endl;
         // 开始箭头流动效果
         for (auto &edge : *edges) {
             if (!edge.visible)
-                continue; // 只处理可见边
-
+                continue;                                                 // 只处理可见边
             osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
-            osg::Vec3 startPos = edge.subDivs.front() - minPos;
-
-            // osg::Vec3 startPos = nodes->at(edge.from).pos - minPos;
-            osg::Vec3 endPos = edge.subDivs.back() - minPos;
-            // osg::Vec3 endPos = nodes->at(edge.to).pos - minPos;
-
-            startPos.x() = dltPos.x() == 0.f ? startPos.x() : startPos.x() / dltPos.x();
-            startPos.y() = dltPos.y() == 0.f ? startPos.y() : startPos.y() / dltPos.y();
-            startPos.z() = dltPos.z() == 0.f ? startPos.z() : startPos.z() / dltPos.z();
-
-            endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
-            endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
-            endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z();
-
-            osg::Vec3 offset(0.0f, 0.0f, -64.6f); // 定义垂直方向的偏移量
-            createArrowAnimation(startPos + offset, endPos + offset, color);
+            osg::Vec3 startPos = edge.subDivs.front();
+            osg::Vec3 endPos = edge.subDivs.back();
+            osg::Vec3 offset(0.0f, 0.0f, -220.6f); // 定义垂直方向的偏移量
+            createArrowAnimation((startPos), (endPos), color);
         }
     } else {
         std::cout << "Arrow flow disabled" << std::endl;
@@ -1310,44 +1268,23 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     grp->removeChildren(0, grp->getNumChildren());
 
-    osg::Vec3 minPos(std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
-                     std::numeric_limits<float>::max());
-    osg::Vec3 maxPos(std::numeric_limits<float>::lowest(), std::numeric_limits<float>::lowest(),
-                     std::numeric_limits<float>::lowest());
-
-    auto updateMinMax = [&](const osg::Vec3 &p) {
-        minPos.x() = std::min(minPos.x(), p.x());
-        minPos.y() = std::min(minPos.y(), p.y());
-        minPos.z() = std::min(minPos.z(), p.z());
-
-        maxPos.x() = std::max(maxPos.x(), p.x());
-        maxPos.y() = std::max(maxPos.y(), p.y());
-        maxPos.z() = std::max(maxPos.z(), p.z());
-    };
-
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        float dlt = maxLongitude - minLongitude;
-        float x = volStartFromLonZero == 0 ? v3.x() : v3.x() < .5f ? v3.x() + .5f : v3.x() - .5f;
-        float lon = minLongitude + x * dlt;
-        dlt = maxLatitude - minLatitude;
-        float lat = minLatitude + v3.y() * dlt;
-        dlt = maxHeight - minHeight;
-        float h = minHeight + v3.z() * dlt;
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+
+        float h = 6371000.0f; // 固定为地球半径，单位为米
 
         osg::Vec3 ret;
-        ret.z() = h * sinf(lat);
-        h = h * cosf(lat);
-        ret.y() = h * sinf(lon);
-        ret.x() = h * cosf(lon);
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
+
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
 
         return ret;
     };
-
-    for (auto &node : *nodes) {
-        updateMinMax(node.second.pos);
-    }
-
-    auto dltPos = maxPos - minPos;
 
     auto tessl = new osg::TessellationHints;
     tessl->setDetailRatio(1.f);
@@ -1356,7 +1293,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         if (!itr->second.visible)
             continue;                                        // 只处理可见节点
-        osg::Vec4 color = osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f); // Set color to blue
+        osg::Vec4 color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f); // Set color to blue
         // osg::Vec4 color = osg::Vec4(itr->second.color, 1.f);
         if (!restrictionOFF) {
             if (itr->second.pos.x() >= restriction.leftBound &&
@@ -1366,10 +1303,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
                 color = osg::Vec4(1.0f, 1.0f, 1.0f, 0.5f); // 设置边框内的点为半透明白色
             }
         }
-        auto p = itr->second.pos - minPos;
-        p.x() = dltPos.x() == 0.f ? p.x() : p.x() / dltPos.x();
-        p.y() = dltPos.y() == 0.f ? p.y() : p.y() / dltPos.y();
-        p.z() = dltPos.z() == 0.f ? p.z() : p.z() / dltPos.z();
+        auto p = itr->second.pos;
 
         p = vec3ToSphere(p);
         auto sphere = new osg::ShapeDrawable(new osg::Sphere(p, .25f * nodeGeomSize), tessl);
@@ -1399,8 +1333,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         }
 
         // TODO: 加入文字避让
-        text->setPosition(p + osg::Vec3(0.25f * nodeGeomSize, -0.25f * nodeGeomSize,
-                                        0.0f)); // 设置文字位置为点的位置稍微向上移动一些
+        text->setPosition(p + osg::Vec3(0.5f * nodeGeomSize, 1.0f * nodeGeomSize,
+                                        0.25f * nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
                                                 // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
 
@@ -1424,17 +1358,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         auto dCol = osg::Vec4(nodes->at(edge.to).color, 1.f) - prevColor;
         dCol /= (edge.subDivs.size() == 1 ? 1 : edge.subDivs.size() - 1);
 
-        osg::Vec3 prevPos = edge.subDivs.front() - minPos;
-        prevPos.x() = dltPos.x() == 0.f ? prevPos.x() : prevPos.x() / dltPos.x();
-        prevPos.y() = dltPos.y() == 0.f ? prevPos.y() : prevPos.y() / dltPos.y();
-        prevPos.z() = dltPos.z() == 0.f ? prevPos.z() : prevPos.z() / dltPos.z();
-        // prevPos = vec3ToSphere(prevPos);
-
+        osg::Vec3 prevPos = edge.subDivs.front();
         osg::Vec3 startPos = vec3ToSphere(prevPos); // 起点
-        osg::Vec3 endPos = edge.subDivs.back() - minPos;
-        endPos.x() = dltPos.x() == 0.f ? endPos.x() : endPos.x() / dltPos.x();
-        endPos.y() = dltPos.y() == 0.f ? endPos.y() : endPos.y() / dltPos.y();
-        endPos.z() = dltPos.z() == 0.f ? endPos.z() : endPos.z() / dltPos.z(); // 终点
+        osg::Vec3 endPos = edge.subDivs.back();
         endPos = vec3ToSphere(endPos);
 
         std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
@@ -1446,12 +1372,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
         osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
         for (size_t i = 0; i < edge.subDivs.size(); ++i) {
-            osg::Vec3 currentPos = edge.subDivs[i] - minPos;
-            currentPos.x() = dltPos.x() == 0.f ? currentPos.x() : currentPos.x() / dltPos.x();
-            currentPos.y() = dltPos.y() == 0.f ? currentPos.y() : currentPos.y() / dltPos.y();
-            currentPos.z() = dltPos.z() == 0.f ? currentPos.z() : currentPos.z() / dltPos.z();
-            // currentPos = vec3ToSphere(currentPos);
-
+            osg::Vec3 currentPos = edge.subDivs[i];
             osg::Vec4 currentColor = prevColor + dCol;
 
             // 在 prevPos 和 currentPos 之间插入 5 个细分点

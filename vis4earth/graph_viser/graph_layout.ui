@@ -38,41 +38,56 @@
                     <string>加载CSV文件</string>
                   </property>
                   <layout class="QGridLayout" name="gridLayoutLoadCSV">
-                    <item row="2" column="0" colspan="3">
+                    <!-- 新增的下拉框，放在第0行 -->
+                    <item row="0" column="0" colspan="3">
+                      <widget class="QComboBox" name="comboBoxGraphType">
+                        <item>
+                          <property name="text">
+                            <string>加载固定位置的图</string>
+                          </property>
+                        </item>
+                        <item>
+                          <property name="text">
+                            <string>无固定位置的图</string>
+                          </property>
+                        </item>
+                      </widget>
+                    </item>
+                    <item row="3" column="0" colspan="3">
                       <widget class="QPushButton" name="loadAndDrawGraphButton">
                         <property name="text">
                           <string>加载并绘制图</string>
                         </property>
                       </widget>
                     </item>
-                    <item row="1" column="2">
+                    <item row="2" column="2">
                       <widget class="QLineEdit" name="edgesFilePath"/>
                     </item>
-                    <item row="1" column="0">
+                    <item row="2" column="0">
                       <widget class="QPushButton" name="loadEdgesButton">
                         <property name="text">
                           <string>加载边文件</string>
                         </property>
                       </widget>
                     </item>
-                    <item row="0" column="2">
+                    <item row="1" column="2">
                       <widget class="QLineEdit" name="pointsFilePath"/>
                     </item>
-                    <item row="0" column="0">
+                    <item row="1" column="0">
                       <widget class="QPushButton" name="loadPointsButton">
                         <property name="text">
                           <string>加载点文件</string>
                         </property>
                       </widget>
                     </item>
-                    <item row="3" column="0">
+                    <item row="4" column="0">
                       <widget class="QLabel" name="sizeLabel">
                         <property name="text">
                           <string>大小: 100%</string>
                         </property>
                       </widget>
                     </item>
-                    <item row="3" column="2">
+                    <item row="4" column="2">
                       <widget class="QSlider" name="sizeSlider">
                         <property name="minimum">
                           <number>50</number>
@@ -88,14 +103,14 @@
                         </property>
                       </widget>
                     </item>
-                    <item row="4" column="0">
+                    <item row="5" column="0">
                       <widget class="QLabel" name="fontSizeLabel">
                         <property name="text">
                           <string>字体大小: 12</string>
                         </property>
                       </widget>
                     </item>
-                    <item row="4" column="2">
+                    <item row="5" column="2">
                       <widget class="QSlider" name="fontSizeSlider">
                         <property name="minimum">
                           <number>8</number>
@@ -112,14 +127,14 @@
                       </widget>
                     </item>
                     <!-- 新增的分辨率滑块 -->
-                    <item row="5" column="0">
+                    <item row="6" column="0">
                       <widget class="QLabel" name="resolutionLabel">
                         <property name="text">
                           <string>分辨率: 100%</string>
                         </property>
                       </widget>
                     </item>
-                    <item row="5" column="2">
+                    <item row="6" column="2">
                       <widget class="QSlider" name="resolutionSlider">
                         <property name="minimum">
                           <number>0</number>

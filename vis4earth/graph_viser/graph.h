@@ -29,6 +29,7 @@ struct Node {
     glm::vec3 acc;
     glm::vec3 force;
     int level;
+    std::string name;
 
     Node()
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0), pos(0.0f),
@@ -40,6 +41,9 @@ struct Node {
     Node(double x, double y, int level)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level) {}
+    Node(double x, double y, int level, std::string name)
+        : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
+          pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name) {}
 };
 
 struct Edge {
