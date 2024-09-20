@@ -32,8 +32,16 @@ VIS4Earth::GraphRenderer::CoordRange getCoordRange(const VIS4Earth::Graph &graph
 
 VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidget(ui, parent) {
 
+    // 连接 comboBox 的信号来记录当前选择的索引
+    graphTypeIndex = 0; // 默认选择第一个（有经纬度的图）
+
+    connect(ui->comboBoxGraphType, SIGNAL(currentIndexChanged(int)), this,
+            SLOT(onComboBoxGraphTypeChanged(int)));
+
+    // 打开文件夹
     connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
     connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
+    // 加载图并绘制
     connect(ui->loadAndDrawGraphButton, &QPushButton::clicked, this,
             &GraphRenderer::loadAndDrawGraph);
 
@@ -177,6 +185,7 @@ void GraphRenderer::update(const std::string &graphName) {
         itr->second.update();
     }
 }
+void VIS4Earth::GraphRenderer::onComboBoxGraphTypeChanged(int index) { graphTypeIndex = index; }
 
 void GraphRenderer::loadPointsCSV() {
     QString pointsFileName =
@@ -198,9 +207,7 @@ void VIS4Earth::GraphRenderer::loadEdgesCSV() {
     // 设置文件路径到对应的文本框
     ui->edgesFilePath->setText(edgesFileName);
 }
-
-void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
-
+void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     QString pointsFileName = ui->pointsFilePath->text();
     QString edgesFileName = ui->edgesFilePath->text();
 
@@ -281,6 +288,17 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
         coordRangeLabel->setText(text);
     } catch (const std::exception &e) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
+    }
+}
+void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {}
+
+void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
+    if (graphTypeIndex == 0) // 假设 index 0 是 "加载固定位置的图"
+    {
+        loadGeoTypeGraph();         // 调用加载函数1
+    } else if (graphTypeIndex == 1) // 假设 index 1 是 "无固定位置的图"
+    {
+        loadNoGeoTypeGraph(); // 调用加载函数2
     }
 }
 
@@ -1333,9 +1351,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         }
 
         // TODO: 加入文字避让
-        text->setPosition(p + osg::Vec3(0.5f * nodeGeomSize, 1.0f * nodeGeomSize,
-                                        0.25f * nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-                                                // 设置文字内容为点的ID
+        text->setPosition(
+            p + osg::Vec3(0.5f * nodeGeomSize, 1.0f * nodeGeomSize,
+                          0.25f * nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
+                                                  // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
 
         osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
@@ -1656,3 +1675,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::performClustering(const GraphLevel
         }
     }
 }
+
+// 有固定位置的图的聚类
+
+// 无固定位置的图的聚类

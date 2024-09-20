@@ -10,6 +10,9 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <stack>
+#include <queue>
+
 
 #define EPSILON 1e-6
 #define INV_SQRT_2PI 0.3989422804
@@ -54,6 +57,7 @@ struct Edge {
     std::vector<glm::vec3> subdivs;
     double width;
     std::vector<int> compatibleEdges;
+    int weight;
 
     Edge(const std::string &mySourceLabel, const std::string &myTargetLabel,
          const glm::vec3 &myStart, const glm::vec3 &myEnd, double myWidth)
@@ -282,6 +286,8 @@ struct Graph {
   private:
     std::unordered_map<std::string, Node> nodes;
     std::vector<Edge> edges;
+    std::unordered_map<std::string, std::vector<std::string>>
+        adj_list; // 邻接表，键为 string 类型的节点 id
     std::unordered_set<std::pair<int, int>, pair_hash> nodePairs;
     std::unordered_set<int> nodesNotMove;
 
@@ -482,6 +488,272 @@ struct Graph {
     static double distance(const glm::vec3 &v1, const glm::vec3 &v2) {
         return std::sqrt(std::pow(v1.x - v2.x, 2.0) + std::pow(v1.y - v2.y, 2.0) +
                          std::pow(v1.z - v2.z, 2.0));
+    }
+    // 计算度中心性
+    std::unordered_map<std::string, double> degree_centrality() {
+        std::unordered_map<std::string, double> degree_centrality;
+        int n = nodes.size();
+        for (const auto &node : nodes) {
+            degree_centrality[node.first] = (double)adj_list[node.first].size() / (n - 1);
+        }
+        return degree_centrality;
+    }
+
+    // 计算介数中心性（基于 BFS）
+    std::unordered_map<std::string, double> betweenness_centrality() {
+        std::unordered_map<std::string, double> betweenness;
+        for (const auto &node : nodes) {
+            betweenness[node.first] = 0.0;
+        }
+
+        for (const auto &s : nodes) {
+            std::unordered_map<std::string, double> sigma;
+            std::unordered_map<std::string, double> dist;
+            std::unordered_map<std::string, std::vector<std::string>> pred;
+            std::unordered_map<std::string, double> delta;
+            std::stack<std::string> S;
+            std::queue<std::string> Q;
+
+            for (const auto &v : nodes) {
+                sigma[v.first] = 0.0;
+                dist[v.first] = -1;
+            }
+            sigma[s.first] = 1.0;
+            dist[s.first] = 0;
+
+            Q.push(s.first);
+
+            while (!Q.empty()) {
+                std::string v = Q.front();
+                Q.pop();
+                S.push(v);
+
+                for (const std::string &w : adj_list[v]) {
+                    if (dist[w] < 0) {
+                        Q.push(w);
+                        dist[w] = dist[v] + 1;
+                    }
+                    if (dist[w] == dist[v] + 1) {
+                        sigma[w] += sigma[v];
+                        pred[w].push_back(v);
+                    }
+                }
+            }
+
+            for (const auto &v : nodes) {
+                delta[v.first] = 0.0;
+            }
+
+            while (!S.empty()) {
+                std::string w = S.top();
+                S.pop();
+                for (const std::string &v : pred[w]) {
+                    delta[v] += (sigma[v] / sigma[w]) * (1 + delta[w]);
+                }
+                if (w != s.first) {
+                    betweenness[w] += delta[w];
+                }
+            }
+        }
+
+        int n = nodes.size();
+        for (auto &node : nodes) {
+            betweenness[node.first] /= (n - 1) * (n - 2) / 2.0;
+        }
+
+        return betweenness;
+    }
+
+    // 计算特征向量中心性（幂迭代法）
+    std::unordered_map<std::string, double> eigenvector_centrality(int max_iter = 100,
+                                                              double tol = 1e-6) {
+        std::unordered_map<std::string, double> eigenvector;
+        std::unordered_map<std::string, double> last_eigenvector;
+        int n = nodes.size();
+
+        // 初始化特征向量
+        for (const auto &node : nodes) {
+            eigenvector[node.first] = 1.0 / sqrt(n);
+        }
+
+        for (int iter = 0; iter < max_iter; iter++) {
+            last_eigenvector = eigenvector;
+            double max_diff = 0.0;
+
+            for (const auto &node : nodes) {
+                double sum = 0.0;
+                for (const std::string &neighbor : adj_list[node.first]) {
+                    sum += last_eigenvector[neighbor];
+                }
+                eigenvector[node.first] = sum;
+            }
+
+            // 归一化
+            double norm = 0.0;
+            for (const auto &node : nodes) {
+                norm += eigenvector[node.first] * eigenvector[node.first];
+            }
+            norm = sqrt(norm);
+            for (auto &node : nodes) {
+                eigenvector[node.first] /= norm;
+            }
+
+            // 检查收敛
+            for (const auto &node : nodes) {
+                max_diff =
+                    std::max(max_diff, fabs(eigenvector[node.first] - last_eigenvector[node.first]));
+            }
+            if (max_diff < tol)
+                break;
+        }
+
+        return eigenvector;
+    }
+    void calculateGeoNodeLevel() {
+        // 计算顶点的权重
+        for (const auto &edge : edges) {
+            adj_list[edge.sourceLabel].push_back(edge.targetLabel);
+            adj_list[edge.targetLabel].push_back(edge.sourceLabel); // 无向图
+        }
+
+        std::unordered_map<std::string, double> degree = degree_centrality();
+        std::unordered_map<std::string, double> betweenness = betweenness_centrality();
+        std::unordered_map<std::string, double> eigenvector = eigenvector_centrality();
+
+        for (auto &node : nodes) {
+            std::string id = node.first;
+            // 直接将权重存储在节点的 level 字段中
+            node.second.level = 0.5 * betweenness[id] + 0.3 * eigenvector[id] + 0.2 * degree[id];
+        }
+
+
+    }
+    // 计算节点的 PageRank 值，并直接覆盖到每个节点的 level 字段中
+    void calculate_pagerank(double damping_factor = 0.85, int max_iter = 100, double tol = 1e-6) {
+        std::unordered_map<std::string, double> pagerank;
+        std::unordered_map<std::string, double> last_pagerank;
+        int n = nodes.size();
+        double initial_rank = 1.0 / n;
+
+        // 初始化每个节点的 PageRank 值
+        for (const auto &node : nodes) {
+            pagerank[node.first] = initial_rank;
+        }
+
+        for (int iter = 0; iter < max_iter; iter++) {
+            last_pagerank = pagerank;
+            double diff = 0.0;
+
+            // 遍历每个节点，计算新的 PageRank
+            for (const auto &node : nodes) {
+                std::string node_id = node.first;
+                double rank_sum = 0.0;
+
+                for (const auto &pair : adj_list) {
+                    const std::string &source_id = pair.first;               // 当前节点的 ID
+                    const std::vector<std::string> &neighbors = pair.second; // 当前节点的邻居列表
+
+                    // 检查当前节点是否指向 node_id
+                    if (find(neighbors.begin(), neighbors.end(), node_id) != neighbors.end()) {
+                        // 如果找到指向 node_id 的边，累加 source_id 的 PageRank
+                        rank_sum += last_pagerank[source_id] / adj_list[source_id].size();
+                    }
+                }
+
+                // 更新当前节点的 PageRank 值
+                pagerank[node_id] = (1 - damping_factor) / n + damping_factor * rank_sum;
+                diff = std::max(diff, fabs(pagerank[node_id] - last_pagerank[node_id]));
+            }
+
+            // 检查是否收敛
+            if (diff < tol) {
+                break;
+            }
+        }
+        // 将 PageRank 值存储在节点的 level 字段中
+        for (auto &node : nodes) {
+            node.second.level = pagerank[node.first];
+        }
+    }
+    void calculateNoGeoNodeLevel() {
+        // 计算顶点的权重
+        for (const auto &edge : edges) {
+            adj_list[edge.sourceLabel].push_back(edge.targetLabel);
+            adj_list[edge.targetLabel].push_back(edge.sourceLabel); // 无向图
+        }
+        calculate_pagerank();
+    }
+    void calculateGeoEdgeWeight() {
+        // 计算边的权重
+    }
+    void calculateNoGeoEdgeWeight() {
+        std::unordered_map<std::string, double> edge_betweenness;
+
+        for (const auto &node_pair : nodes) {
+            std::string s = node_pair.first;
+            // BFS 初始化
+            std::unordered_map<std::string, int> distance;
+            std::unordered_map<std::string, std::vector<std::string>> predecessors;
+            std::unordered_map<std::string, double> sigma;
+            std::unordered_map<std::string, double> delta;
+            std::stack<std::string> node_stack;
+            std::queue<std::string> q;
+
+            // 初始化
+            for (const auto &node : nodes) {
+                distance[node.first] = -1; // -1 表示未访问
+                sigma[node.first] = 0;
+                delta[node.first] = 0;
+            }
+
+            distance[s] = 0;
+            sigma[s] = 1;
+            q.push(s);
+
+            // BFS 阶段
+            while (!q.empty()) {
+                std::string v = q.front();
+                q.pop();
+                node_stack.push(v);
+
+                for (const auto &neighbor : adj_list[v]) {
+                    // 未访问的节点
+                    if (distance[neighbor] < 0) {
+                        distance[neighbor] = distance[v] + 1;
+                        q.push(neighbor);
+                    }
+                    // 更新前驱节点
+                    if (distance[neighbor] == distance[v] + 1) {
+                        sigma[neighbor] += sigma[v];
+                        predecessors[neighbor].push_back(v);
+                    }
+                }
+            }
+
+            // 反向传播阶段
+            while (!node_stack.empty()) {
+                std::string w = node_stack.top();
+                node_stack.pop();
+
+                for (const auto &v : predecessors[w]) {
+                    double c = (sigma[v] / sigma[w]) * (1.0 + delta[w]);
+                    delta[v] += c;
+
+                    // 找到边 (v, w)，增加其介数中心性
+                    for (auto &edge : edges) {
+                        if ((edge.sourceLabel == v && edge.targetLabel == w) ||
+                            (edge.sourceLabel == w && edge.targetLabel == v)) {
+                            edge.weight += c;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 最后将介数中心性值除以 2（因为每条边在无向图中被计算了两次）
+        for (auto &edge : edges) {
+            edge.weight /= 2.0;
+        }
     }
 };
 

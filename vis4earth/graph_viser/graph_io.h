@@ -210,23 +210,16 @@ class GraphLoader {
         }
         rows = f.Rows();
         f.GetText(line, 1024);
-        char labelCh[128] = {""};
-        double x, y;
+        int labelCh;
+        char name[100];
+        double latitude, longitude;
         std::unordered_map<std::string, Node> read_nodes;
-        int nodeLevel = 0;    // Default value if level is not present
-        bool hasLevel = true; // Flag to indicate if level is present in the file
 
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
-
-            if (hasLevel) {
-                sscanf(line, "%s %lg %lg %d", labelCh, &x, &y, &nodeLevel);
-            } else {
-                sscanf(line, "%s %lg %lg", labelCh, &x, &y);
-                nodeLevel = 0; // Default level if not present
-            }
+            sscanf(line, "%d,%[^,],%lg,%lg", &labelCh, name, &latitude, &longitude);
             read_nodes.insert(
-                std::pair<std::string, Node>(std::string(labelCh), Node(x, y, nodeLevel)));
+                std::pair<std::string, Node>(std::to_string(labelCh), Node(latitude, longitude)));
         }
         f.Close();
 
@@ -246,6 +239,57 @@ class GraphLoader {
             edgeF.GetText(line, 1024);
             w = 1.0;
             sscanf(line, "%s %s %lg", src, dst, &w);
+            allEdges.push_back(Edge(std::string(src), std::string(dst),
+                                    read_nodes[std::string(src)].pos,
+                                    read_nodes[std::string(dst)].pos, w + 1.0));
+        }
+        edgeF.Close();
+
+        VIS4Earth::Graph graph;
+        graph.set(read_nodes, allEdges);
+
+        return graph;
+    }
+    static VIS4Earth::Graph LoadFromNoGeoFile(const std::string &nodesFile,
+                                              const std::string &edgesFile) {
+        VIS4Earth::GraphLoader f;
+        int rows = 0;
+        char line[1024] = {""};
+
+        // read nodes
+        if (!f.Open(nodesFile, "r")) {
+            exit(0);
+        }
+        rows = f.Rows();
+        f.GetText(line, 1024);
+        int labelCh;
+        char name[100];
+        double latitude, longitude;
+        std::unordered_map<std::string, Node> read_nodes;
+
+        for (int r = 1; r < rows; r++) {
+            f.GetText(line, 1024);
+            sscanf(line, "%d,%[^,]", &labelCh, name);
+            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh), Node()));
+        }
+        f.Close();
+
+        // read edgeFile
+        VIS4Earth::GraphLoader edgeF;
+        int rowsEdge = 0;
+        char lineEdge[1024] = {""};
+        if (!edgeF.Open(edgesFile, "r")) {
+            exit(0);
+        }
+        rowsEdge = edgeF.Rows();
+        edgeF.GetText(lineEdge, 1024);
+        char src[128], dst[128];
+        double w, wmax = 0.0;
+        std::vector<Edge> allEdges;
+        for (int r = 0; r < rowsEdge - 1; r++) {
+            edgeF.GetText(line, 1024);
+            w = 1.0;
+            sscanf(line, "%s,%s %lg", src, dst, &w);
             allEdges.push_back(Edge(std::string(src), std::string(dst),
                                     read_nodes[std::string(src)].pos,
                                     read_nodes[std::string(dst)].pos, w + 1.0));

@@ -14,8 +14,10 @@
 #include <vector>
 
 #include <osg/AnimationPath>
+#include <osg/BlendFunc>
 #include <osg/CoordinateSystemNode>
 #include <osg/CullFace>
+#include <osg/Depth>
 #include <osg/Geode>
 #include <osg/Geometry>
 #include <osg/LineWidth>
@@ -23,8 +25,6 @@
 #include <osg/MatrixTransform>
 #include <osg/NodeCallback>
 #include <osg/Point>
-#include <osg/BlendFunc>
-#include <osg/Depth>
 #include <osg/ShapeDrawable>
 #include <osgAnimation/AnimationManagerBase>
 #include <osgAnimation/BasicAnimationManager>
@@ -50,7 +50,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
   public:
     double size = 1.0;
-
+    int graphTypeIndex;
     VIS4Earth::Graph myGraph;
 
     VIS4Earth::EdgeBundling::BundlingParam mybundlingParam;
@@ -108,8 +108,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         bool arrowFlowEnabled = false; // 标志变量
         bool isAnimating = false;
         std::shared_ptr<std::map<std::string, Node>> nodes; // 当前nodes
-        std::shared_ptr<std::vector<Edge>> edges; // 当前edges
-        std::vector<GraphLevel> levels; // 存放多层次的图
+        std::shared_ptr<std::vector<Edge>> edges;           // 当前edges
+        std::vector<GraphLevel> levels;                     // 存放多层次的图
         osg::ref_ptr<osg::Group> grp;
 
       public:
@@ -138,7 +138,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::ref_ptr<osg::Geode> lineGeode;
         osg::ref_ptr<osg::Geometry> lineGeometry;
         osg::ref_ptr<osg::Geode> triangleGeode; // 新增用于保存三角形的 Geode
-        
+
         void update();
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
                                   const osg::Vec4 &color);
@@ -193,12 +193,15 @@ class GraphRenderer : public QtOSGReflectableWidget {
             it->second.edges = edges;
         }
     }
+    void loadGeoTypeGraph();
+    void loadNoGeoTypeGraph();
 
   protected:
     Ui::GraphRenderer *ui;
 
     // void initOSGResource();
   private slots:
+    void onComboBoxGraphTypeChanged(int index);
     void loadPointsCSV();
 
     void loadEdgesCSV();
