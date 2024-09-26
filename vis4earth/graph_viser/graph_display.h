@@ -46,8 +46,6 @@ class GraphRenderer;
 
 namespace VIS4Earth {
 
-
-
 class GraphRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
   public:
@@ -67,7 +65,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::Vec3 color;
         std::string id;
         bool visible = true; // 默认可见
-        double level;       
+        double level;
     };
 
     struct Edge {
@@ -75,7 +73,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::string from;
         std::string to;
         std::vector<osg::Vec3> subDivs;
-        int weight;
+        float weight = 0;
         bool visible = true; // 默认可见
         bool isAdd = false;  // 默认不是后添加的边
         // 自定义比较运算符
@@ -98,6 +96,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
     std::vector<std::unordered_map<std::string, std::vector<Edge>>>
         edgeMappingList; // 使用边的id作为键
     void simplifyGraphWithDBSCAN(const Graph &originalGraph);
+
   private:
     struct PerRendererParam {
         osg::ref_ptr<osg::Group> grp;
@@ -111,7 +110,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::shared_ptr<std::map<std::string, Node>> nodes; // 当前层次的节点
         std::shared_ptr<std::vector<Edge>> edges;           // 当前层次的边
         std::shared_ptr<std::map<std::string, std::vector<std::string>>> nodeMapping; // 节点映射
-        std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping; 
+        std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping;
     };
 
     class PerGraphParam {
@@ -212,8 +211,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
     }
     void loadGeoTypeGraph();
     void loadNoGeoTypeGraph();
-    
-
 
   protected:
     Ui::GraphRenderer *ui;

@@ -252,6 +252,7 @@ class GraphLoader {
     }
     static VIS4Earth::Graph LoadFromNoGeoFile(const std::string &nodesFile,
                                               const std::string &edgesFile) {
+        std::srand(std::time(0));
         VIS4Earth::GraphLoader f;
         int rows = 0;
         char line[1024] = {""};
@@ -270,7 +271,9 @@ class GraphLoader {
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
             sscanf(line, "%d,%[^,]", &labelCh, name);
-            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh), Node()));
+            float x = std::rand() % 100;
+            float y = std::rand() % 100;
+            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh), Node(x, y)));
         }
         f.Close();
 
@@ -299,7 +302,7 @@ class GraphLoader {
         VIS4Earth::Graph graph;
         graph.set(read_nodes, allEdges);
         graph.calculateNoGeoNodeLevel();
-        graph.calculateNoGeoNodeLevel();
+        graph.calculateNoGeoEdgeWeight();
         return graph;
     }
 };

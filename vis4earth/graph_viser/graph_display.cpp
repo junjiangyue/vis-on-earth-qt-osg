@@ -281,11 +281,12 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         myGraph = graph;
         // 初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
-        QString text = QString("当前坐标范围: 最低纬度: %1, 最高纬度: %2, 最大经度: %3, 最小经度: %4")
-                           .arg(coordRange.minX)
-                           .arg(coordRange.maxX)
-                           .arg(coordRange.maxY)
-                           .arg(coordRange.minY);
+        QString text =
+            QString("当前坐标范围: 最低纬度: %1, 最高纬度: %2, 最大经度: %3, 最小经度: %4")
+                .arg(coordRange.minX)
+                .arg(coordRange.maxX)
+                .arg(coordRange.maxY)
+                .arg(coordRange.minY);
         coordRangeLabel->setText(text);
     } catch (const std::exception &e) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
@@ -318,22 +319,39 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         }
         size_t i = 0;
         for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
+            VIS4Earth::GraphRenderer::Node node;
+            // 初始化pos
+            node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+            node.color = colors[i];
+            node.id = itr->first;
+            node.level = itr->second.level;
 
+            nodes->emplace(std::make_pair(itr->first, node));
+            ++i;
         }
-
+        // pos有问题
         for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
-            
-        }
+            edges->emplace_back();
 
-        // 添加图到渲染器中
-        addGraph("LoadedGraph", nodes, edges);
-        // 更新图渲染
-        auto graphParam = getGraph("LoadedGraph");
-        if (graphParam) {
-
-           
+            auto &edge = edges->back();
+            edge.from = itr->sourceLabel;
+            edge.to = itr->targetLabel;
+            edge.weight = itr->weight;
+            if (itr->subdivs.empty()) {
+                edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            } else {
+                edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+                for (auto &subdiv : itr->subdivs)
+                    edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            }
         }
         myGraph = graph;
+        // 添加图到渲染器中
+        addGraph("LoadedGraph", nodes, edges);
+
+        showGraph();
         // 初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
         QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
@@ -342,13 +360,10 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
                            .arg(coordRange.maxY)
                            .arg(coordRange.minY);
         coordRangeLabel->setText(text);
-    
-    
+
     } catch (const std::exception &e) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
     }
-
-
 }
 
 void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
@@ -1441,11 +1456,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         osg::Vec3 endPos = edge.subDivs.back();
         endPos = vec3ToSphere(endPos);
 
-        //std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
-        //std::cout << "Start position (sphere): (" << startPos.x() << ", " << startPos.y() << ", "
-        //          << startPos.z() << ")" << std::endl;
-        //std::cout << "End position (sphere): (" << endPos.x() << ", " << endPos.y() << ", "
-        //          << endPos.z() << ")" << std::endl;
+        // std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
+        // std::cout << "Start position (sphere): (" << startPos.x() << ", " << startPos.y() << ", "
+        //           << startPos.z() << ")" << std::endl;
+        // std::cout << "End position (sphere): (" << endPos.x() << ", " << endPos.y() << ", "
+        //           << endPos.z() << ")" << std::endl;
 
         osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
         osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
@@ -1605,7 +1620,6 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             // 更新簇中所有节点的映射关系
             for (const std::string &nodeId : nodesInCluster) {
                 nodeMapping[representativeNodeId].push_back(nodeId);
-                
             }
         } else {
             // 如果簇中只有一个节点，直接保留
@@ -1623,40 +1637,6 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             remainingNodes.push_back(nodeId);
         }
     }
-
-    // 处理边的合并
-    for (const auto &edge : *(previousLevel.edges)) {
-        if (nodeMapping.find(edge.from) != nodeMapping.end() &&
-            nodeMapping.find(edge.to) != nodeMapping.end()) {
-       
-            std::string newFrom = nodeMapping[edge.from][0]; // 从映射中获取代表节点
-            std::string newTo = nodeMapping[edge.to][0];     // 从映射中获取代表节点
-
-            if (newFrom != newTo) {
-                // 检查新图中是否已经存在这条边，避免重复
-                bool edgeExists =
-                    std::any_of(currentLevel.edges->begin(), currentLevel.edges->end(),
-                                [&](const Edge &existingEdge) {
-                                    return (existingEdge.from == newFrom && existingEdge.to == newTo) ||
-                                           (existingEdge.from == newTo && existingEdge.to == newFrom);
-                                });
-
-                if (!edgeExists) {
-                    // 添加新的边
-                    Edge newEdge = edge;
-                    newEdge.from = newFrom;
-                    newEdge.to = newTo;
-                    currentLevel.edges->push_back(newEdge);
-
-                    // 记录边的映射
-                    edgeMapping[newEdge].push_back(edge);
-                }
-            }
-        } else {
-            continue;
-        }
-    }
-
     // 计算目标节点数 N_simplified
     int N_simplified = static_cast<int>(previousLevel.nodes->size() * (1 - threshold));
 
@@ -1697,7 +1677,7 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
     }
 
     // 添加剩余节点，直到当前层次的节点数等于 N_simplified
-    if (remainingNodes.size() > 0 && currentLevel.nodes->size() < N_simplified) {
+    if (currentLevel.nodes->size() < N_simplified && remainingNodes.size() > 0) {
         // 将剩余节点按权重降序排列
         std::sort(remainingNodes.begin(), remainingNodes.end(),
                   [&](const std::string &a, const std::string &b) {
@@ -1712,26 +1692,75 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
 
             // 更新节点映射，直接映射自己
             nodeMapping[nodeIdToAdd].push_back(nodeIdToAdd);
+        }
+    }
+    // 处理边
+    std::set<std::pair<std::string, std::string>> processedEdges;
 
-            // 处理边，将新添加的节点的相关边加回 simplifiedGraph
-            for (const Edge &edge : *previousLevel.edges) {
-                // 如果边的两端有一端是这个新添加的节点，另一端已经在 currentLevel 中
-                if (edge.from == nodeIdToAdd && currentLevel.nodes->count(edge.to) > 0) {
-                    // 添加从 nodeIdToAdd 到已经存在的节点的边
-                    Edge newEdge = edge;
-                    currentLevel.edges->push_back(newEdge);
+    // 1. 保留当前层次中已经存在的边
+    for (const Edge &edge : *previousLevel.edges) {
+        if (currentLevel.nodes->count(edge.from) > 0 && currentLevel.nodes->count(edge.to) > 0) {
+            Edge newEdge = edge;
+            currentLevel.edges->push_back(newEdge);
 
-                    // 记录边映射
-                    edgeMapping[newEdge] = {edge};
+            // 记录边映射
+            edgeMapping[newEdge] = {edge};
 
-                } else if (edge.to == nodeIdToAdd && currentLevel.nodes->count(edge.from) > 0) {
-                    // 添加从已经存在的节点到 nodeIdToAdd 的边
-                    Edge newEdge = edge;
-                    currentLevel.edges->push_back(newEdge);
+            // 标记已处理的边
+            processedEdges.insert({std::min(edge.from, edge.to), std::max(edge.from, edge.to)});
+        }
+    }
 
-                    // 记录边映射
-                    edgeMapping[newEdge] = {edge};
+    // 2. 为未直接连接但联通的节点添加新边
+    for (const auto &nodePair1 : *currentLevel.nodes) {
+        for (const auto &nodePair2 : *currentLevel.nodes) {
+            if (nodePair1.first == nodePair2.first)
+                continue; // 跳过自己与自己的边
+
+            std::string from = std::min(nodePair1.first, nodePair2.first);
+            std::string to = std::max(nodePair1.first, nodePair2.first);
+
+            // 如果这条边已经处理过，则跳过
+            if (processedEdges.count({from, to}) > 0)
+                continue;
+
+            // 检查这两个节点在上一层是否通过某种方式连接
+            bool isConnected = false;
+            for (const std::string &originalNode1 : nodeMapping.at(nodePair1.first)) {
+                for (const std::string &originalNode2 : nodeMapping.at(nodePair2.first)) {
+                    // 检查是否有直接连接的边
+                    for (const Edge &edge : *previousLevel.edges) {
+                        if ((edge.from == originalNode1 && edge.to == originalNode2) ||
+                            (edge.from == originalNode2 && edge.to == originalNode1)) {
+                            isConnected = true;
+                            break;
+                        }
+                    }
+                    if (isConnected)
+                        break;
                 }
+                if (isConnected)
+                    break;
+            }
+
+            // 如果两个节点在上一级中连接，则在当前层中添加一条直接的边
+            if (isConnected) {
+                Edge newEdge;
+                newEdge.from = from;
+                newEdge.to = to;
+                // 设置细分点
+                auto it = nodes->find(from);
+                newEdge.subDivs.emplace_back(it->second.pos);
+                it = nodes->find(to);
+                newEdge.subDivs.emplace_back(it->second.pos);
+
+                currentLevel.edges->push_back(newEdge);
+
+                // 记录边映射
+                edgeMapping[newEdge] = {};
+
+                // 标记已处理的边
+                processedEdges.insert({from, to});
             }
         }
     }
@@ -1741,6 +1770,5 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         std::make_shared<std::map<std::string, std::vector<std::string>>>(nodeMapping);
     currentLevel.edgeMapping = std::make_shared<std::map<Edge, std::vector<Edge>>>(edgeMapping);
 }
-
 
 // 无固定位置的图的聚类

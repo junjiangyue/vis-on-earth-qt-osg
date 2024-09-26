@@ -5,14 +5,13 @@
 #include <cmath>
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
+#include <queue>
+#include <stack>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include <stack>
-#include <queue>
-
 
 #define EPSILON 1e-6
 #define INV_SQRT_2PI 0.3989422804
@@ -567,7 +566,7 @@ struct Graph {
 
     // 计算特征向量中心性（幂迭代法）
     std::unordered_map<std::string, double> eigenvector_centrality(int max_iter = 100,
-                                                              double tol = 1e-6) {
+                                                                   double tol = 1e-6) {
         std::unordered_map<std::string, double> eigenvector;
         std::unordered_map<std::string, double> last_eigenvector;
         int n = nodes.size();
@@ -601,8 +600,8 @@ struct Graph {
 
             // 检查收敛
             for (const auto &node : nodes) {
-                max_diff =
-                    std::max(max_diff, fabs(eigenvector[node.first] - last_eigenvector[node.first]));
+                max_diff = std::max(max_diff,
+                                    fabs(eigenvector[node.first] - last_eigenvector[node.first]));
             }
             if (max_diff < tol)
                 break;
@@ -626,8 +625,6 @@ struct Graph {
             // 直接将权重存储在节点的 level 字段中
             node.second.level = 0.5 * betweenness[id] + 0.3 * eigenvector[id] + 0.2 * degree[id];
         }
-
-
     }
     // 计算节点的 PageRank 值，并直接覆盖到每个节点的 level 字段中
     void calculate_pagerank(double damping_factor = 0.85, int max_iter = 100, double tol = 1e-6) {
@@ -689,7 +686,9 @@ struct Graph {
     }
     void calculateNoGeoEdgeWeight() {
         std::unordered_map<std::string, double> edge_betweenness;
-
+        for (auto &edge : edges) {
+            edge.weight = 0.0;
+        }
         for (const auto &node_pair : nodes) {
             std::string s = node_pair.first;
             // BFS 初始化
@@ -742,6 +741,7 @@ struct Graph {
 
                     // 找到边 (v, w)，增加其介数中心性
                     for (auto &edge : edges) {
+
                         if ((edge.sourceLabel == v && edge.targetLabel == w) ||
                             (edge.sourceLabel == w && edge.targetLabel == v)) {
                             edge.weight += c;
