@@ -31,7 +31,7 @@ struct Node {
     glm::vec3 vel;
     glm::vec3 acc;
     glm::vec3 force;
-    int level;
+    double level;
     std::string name;
 
     Node()
@@ -41,10 +41,10 @@ struct Node {
     Node(double x, double y)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f) {}
-    Node(double x, double y, int level)
+    Node(double x, double y, double level)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level) {}
-    Node(double x, double y, int level, std::string name)
+    Node(double x, double y, double level, std::string name)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name) {}
 };
@@ -52,6 +52,7 @@ struct Node {
 struct Edge {
     std::string sourceLabel;
     std::string targetLabel;
+    std::string id;
     glm::vec3 start;
     glm::vec3 end;
     std::vector<glm::vec3> subdivs;

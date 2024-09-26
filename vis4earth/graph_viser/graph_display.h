@@ -46,6 +46,8 @@ class GraphRenderer;
 
 namespace VIS4Earth {
 
+
+
 class GraphRenderer : public QtOSGReflectableWidget {
     Q_OBJECT
   public:
@@ -65,15 +67,24 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::Vec3 color;
         std::string id;
         bool visible = true; // 默认可见
-        int level = 0;       // 默认等级为0 用来展示多分辨率的图和节点收缩
+        double level;       
     };
 
     struct Edge {
+        std::string id;
         std::string from;
         std::string to;
         std::vector<osg::Vec3> subDivs;
+        int weight;
         bool visible = true; // 默认可见
         bool isAdd = false;  // 默认不是后添加的边
+        // 自定义比较运算符
+        bool operator<(const Edge &other) const {
+            if (from == other.from) {
+                return to < other.to;
+            }
+            return from < other.from;
+        }
     };
     struct CoordRange {
         float minX;
@@ -82,7 +93,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
         float maxY;
     };
     CoordRange coordRange;
-
+    std::vector<Graph> simplifiedGraphsList;
+    std::vector<std::unordered_map<std::string, std::vector<std::string>>> nodeMappingList;
+    std::vector<std::unordered_map<std::string, std::vector<Edge>>>
+        edgeMappingList; // 使用边的id作为键
+    void simplifyGraphWithDBSCAN(const Graph &originalGraph);
   private:
     struct PerRendererParam {
         osg::ref_ptr<osg::Group> grp;
@@ -93,8 +108,10 @@ class GraphRenderer : public QtOSGReflectableWidget {
     PerRendererParam param;
 
     struct GraphLevel {
-        std::shared_ptr<std::map<std::string, Node>> nodes;
-        std::shared_ptr<std::vector<Edge>> edges;
+        std::shared_ptr<std::map<std::string, Node>> nodes; // 当前层次的节点
+        std::shared_ptr<std::vector<Edge>> edges;           // 当前层次的边
+        std::shared_ptr<std::map<std::string, std::vector<std::string>>> nodeMapping; // 节点映射
+        std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping; 
     };
 
     class PerGraphParam {
@@ -160,7 +177,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void setLevelGraph(int level);
         void generateHierarchicalGraphs(std::shared_ptr<std::map<std::string, Node>> &initialNodes,
                                         std::shared_ptr<std::vector<Edge>> &initialEdges);
-        void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel);
+        void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel, float p);
 
       private:
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
@@ -195,6 +212,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
     }
     void loadGeoTypeGraph();
     void loadNoGeoTypeGraph();
+    
+
 
   protected:
     Ui::GraphRenderer *ui;

@@ -247,7 +247,7 @@ class GraphLoader {
 
         VIS4Earth::Graph graph;
         graph.set(read_nodes, allEdges);
-
+        graph.calculateGeoNodeLevel();
         return graph;
     }
     static VIS4Earth::Graph LoadFromNoGeoFile(const std::string &nodesFile,
@@ -289,7 +289,7 @@ class GraphLoader {
         for (int r = 0; r < rowsEdge - 1; r++) {
             edgeF.GetText(line, 1024);
             w = 1.0;
-            sscanf(line, "%s,%s %lg", src, dst, &w);
+            sscanf(line, "%s %s %lg", src, dst, &w);
             allEdges.push_back(Edge(std::string(src), std::string(dst),
                                     read_nodes[std::string(src)].pos,
                                     read_nodes[std::string(dst)].pos, w + 1.0));
@@ -298,7 +298,8 @@ class GraphLoader {
 
         VIS4Earth::Graph graph;
         graph.set(read_nodes, allEdges);
-
+        graph.calculateNoGeoNodeLevel();
+        graph.calculateNoGeoNodeLevel();
         return graph;
     }
 };
