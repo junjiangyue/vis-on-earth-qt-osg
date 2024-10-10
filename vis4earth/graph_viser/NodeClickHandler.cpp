@@ -52,72 +52,87 @@ bool NodeClickHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIAction
 }
 
 void NodeClickHandler::collapseNode(const std::string &nodeId) {
+    // auto nodes = graphRenderer->getNodes("LoadedGraph");
+    // auto neighbors = getNeighbors(nodeId);
+    //// 获取当前节点的等级
+    // int currentNodeLevel = nodes->at(nodeId).level;
+
+    //// 连接邻居的邻居并隐藏邻居
+    // for (const auto &neighbor : neighbors) {
+    //     // 仅当邻居节点的等级高于当前节点时才进行收缩
+    //     if (currentNodeLevel == 0 || nodes->at(neighbor).level > currentNodeLevel) {
+    //         auto neighborNeighbors = getNeighbors(neighbor);
+    //         setNodeVisible(neighbor, false);
+    //         // 递归地收起邻居节点的子节点
+    //         collapseNode(neighbor);
+    //     }
+    // }
+
+    // graphRenderer->update("LoadedGraph");
     auto nodes = graphRenderer->getNodes("LoadedGraph");
-    auto neighbors = getNeighbors(nodeId);
-    // 获取当前节点的等级
-    int currentNodeLevel = nodes->at(nodeId).level;
+    auto edges = graphRenderer->getEdges("LoadedGraph");
+    auto nodeMapping = graphRenderer->getNodeMapping("LoadedGraph");
+    auto edgeMapping = graphRenderer->getEdgeMapping("LoadedGraph");
 
-    // 连接邻居的邻居并隐藏邻居
-    for (const auto &neighbor : neighbors) {
-        // 仅当邻居节点的等级高于当前节点时才进行收缩
-        if (currentNodeLevel == 0 || nodes->at(neighbor).level > currentNodeLevel) {
-            auto neighborNeighbors = getNeighbors(neighbor);
-            // for (const auto &nn : neighborNeighbors) {
-            //     if (nn != nodeId) {
-            //         // 创建新边，从 nodeId 到 nn，并设置细分点
-            //         GraphRenderer::Edge newEdge;
-            //         newEdge.from = nodeId;
-            //         newEdge.to = nn;
-            //         newEdge.isAdd = true;
+    auto nodeIt = nodeMapping->find(nodeId);
 
-            //        // 设置细分点
-            //        auto it = nodes->find(nodeId);
-            //        newEdge.subDivs.emplace_back(it->second.pos);
-            //        it = nodes->find(nn);
-            //        newEdge.subDivs.emplace_back(it->second.pos);
+    if (nodeIt != nodeMapping->end()) {
+        const std::vector<std::string> &originalNodes = nodeIt->second;
 
-            //        graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
-            //    }
-            //}
-            setNodeVisible(neighbor, false);
-            // 递归地收起邻居节点的子节点
-            collapseNode(neighbor);
+        // 展示这些原始节点
+        for (const std::string &nodeId : originalNodes) {
+            std::cout << "Original node: " << nodeId << std::endl;
         }
+    } else {
+        std::cout << "No mapping found for node: " << nodeId << std::endl;
     }
-
-    graphRenderer->update("LoadedGraph");
 }
 void NodeClickHandler::expandNode(const std::string &nodeId) {
     auto nodes = graphRenderer->getNodes("LoadedGraph");
     auto edges = graphRenderer->getEdges("LoadedGraph");
+    auto nodeMapping = graphRenderer->getNodeMapping("LoadedGraph");
+    auto edgeMapping = graphRenderer->getEdgeMapping("LoadedGraph");
 
-    // 获取邻居节点
-    auto neighbors = getNeighbors(nodeId);
+    auto nodeIt = nodeMapping->find(nodeId);
 
-    // 恢复当前节点的可见性
-    setNodeVisible(nodeId, true);
+    if (nodeIt != nodeMapping->end()) {
+        const std::vector<std::string> &originalNodes = nodeIt->second;
 
-    // 恢复邻居节点及其边的可见性
-    for (const auto &neighbor : neighbors) {
-        // 仅当邻居节点之前被隐藏时才恢复
-        if (!nodes->at(neighbor).visible) {
-            setNodeVisible(neighbor, true);
-
-            // 恢复与该邻居节点相连的边的可见性
-            for (auto &edge : *edges) {
-                if ((edge.from == nodeId && edge.to == neighbor) ||
-                    (edge.from == neighbor && edge.to == nodeId)) {
-                    edge.visible = true;
-                }
-            }
-
-            // 递归地展开邻居节点的子节点
-            expandNode(neighbor);
+        // 展示这些原始节点
+        for (const std::string &nodeId : originalNodes) {
+            std::cout << "Original node: " << nodeId << std::endl;
         }
+    } else {
+        std::cout << "No mapping found for node: " << nodeId << std::endl;
     }
 
-    // 更新图形
-    graphRenderer->update("LoadedGraph");
+    //// 获取邻居节点
+    // auto neighbors = getNeighbors(nodeId);
+
+    //// 恢复当前节点的可见性
+    // setNodeVisible(nodeId, true);
+
+    //// 恢复邻居节点及其边的可见性
+    // for (const auto &neighbor : neighbors) {
+    //     // 仅当邻居节点之前被隐藏时才恢复
+    //     if (!nodes->at(neighbor).visible) {
+    //         setNodeVisible(neighbor, true);
+
+    //        // 恢复与该邻居节点相连的边的可见性
+    //        for (auto &edge : *edges) {
+    //            if ((edge.from == nodeId && edge.to == neighbor) ||
+    //                (edge.from == neighbor && edge.to == nodeId)) {
+    //                edge.visible = true;
+    //            }
+    //        }
+
+    //        // 递归地展开邻居节点的子节点
+    //        expandNode(neighbor);
+    //    }
+    //}
+
+    //// 更新图形
+    // graphRenderer->update("LoadedGraph");
 }
 
 // void NodeClickHandler::expandNode(const std::string &nodeId) {

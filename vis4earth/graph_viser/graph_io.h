@@ -3,13 +3,13 @@
 
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <sstream>
 #include <unordered_map>
 #include <vector>
 #include <vis4earth/graph_viser/graph.h>
 
 namespace VIS4Earth {
-
 class GraphLoader {
   private:
     FILE *filePointer;
@@ -271,9 +271,23 @@ class GraphLoader {
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
             sscanf(line, "%d,%[^,]", &labelCh, name);
+
+            // 创建随机数生成器
+            std::random_device rd;  // 随机设备，用于生成随机种子
+            std::mt19937 gen(rd()); // 随机数引擎，使用 Mersenne Twister 算法
+
+            // 为经度和纬度创建均匀分布的浮点数生成器
+            std::uniform_real_distribution<float> lonDist(30.f, 60.f);
+            std::uniform_real_distribution<float> latDist(-20.f, 20.f);
+
+            // 生成随机的经度和纬度
+            float randomLon = lonDist(gen); // 生成范围 [30, 60] 内的随机经度
+            float randomLat = latDist(gen); // 生成范围 [-20, 20] 内的随机纬度
+
             float x = std::rand() % 100;
             float y = std::rand() % 100;
-            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh), Node(x, y)));
+            read_nodes.insert(
+                std::pair<std::string, Node>(std::to_string(labelCh), Node(randomLon, randomLat)));
         }
         f.Close();
 

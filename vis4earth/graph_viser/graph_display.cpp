@@ -7,7 +7,7 @@
 #include <osgText/Text>
 
 using namespace VIS4Earth;
-static std::array<float, 2> lonRng = {-60.f, -30.f};
+static std::array<float, 2> lonRng = {30.f, 60.f};
 const std::array<float, 2> latRng = {-20.f, 20.f};
 const std::array<float, 2> hRng = {10000.f, 15000.f};
 const float hScale = 10.f;
@@ -85,17 +85,17 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxGlobalSpringConstant, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphRenderer::onGlobalSpringConstantChanged);
 
-    // 连接迭代次数 (I)
-    connect(ui->spinBoxNumberOfIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &GraphRenderer::onNumberOfIterationsChanged);
+    //// 连接迭代次数 (I)
+    // connect(ui->spinBoxNumberOfIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //         &GraphRenderer::onNumberOfIterationsChanged);
 
-    // 连接剩余迭代次数 (iter)
-    connect(ui->spinBoxRemainingIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &GraphRenderer::onRemainingIterationsChanged);
+    //// 连接剩余迭代次数 (iter)
+    // connect(ui->spinBoxRemainingIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //         &GraphRenderer::onRemainingIterationsChanged);
 
-    // 连接剩余循环数
-    connect(ui->spinBoxCyclesLeft, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &GraphRenderer::onCyclesLeftChanged);
+    //// 连接剩余循环数
+    // connect(ui->spinBoxCyclesLeft, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //         &GraphRenderer::onCyclesLeftChanged);
 
     // 连接兼容性阈值
     connect(ui->spinBoxCompatibilityThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -113,21 +113,21 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::onEdgeDistanceChanged);
 
-    // 连接引力开启
-    connect(ui->checkBoxGravitationIsOn, &QCheckBox::toggled, this,
-            &GraphRenderer::onGravitationIsOnToggled);
+    //// 连接引力开启
+    // connect(ui->checkBoxGravitationIsOn, &QCheckBox::toggled, this,
+    //         &GraphRenderer::onGravitationIsOnToggled);
 
-    // 连接引力中心
-    connect(ui->spinBoxGravitationCenterX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onGravitationCenterXChanged);
-    connect(ui->spinBoxGravitationCenterY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onGravitationCenterYChanged);
-    connect(ui->spinBoxGravitationCenterZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onGravitationCenterZChanged);
+    //// 连接引力中心
+    // connect(ui->spinBoxGravitationCenterX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationCenterXChanged);
+    // connect(ui->spinBoxGravitationCenterY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationCenterYChanged);
+    // connect(ui->spinBoxGravitationCenterZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationCenterZChanged);
 
-    // 连接引力指数
-    connect(ui->spinBoxGravitationExponent, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onGravitationExponentChanged);
+    //// 连接引力指数
+    // connect(ui->spinBoxGravitationExponent, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationExponentChanged);
 
     // 连接边权重阈值
     connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -176,6 +176,14 @@ GraphRenderer::getEdges(const std::string &graphName) {
     auto itr = graphs.find(graphName);
     if (itr != graphs.end()) {
         return itr->second.getEdges();
+    }
+    return nullptr;
+}
+std::shared_ptr<std::map<std::string, std::vector<std::string>>>
+GraphRenderer::getNodeMapping(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        return itr->second.getNodeMapping();
     }
     return nullptr;
 }
@@ -350,7 +358,9 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         myGraph = graph;
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
-
+        auto graphParam = getGraph("LoadedGraph");
+        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->setLevelGraph(0);
         showGraph();
         // 初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
@@ -384,7 +394,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
     nodeLayouter.setParameter(myLayoutParam);
     nodeLayouter.layout(myLayoutParam.Iteration);
     myGraph = nodeLayouter.getLayoutedGraph();
-    auto existGraph = getGraph("GraphLayout");
+    auto existGraph = getGraph("LoadedGraph");
     if (!existGraph) {
         auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
         lonRng[0] += lonOffs;
@@ -426,9 +436,9 @@ void VIS4Earth::GraphRenderer::showGraph() {
         }
     }
     // 添加图到渲染器中
-    addGraph("GraphLayout", nodes, edges);
+    addGraph("LoadedGraph", nodes, edges);
     // 更新图渲染
-    auto graphParam = getGraph("GraphLayout");
+    auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
@@ -439,6 +449,8 @@ void VIS4Earth::GraphRenderer::showGraph() {
         graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
+        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->setLevelGraph(0);
         graphParam->update();
     }
 }
@@ -447,20 +459,6 @@ void VIS4Earth::GraphRenderer::showBundling() {
     auto edgeBundling = VIS4Earth::EdgeBundling();
     edgeBundling.SetGraph(myGraph);
     glm::vec3 gravitationCenter(0.0, 0.0, 0.0);
-
-    // VIS4Earth::EdgeBundling::BundlingParam bundlingParam = {
-    //     bundlingParam.K = 0.1,
-    //     bundlingParam.cycles = 5,
-    //     bundlingParam.I = 90,
-    //     bundlingParam.compatibilityThreshold = 0.6,
-    //     bundlingParam.smoothWidth = 3,
-    //     bundlingParam.edgeWeightThreshold = -1.0,
-    //     bundlingParam.edgePercentageThreshold = -1.0,
-    //     bundlingParam.S = 0.4,
-    //     bundlingParam.edgeDistance = 1e-4,
-    //     bundlingParam.gravitationCenter = gravitationCenter,
-    //     bundlingParam.gravitationExponent = 1.0};
-    //
     mybundlingParam.K = 0.1, mybundlingParam.cycles = 5, mybundlingParam.I = 90,
     mybundlingParam.compatibilityThreshold = 0.6, mybundlingParam.smoothWidth = 3,
     mybundlingParam.edgeWeightThreshold = -1.0, mybundlingParam.edgePercentageThreshold = -1.0,
@@ -509,10 +507,11 @@ void VIS4Earth::GraphRenderer::showBundling() {
             edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
         }
     }
+
     // 添加图到渲染器中
-    addGraph("edge_clustered", nodes, edges);
+    addGraph("LoadedGraph", nodes, edges);
     // 更新图渲染
-    auto graphParam = getGraph("edge_clustered");
+    auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
         graphParam->setLatitudeRange(latRng[0], latRng[1]);
@@ -1481,9 +1480,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
                 if (j > 0) { // 从第二个插值点开始创建线段
                     segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
-                    segCols->push_back(prevInterpolatedColor);
+                    segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
+                    // segCols->push_back(prevInterpolatedColor);
                     segVerts->push_back(vec3ToSphere(interpolatedPos));
-                    segCols->push_back(interpolatedColor);
+                    segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
+                    // segCols->push_back(interpolatedColor);
                 }
 
                 prevInterpolatedPos = interpolatedPos;
@@ -1549,6 +1550,8 @@ bool VIS4Earth::GraphRenderer::PerGraphParam::setHeightFromCenterRange(float min
 void VIS4Earth::GraphRenderer::PerGraphParam::setLevelGraph(int level) {
     nodes = levels[level].nodes;
     edges = levels[level].edges;
+    nodeMapping = levels[level].nodeMapping;
+    edgeMapping = levels[level].edgeMapping;
 }
 
 void GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
@@ -1561,11 +1564,17 @@ void GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
     // 第0层次是原始图
     mylevels[0].nodes = std::make_shared<std::map<std::string, Node>>(*initialNodes);
     mylevels[0].edges = std::make_shared<std::vector<Edge>>(*initialEdges);
+    mylevels[0].nodeMapping =
+        std::shared_ptr<std::map<std::string, std::vector<std::string>>>(); // 节点映射
+    mylevels[0].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
 
     // 生成其他层次的图
     for (int level = 1; level < numLevels; ++level) {
         mylevels[level].nodes = std::make_shared<std::map<std::string, Node>>();
         mylevels[level].edges = std::make_shared<std::vector<Edge>>();
+        mylevels[level].nodeMapping =
+            std::shared_ptr<std::map<std::string, std::vector<std::string>>>(); // 节点映射
+        mylevels[level].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
 
         // 对前一个层次的图执行 DBSCAN 聚类
         performClustering(mylevels[level - 1], mylevels[level], static_cast<float>(level) / 10.0f);

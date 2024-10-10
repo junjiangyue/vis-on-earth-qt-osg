@@ -1,676 +1,577 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ui version="4.0">
-  <class>GraphRenderer</class>
-  <widget class="QWidget" name="GraphRenderer">
-    <property name="geometry">
-      <rect>
+ <class>GraphRenderer</class>
+ <widget class="QWidget" name="GraphRenderer">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>729</width>
+    <height>742</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>图布局控制面板</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="horizontalScrollBarPolicy">
+      <enum>Qt::ScrollBarAlwaysOff</enum>
+     </property>
+     <property name="widgetResizable">
+      <bool>true</bool>
+     </property>
+     <widget class="QWidget" name="scrollAreaWidgetContents_main">
+      <property name="geometry">
+       <rect>
         <x>0</x>
         <y>0</y>
-        <width>600</width>
-        <height>800</height>
-      </rect>
-    </property>
-    <property name="windowTitle">
-      <string>图布局控制面板</string>
-    </property>
-    <layout class="QVBoxLayout" name="verticalLayout">
-      <item>
-        <widget class="QScrollArea" name="scrollArea">
-          <property name="horizontalScrollBarPolicy">
-            <enum>Qt::ScrollBarAlwaysOff</enum>
-          </property>
-          <property name="widgetResizable">
-            <bool>true</bool>
-          </property>
-          <widget class="QWidget" name="scrollAreaWidgetContents_main">
-            <property name="geometry">
-              <rect>
-                <x>0</x>
-                <y>0</y>
-                <width>580</width>
-                <height>780</height>
-              </rect>
+        <width>709</width>
+        <height>722</height>
+       </rect>
+      </property>
+      <layout class="QVBoxLayout" name="verticalLayout_2">
+       <item>
+        <widget class="QGroupBox" name="groupBoxLoadCSV">
+         <property name="title">
+          <string>加载CSV文件</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayoutLoadCSV">
+          <item row="7" column="2">
+           <widget class="QSlider" name="resolutionSlider">
+            <property name="minimum">
+             <number>0</number>
             </property>
-            <layout class="QVBoxLayout" name="verticalLayout_2">
-              <item>
-                <widget class="QGroupBox" name="groupBoxLoadCSV">
-                  <property name="title">
-                    <string>加载CSV文件</string>
-                  </property>
-                  <layout class="QGridLayout" name="gridLayoutLoadCSV">
-                    <!-- 新增的下拉框，放在第0行 -->
-                    <item row="0" column="0" colspan="3">
-                      <widget class="QComboBox" name="comboBoxGraphType">
-                        <item>
-                          <property name="text">
-                            <string>加载固定位置的图</string>
-                          </property>
-                        </item>
-                        <item>
-                          <property name="text">
-                            <string>无固定位置的图</string>
-                          </property>
-                        </item>
-                      </widget>
-                    </item>
-                    <item row="3" column="0" colspan="3">
-                      <widget class="QPushButton" name="loadAndDrawGraphButton">
-                        <property name="text">
-                          <string>加载并绘制图</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="2" column="2">
-                      <widget class="QLineEdit" name="edgesFilePath"/>
-                    </item>
-                    <item row="2" column="0">
-                      <widget class="QPushButton" name="loadEdgesButton">
-                        <property name="text">
-                          <string>加载边文件</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="1" column="2">
-                      <widget class="QLineEdit" name="pointsFilePath"/>
-                    </item>
-                    <item row="1" column="0">
-                      <widget class="QPushButton" name="loadPointsButton">
-                        <property name="text">
-                          <string>加载点文件</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="4" column="0">
-                      <widget class="QLabel" name="sizeLabel">
-                        <property name="text">
-                          <string>大小: 100%</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="4" column="2">
-                      <widget class="QSlider" name="sizeSlider">
-                        <property name="minimum">
-                          <number>50</number>
-                        </property>
-                        <property name="maximum">
-                          <number>200</number>
-                        </property>
-                        <property name="value">
-                          <number>100</number>
-                        </property>
-                        <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="5" column="0">
-                      <widget class="QLabel" name="fontSizeLabel">
-                        <property name="text">
-                          <string>字体大小: 12</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="5" column="2">
-                      <widget class="QSlider" name="fontSizeSlider">
-                        <property name="minimum">
-                          <number>8</number>
-                        </property>
-                        <property name="maximum">
-                          <number>32</number>
-                        </property>
-                        <property name="value">
-                          <number>12</number>
-                        </property>
-                        <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                        </property>
-                      </widget>
-                    </item>
-                    <!-- 新增的分辨率滑块 -->
-                    <item row="6" column="0">
-                      <widget class="QLabel" name="resolutionLabel">
-                        <property name="text">
-                          <string>分辨率: 100%</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item row="6" column="2">
-                      <widget class="QSlider" name="resolutionSlider">
-                        <property name="minimum">
-                          <number>0</number>
-                        </property>
-                        <property name="maximum">
-                          <number>10</number>
-                        </property>
-                        <property name="value">
-                          <number>10</number>
-                          <!-- 默认显示最详细的图，即100%分辨率 -->
-                        </property>
-                        <property name="orientation">
-                          <enum>Qt::Horizontal</enum>
-                        </property>
-                        <property name="tickInterval">
-                          <number>1</number>
-                        </property>
-                        <property name="tickPosition">
-                          <enum>QSlider::TicksBelow</enum>
-                        </property>
-                      </widget>
-                    </item>
-                  </layout>
-                </widget>
-              </item>
-              <!-- New Flow Visualization Group Box -->
-              <item>
-                <widget class="QGroupBox" name="groupBoxFlowVisualization">
-                  <property name="title">
-                    <string>流向可视化</string>
-                  </property>
-                  <layout class="QHBoxLayout" name="horizontalLayoutFlowVisualization">
-                    <item>
-                      <widget class="QPushButton" name="arrowFlowButton">
-                        <property name="text">
-                          <string>箭头流动</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item>
-                      <widget class="QPushButton" name="highlightFlowButton">
-                        <property name="text">
-                          <string>高光光照流动</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item>
-                      <widget class="QPushButton" name="textureFlowButton">
-                        <property name="text">
-                          <string>纹理着色流动</string>
-                        </property>
-                      </widget>
-                    </item>
-                    <item>
-                      <widget class="QPushButton" name="starFlowButton">
-                        <property name="text">
-                          <string>高光拖尾流动</string>
-                        </property>
-                      </widget>
-                    </item>
-                  </layout>
-                </widget>
-              </item>
-
-              <item>
-                <layout class="QHBoxLayout" name="horizontalLayout">
-                  <item>
-                    <widget class="QGroupBox" name="groupBoxLayoutParams">
-                      <property name="title">
-                        <string>图布局参数</string>
-                      </property>
-                      <layout class="QGridLayout" name="gridLayout">
-                        <item row="0" column="0">
-                          <widget class="QLabel" name="labelAttraction">
-                            <property name="text">
-                              <string>Attraction</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="0" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxAttraction">
-                            <property name="minimum">
-                              <double>-100.000000000000000</double>
-                            </property>
-                            <property name="value">
-                              <double>25.100000000000001</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="1" column="0">
-                          <widget class="QLabel" name="labelEdgeLength">
-                            <property name="text">
-                              <string>Edge Length</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="1" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxEdgeLength">
-                            <property name="minimum">
-                              <double>-100.000000000000000</double>
-                            </property>
-                            <property name="value">
-                              <double>10.000000000000000</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="2" column="0">
-                          <widget class="QLabel" name="labelRepulsion">
-                            <property name="text">
-                              <string>Repulsion</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="2" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxRepulsion">
-                            <property name="minimum">
-                              <double>-100.000000000000000</double>
-                            </property>
-                            <property name="value">
-                              <double>0.200000000000000</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="3" column="0">
-                          <widget class="QLabel" name="labelSpringK">
-                            <property name="text">
-                              <string>Spring K</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxSpringK">
-                            <property name="minimum">
-                              <double>-100.000000000000000</double>
-                            </property>
-                            <property name="value">
-                              <double>12.400000000000000</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="4" column="0">
-                          <widget class="QLabel" name="labelIteration">
-                            <property name="text">
-                              <string>Iteration</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="4" column="1">
-                          <widget class="QSpinBox" name="spinBoxIteration">
-                            <property name="maximum">
-                              <number>1000000</number>
-                            </property>
-                            <property name="value">
-                              <number>100</number>
-                            </property>
-                          </widget>
-                        </item>
-                      </layout>
-                    </widget>
-                  </item>
-                  <item>
-                    <widget class="QGroupBox" name="groupBoxRegionRestriction">
-                      <property name="title">
-                        <string>区域限制</string>
-                      </property>
-                      <layout class="QGridLayout" name="gridLayoutRegion">
-                        <item row="3" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxMinX">
-                            <property name="minimum">
-                              <double>-10000.000000000000000</double>
-                            </property>
-                            <property name="maximum">
-                              <double>10000.000000000000000</double>
-                            </property>
-                            <property name="value">
-                              <double>-1000.0</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="5" column="0">
-                          <widget class="QLabel" name="labelMinY">
-                            <property name="text">
-                              <string>Min Y</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="4" column="0">
-                          <widget class="QLabel" name="labelMaxX">
-                            <property name="text">
-                              <string>Max X</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="1" column="0" colspan="2">
-                          <widget class="QLabel" name="labelCurrentCoordRange">
-                            <property name="text">
-                              <string>当前坐标范围: 左: 0.00, 右: 0.00, 上: 0.00, 下: 0.00</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="6" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxMaxY">
-                            <property name="minimum">
-                              <double>-10000.000000000000000</double>
-                            </property>
-                            <property name="maximum">
-                              <double>10000.989999999999782</double>
-                            </property>
-                            <property name="value">
-                              <double>-300.000000000000000</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="4" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxMaxX">
-                            <property name="minimum">
-                              <double>-10000.000000000000000</double>
-                            </property>
-                            <property name="maximum">
-                              <double>9999.000000000000000</double>
-                            </property>
-                            <property name="value">
-                              <double>-800.0</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="5" column="1">
-                          <widget class="QDoubleSpinBox" name="spinBoxMinY">
-                            <property name="minimum">
-                              <double>-10000.000000000000000</double>
-                            </property>
-                            <property name="maximum">
-                              <double>10000.989999999999782</double>
-                            </property>
-                            <property name="value">
-                              <double>-400.0</double>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="6" column="0">
-                          <widget class="QLabel" name="labelMaxY">
-                            <property name="text">
-                              <string>Max Y</string>
-                            </property>
-                          </widget>
-                        </item>
-                        <item row="3" column="0">
-                          <widget class="QLabel" name="labelMinX">
-                            <property name="text">
-                              <string>Min X</string>
-                            </property>
-                          </widget>
-                        </item>
-                      </layout>
-                    </widget>
-                  </item>
-                </layout>
-              </item>
-              <item>
-                <layout class="QHBoxLayout" name="horizontalLayoutButtons">
-                  <item>
-                    <widget class="QPushButton" name="showGraphLayoutButton">
-                      <property name="text">
-                        <string>显示图布局</string>
-                      </property>
-                    </widget>
-                  </item>
-                  <item>
-                    <widget class="QPushButton" name="regionRestrictionButton">
-                      <property name="text">
-                        <string>启用区域限制</string>
-                      </property>
-                    </widget>
-                  </item>
-                </layout>
-              </item>
-              <item>
-                <widget class="QGroupBox" name="groupBoxEdgeBundlingParams">
-                  <property name="title">
-                    <string>边绑定参数</string>
-                  </property>
-                  <layout class="QVBoxLayout" name="verticalLayoutEdgeBundling">
-                    <item>
-                      <layout class="QVBoxLayout" name="verticalLayoutMain">
-                        <item>
-                          <layout class="QHBoxLayout" name="horizontalLayoutParams">
-                            <item>
-                              <widget class="QGroupBox" name="groupBoxAlgorithmParams">
-                                <property name="title">
-                                  <string>算法参数</string>
-                                </property>
-                                <layout class="QGridLayout" name="gridLayoutAlgorithm">
-                                  <item row="0" column="0">
-                                    <widget class="QLabel" name="labelGlobalSpringConstant">
-                                      <property name="text">
-                                        <string>全局弹簧常数 (K)</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="0" column="1">
-                                    <widget class="QDoubleSpinBox" name="spinBoxGlobalSpringConstant">
-                                      <property name="value">
-                                        <double>0.100000000000000</double>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="1" column="0">
-                                    <widget class="QLabel" name="labelNumberOfIterations">
-                                      <property name="text">
-                                        <string>迭代次数 (I)</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="1" column="1">
-                                    <widget class="QSpinBox" name="spinBoxNumberOfIterations">
-                                      <property name="value">
-                                        <number>90</number>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="2" column="0">
-                                    <widget class="QLabel" name="labelRemainingIterations">
-                                      <property name="text">
-                                        <string>剩余迭代次数 (iter)</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="2" column="1">
-                                    <widget class="QSpinBox" name="spinBoxRemainingIterations">
-                                      <property name="value">
-                                        <number>90</number>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="3" column="0">
-                                    <widget class="QLabel" name="labelCyclesLeft">
-                                      <property name="text">
-                                        <string>剩余循环数</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="3" column="1">
-                                    <widget class="QSpinBox" name="spinBoxCyclesLeft">
-                                      <property name="value">
-                                        <number>5</number>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="4" column="0">
-                                    <widget class="QLabel" name="labelCompatibilityThreshold">
-                                      <property name="text">
-                                        <string>兼容性阈值</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="4" column="1">
-                                    <widget class="QDoubleSpinBox" name="spinBoxCompatibilityThreshold">
-                                      <property name="value">
-                                        <double>0.600000000000000</double>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="5" column="0">
-                                    <widget class="QLabel" name="labelSmoothWidth">
-                                      <property name="text">
-                                        <string>平滑宽度</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="5" column="1">
-                                    <widget class="QDoubleSpinBox" name="spinBoxSmoothWidth">
-                                      <property name="minimum">
-                                        <double>-100.000000000000000</double>
-                                      </property>
-                                      <property name="value">
-                                        <double>-1.000000000000000</double>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                </layout>
-                              </widget>
-                            </item>
-                            <item>
-                              <widget class="QGroupBox" name="groupBoxPhysicalParams">
-                                <property name="title">
-                                  <string>物理参数</string>
-                                </property>
-                                <layout class="QGridLayout" name="gridLayoutPhysical">
-                                  <item row="0" column="0">
-                                    <widget class="QLabel" name="labelDisplacement">
-                                      <property name="text">
-                                        <string>位移 (S)</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="0" column="1">
-                                    <widget class="QDoubleSpinBox" name="spinBoxDisplacement">
-                                      <property name="decimals">
-                                        <number>2</number>
-                                      </property>
-                                      <property name="value">
-                                        <double>0.400000000000000</double>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="1" column="0">
-                                    <widget class="QLabel" name="labelEdgeDistance">
-                                      <property name="text">
-                                        <string>边距离</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="1" column="1">
-                                    <widget class="QDoubleSpinBox" name="spinBoxEdgeDistance">
-                                      <property name="decimals">
-                                        <number>4</number>
-                                      </property>
-                                      <property name="value">
-                                        <double>0.000100000000000</double>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="2" column="0">
-                                    <widget class="QLabel" name="labelGravitationIsOn">
-                                      <property name="text">
-                                        <string>引力开启</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="2" column="1">
-                                    <widget class="QCheckBox" name="checkBoxGravitationIsOn">
-                                      <property name="checked">
-                                        <bool>true</bool>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="3" column="0">
-                                    <widget class="QLabel" name="labelGravitationCenter">
-                                      <property name="text">
-                                        <string>引力中心</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="3" column="1">
-                                    <layout class="QHBoxLayout" name="spinBoxGravitationCenterSet">
-                                      <item>
-                                        <widget class="QDoubleSpinBox" name="spinBoxGravitationCenterX"/>
-                                      </item>
-                                      <item>
-                                        <widget class="QDoubleSpinBox" name="spinBoxGravitationCenterY"/>
-                                      </item>
-                                      <item>
-                                        <widget class="QDoubleSpinBox" name="spinBoxGravitationCenterZ"/>
-                                      </item>
-                                    </layout>
-                                  </item>
-                                  <item row="4" column="0">
-                                    <widget class="QLabel" name="labelGravitationExponent">
-                                      <property name="text">
-                                        <string>引力指数</string>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                  <item row="4" column="1">
-                                    <widget class="QDoubleSpinBox" name="spinBoxGravitationExponent">
-                                      <property name="value">
-                                        <double>1.000000000000000</double>
-                                      </property>
-                                    </widget>
-                                  </item>
-                                </layout>
-                              </widget>
-                            </item>
-                          </layout>
-                        </item>
-                        <item>
-                          <widget class="QGroupBox" name="groupBoxNetworkParams">
-                            <property name="title">
-                              <string>网络参数</string>
-                            </property>
-                            <layout class="QGridLayout" name="gridLayoutNetwork">
-                              <item row="0" column="0">
-                                <widget class="QLabel" name="labelEdgeWeightThreshold">
-                                  <property name="text">
-                                    <string>边权重阈值</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item row="0" column="1">
-                                <widget class="QDoubleSpinBox" name="spinBoxEdgeWeightThreshold">
-                                  <property name="minimum">
-                                    <double>-100.000000000000000</double>
-                                  </property>
-                                  <property name="value">
-                                    <double>-1.000000000000000</double>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item row="1" column="0">
-                                <widget class="QLabel" name="labelEdgePercentageThreshold">
-                                  <property name="text">
-                                    <string>边百分比阈值</string>
-                                  </property>
-                                </widget>
-                              </item>
-                              <item row="1" column="1">
-                                <widget class="QDoubleSpinBox" name="spinBoxEdgePercentageThreshold">
-                                  <property name="minimum">
-                                    <double>-100.000000000000000</double>
-                                  </property>
-                                  <property name="value">
-                                    <double>-1.000000000000000</double>
-                                  </property>
-                                </widget>
-                              </item>
-                            </layout>
-                          </widget>
-                        </item>
-                      </layout>
-                    </item>
-                  </layout>
-                </widget>
-              </item>
-              <item>
-                <widget class="QPushButton" name="showEdgeBundlingButton">
-                  <property name="text">
-                    <string>显示边绑定</string>
-                  </property>
-                </widget>
-              </item>
-            </layout>
-          </widget>
+            <property name="maximum">
+             <number>10</number>
+            </property>
+            <property name="value">
+             <number>10</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+            <property name="tickPosition">
+             <enum>QSlider::TicksBelow</enum>
+            </property>
+            <property name="tickInterval">
+             <number>1</number>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QPushButton" name="loadEdgesButton">
+            <property name="text">
+             <string>加载边文件</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="0">
+           <widget class="QLabel" name="fontSizeLabel">
+            <property name="text">
+             <string>字体大小: 12</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="0">
+           <widget class="QLabel" name="sizeLabel">
+            <property name="text">
+             <string>大小: 100%</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="2">
+           <widget class="QLineEdit" name="pointsFilePath"/>
+          </item>
+          <item row="0" column="0">
+           <widget class="QComboBox" name="comboBoxGraphType">
+            <item>
+             <property name="text">
+              <string>加载固定位置的图</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>无固定位置的图</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QPushButton" name="loadPointsButton">
+            <property name="text">
+             <string>加载点文件</string>
+            </property>
+           </widget>
+          </item>
+          <item row="5" column="2">
+           <widget class="QSlider" name="sizeSlider">
+            <property name="minimum">
+             <number>50</number>
+            </property>
+            <property name="maximum">
+             <number>200</number>
+            </property>
+            <property name="value">
+             <number>100</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="7" column="0">
+           <widget class="QLabel" name="resolutionLabel">
+            <property name="text">
+             <string>分辨率: 100%</string>
+            </property>
+           </widget>
+          </item>
+          <item row="6" column="2">
+           <widget class="QSlider" name="fontSizeSlider">
+            <property name="minimum">
+             <number>8</number>
+            </property>
+            <property name="maximum">
+             <number>32</number>
+            </property>
+            <property name="value">
+             <number>12</number>
+            </property>
+            <property name="orientation">
+             <enum>Qt::Horizontal</enum>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="2">
+           <widget class="QLineEdit" name="edgesFilePath"/>
+          </item>
+          <item row="4" column="0" colspan="3">
+           <widget class="QPushButton" name="loadAndDrawGraphButton">
+            <property name="text">
+             <string>加载并绘制图</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
-      </item>
-    </layout>
-  </widget>
-  <resources/>
-  <connections/>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBoxFlowVisualization">
+         <property name="title">
+          <string>流向可视化</string>
+         </property>
+         <layout class="QHBoxLayout" name="horizontalLayoutFlowVisualization">
+          <item>
+           <widget class="QPushButton" name="arrowFlowButton">
+            <property name="text">
+             <string>箭头流动</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="highlightFlowButton">
+            <property name="text">
+             <string>高光光照流动</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="textureFlowButton">
+            <property name="text">
+             <string>纹理着色流动</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="starFlowButton">
+            <property name="text">
+             <string>高光拖尾流动</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="horizontalLayout">
+         <item>
+          <widget class="QGroupBox" name="groupBoxLayoutParams">
+           <property name="title">
+            <string>图布局参数</string>
+           </property>
+           <layout class="QGridLayout" name="gridLayout">
+            <item row="3" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxSpringK">
+              <property name="minimum">
+               <double>-100.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>12.400000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0">
+             <widget class="QLabel" name="labelEdgeLength">
+              <property name="text">
+               <string>边长度</string>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="0">
+             <widget class="QLabel" name="labelRepulsion">
+              <property name="text">
+               <string>斥力</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="0">
+             <widget class="QLabel" name="labelIteration">
+              <property name="text">
+               <string>迭代次数</string>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxAttraction">
+              <property name="minimum">
+               <double>-100.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>25.100000000000001</double>
+              </property>
+             </widget>
+            </item>
+            <item row="0" column="0">
+             <widget class="QLabel" name="labelAttraction">
+              <property name="text">
+               <string>引力</string>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="labelSpringK">
+              <property name="text">
+               <string>弹力</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0">
+             <widget class="QPushButton" name="showGraphLayoutButton">
+              <property name="text">
+               <string>显示图布局</string>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QSpinBox" name="spinBoxIteration">
+              <property name="maximum">
+               <number>1000000</number>
+              </property>
+              <property name="value">
+               <number>100</number>
+              </property>
+             </widget>
+            </item>
+            <item row="2" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxRepulsion">
+              <property name="minimum">
+               <double>-100.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>0.200000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxEdgeLength">
+              <property name="minimum">
+               <double>-100.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>10.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+         <item>
+          <widget class="QGroupBox" name="groupBoxRegionRestriction">
+           <property name="title">
+            <string>区域限制</string>
+           </property>
+           <layout class="QGridLayout" name="gridLayoutRegion">
+            <item row="4" column="0">
+             <widget class="QLabel" name="labelMaxX">
+              <property name="text">
+               <string>最大经度：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="0">
+             <widget class="QLabel" name="labelMaxY">
+              <property name="text">
+               <string>最高纬度：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="0">
+             <widget class="QLabel" name="labelMinY">
+              <property name="text">
+               <string>最低纬度</string>
+              </property>
+             </widget>
+            </item>
+            <item row="5" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxMinY">
+              <property name="minimum">
+               <double>-10000.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>10000.989999999999782</double>
+              </property>
+              <property name="value">
+               <double>-400.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="1" column="0" colspan="2">
+             <widget class="QLabel" name="labelCurrentCoordRange">
+              <property name="text">
+               <string>当前坐标范围: 左: 0.00, 右: 0.00, 上: 0.00, 下: 0.00</string>
+              </property>
+             </widget>
+            </item>
+            <item row="6" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxMaxY">
+              <property name="minimum">
+               <double>-10000.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>10000.989999999999782</double>
+              </property>
+              <property name="value">
+               <double>-300.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="4" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxMaxX">
+              <property name="minimum">
+               <double>-10000.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>9999.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>-800.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="1">
+             <widget class="QDoubleSpinBox" name="spinBoxMinX">
+              <property name="minimum">
+               <double>-10000.000000000000000</double>
+              </property>
+              <property name="maximum">
+               <double>10000.000000000000000</double>
+              </property>
+              <property name="value">
+               <double>-1000.000000000000000</double>
+              </property>
+             </widget>
+            </item>
+            <item row="3" column="0">
+             <widget class="QLabel" name="labelMinX">
+              <property name="text">
+               <string>最小经度：</string>
+              </property>
+             </widget>
+            </item>
+            <item row="7" column="0">
+             <widget class="QPushButton" name="regionRestrictionButton">
+              <property name="text">
+               <string>启用区域限制</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBoxEdgeBundlingParams">
+         <property name="title">
+          <string>边绑定参数</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayoutEdgeBundling">
+          <item>
+           <layout class="QVBoxLayout" name="verticalLayoutMain">
+            <item>
+             <layout class="QHBoxLayout" name="horizontalLayoutParams">
+              <item>
+               <widget class="QGroupBox" name="groupBoxAlgorithmParams">
+                <property name="title">
+                 <string>算法参数</string>
+                </property>
+                <layout class="QGridLayout" name="gridLayoutAlgorithm">
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="labelGlobalSpringConstant">
+                   <property name="text">
+                    <string>全局弹簧常数 (K)</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="labelCompatibilityThreshold">
+                   <property name="text">
+                    <string>兼容性阈值</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxCompatibilityThreshold">
+                   <property name="value">
+                    <double>0.600000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="0">
+                  <widget class="QLabel" name="labelSmoothWidth">
+                   <property name="text">
+                    <string>平滑宽度</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxGlobalSpringConstant">
+                   <property name="value">
+                    <double>0.100000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="2" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxSmoothWidth">
+                   <property name="minimum">
+                    <double>-100.000000000000000</double>
+                   </property>
+                   <property name="value">
+                    <double>-1.000000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBoxNetworkParams">
+                <property name="title">
+                 <string>网络参数</string>
+                </property>
+                <layout class="QGridLayout" name="gridLayoutNetwork">
+                 <item row="0" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxEdgeWeightThreshold">
+                   <property name="minimum">
+                    <double>-100.000000000000000</double>
+                   </property>
+                   <property name="value">
+                    <double>-1.000000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxEdgePercentageThreshold">
+                   <property name="minimum">
+                    <double>-100.000000000000000</double>
+                   </property>
+                   <property name="value">
+                    <double>-1.000000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="labelEdgeWeightThreshold">
+                   <property name="text">
+                    <string>边权重阈值</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="labelEdgePercentageThreshold">
+                   <property name="text">
+                    <string>边百分比阈值</string>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+              <item>
+               <widget class="QGroupBox" name="groupBoxPhysicalParams">
+                <property name="title">
+                 <string>物理参数</string>
+                </property>
+                <layout class="QGridLayout" name="gridLayoutPhysical">
+                 <item row="1" column="0">
+                  <widget class="QLabel" name="labelEdgeDistance">
+                   <property name="text">
+                    <string>边距离</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="1" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxEdgeDistance">
+                   <property name="decimals">
+                    <number>4</number>
+                   </property>
+                   <property name="value">
+                    <double>0.000100000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="0">
+                  <widget class="QLabel" name="labelDisplacement">
+                   <property name="text">
+                    <string>位移 (S)</string>
+                   </property>
+                  </widget>
+                 </item>
+                 <item row="0" column="1">
+                  <widget class="QDoubleSpinBox" name="spinBoxDisplacement">
+                   <property name="decimals">
+                    <number>2</number>
+                   </property>
+                   <property name="value">
+                    <double>0.400000000000000</double>
+                   </property>
+                  </widget>
+                 </item>
+                </layout>
+               </widget>
+              </item>
+             </layout>
+            </item>
+           </layout>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="showEdgeBundlingButton">
+         <property name="text">
+          <string>显示边绑定</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
 </ui>

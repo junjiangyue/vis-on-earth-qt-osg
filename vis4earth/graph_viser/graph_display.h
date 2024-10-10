@@ -123,9 +123,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
         bool volStartFromLonZero;
         bool arrowFlowEnabled = false; // 标志变量
         bool isAnimating = false;
-        std::shared_ptr<std::map<std::string, Node>> nodes; // 当前nodes
-        std::shared_ptr<std::vector<Edge>> edges;           // 当前edges
-        std::vector<GraphLevel> levels;                     // 存放多层次的图
+        std::shared_ptr<std::map<std::string, Node>> nodes;                           // 当前nodes
+        std::shared_ptr<std::vector<Edge>> edges;                                     // 当前edges
+        std::shared_ptr<std::map<std::string, std::vector<std::string>>> nodeMapping; // 节点映射
+        std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping;
+        std::vector<GraphLevel> levels; // 存放多层次的图
         osg::ref_ptr<osg::Group> grp;
 
       public:
@@ -151,6 +153,10 @@ class GraphRenderer : public QtOSGReflectableWidget {
         }
         std::shared_ptr<std::map<std::string, Node>> getNodes() { return nodes; }
         std::shared_ptr<std::vector<Edge>> getEdges() { return edges; }
+        std::shared_ptr<std::map<std::string, std::vector<std::string>>> getNodeMapping() {
+            return nodeMapping;
+        }
+        std::shared_ptr<std::map<Edge, std::vector<Edge>>> getEdgeMapping() { return edgeMapping; }
         osg::ref_ptr<osg::Geode> lineGeode;
         osg::ref_ptr<osg::Geometry> lineGeometry;
         osg::ref_ptr<osg::Geode> triangleGeode; // 新增用于保存三角形的 Geode
@@ -201,6 +207,16 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     std::shared_ptr<std::map<std::string, Node>> getNodes(const std::string &graphName);
     std::shared_ptr<std::vector<Edge>> getEdges(const std::string &graphName);
+    std::shared_ptr<std::map<std::string, std::vector<std::string>>>
+    getNodeMapping(const std::string &graphName);
+    std::shared_ptr<std::map<Edge, std::vector<Edge>>>
+    getEdgeMapping(const std::string &graphName) {
+        auto itr = graphs.find(graphName);
+        if (itr != graphs.end()) {
+            return itr->second.getEdgeMapping();
+        }
+        return nullptr;
+    }
     void update(const std::string &graphName);
     void GraphRenderer::setEdges(const std::string &graphName,
                                  std::shared_ptr<std::vector<Edge>> edges) {
