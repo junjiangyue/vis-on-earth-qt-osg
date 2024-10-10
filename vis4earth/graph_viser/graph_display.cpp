@@ -283,8 +283,8 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
                 static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
             graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-            graphParam->update();
             graphParam->generateHierarchicalGraphs(nodes, edges);
+            graphParam->update();
         }
         myGraph = graph;
         // 初始化 UI
@@ -1356,6 +1356,27 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
         isAnimating = true;
     }
 }
+osg::Vec4 generateColor(float index) {
+    std::vector<osg::Vec4> predefinedColors = {
+        osg::Vec4(1.0f, 0.0f, 0.0f, 1.0f), // 红色
+        osg::Vec4(0.0f, 1.0f, 0.0f, 1.0f), // 绿色
+        osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f), // 蓝色
+        osg::Vec4(1.0f, 1.0f, 0.0f, 1.0f), // 黄色
+        osg::Vec4(0.0f, 1.0f, 1.0f, 1.0f), // 青色
+        osg::Vec4(1.0f, 0.0f, 1.0f, 1.0f), // 品红色
+        osg::Vec4(0.5f, 0.5f, 0.5f, 1.0f), // 灰色
+        osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f), // 橙色
+        osg::Vec4(0.5f, 0.0f, 0.5f, 1.0f), // 紫色
+        osg::Vec4(0.0f, 0.5f, 0.5f, 1.0f), // 深青色
+        osg::Vec4(0.3f, 0.3f, 0.7f, 1.0f)  // 其他颜色
+    };
+
+    if (index < 0)
+        index = 0;
+    if (index >= predefinedColors.size())
+        index = predefinedColors.size() - 1;
+    return predefinedColors[index];
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     grp->removeChildren(0, grp->getNumChildren());
 
@@ -1381,11 +1402,12 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     tessl->setDetailRatio(1.f);
     std::map<std::string, osg::ShapeDrawable *> osgNodes;
     std::vector<osg::ref_ptr<osgText::Text>> textNodes;
+
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         if (!itr->second.visible)
-            continue;                                        // 只处理可见节点
-        osg::Vec4 color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f); // Set color to blue
-        // osg::Vec4 color = osg::Vec4(itr->second.color, 1.f);
+            continue; // 只处理可见节点
+        osg::Vec4 color = generateColor(static_cast<float>(itr->second.cluster));
+
         if (!restrictionOFF) {
             if (itr->second.pos.x() >= restriction.leftBound &&
                 itr->second.pos.x() <= restriction.rightBound &&
@@ -1397,7 +1419,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         auto p = itr->second.pos;
 
         p = vec3ToSphere(p);
-        auto sphere = new osg::ShapeDrawable(new osg::Sphere(p, .25f * nodeGeomSize), tessl);
+        auto sphere = new osg::ShapeDrawable(
+            new osg::Sphere(p, itr->second.size * .25f * nodeGeomSize), tessl);
         osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
         centerData->push_back(itr->second.pos);
         sphere->setUserData(centerData);
@@ -1577,15 +1600,15 @@ void GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
         mylevels[level].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
 
         // 对前一个层次的图执行 DBSCAN 聚类
-        performClustering(mylevels[level - 1], mylevels[level], static_cast<float>(level) / 10.0f);
+        performClustering(mylevels[level - 1], mylevels[level], level);
     }
 
     levels = mylevels; // 将生成的层次存储到成员变量
 }
 
 void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousLevel,
-                                                     GraphLevel &currentLevel, float threshold) {
-
+                                                     GraphLevel &currentLevel, int level) {
+    float threshold = static_cast<float>(level) / 10.f;
     // 从上一个层次的节点中提取位置信息，用于 DBSCAN 聚类
     std::vector<osg::Vec3> positions;
     std::vector<std::string> nodeIds;
@@ -1594,24 +1617,49 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         nodeIds.push_back(nodePair.first);
     }
 
-    // 使用 DBSCAN 对节点进行聚类
-    std::vector<int> clusterLabels = DBSCAN(positions, 5, /*minPts*/ 2);
-
     // 将节点根据簇分类
     std::map<int, std::vector<std::string>> clusters; // 簇ID -> 节点ID列表
-    for (size_t i = 0; i < clusterLabels.size(); ++i) {
-        int clusterId = clusterLabels[i];
-        clusters[clusterId].push_back(nodeIds[i]);
+    // 使用 DBSCAN 对节点进行聚类
+    if (level == 1) {
+        std::vector<int> clusterLabels = DBSCAN(positions, 4.2, /*minPts*/ 1);
+        // 找到最大的标签
+        int maxClusterID = -1;
+        for (const auto &point : clusterLabels) {
+            if (point != -1) {
+                maxClusterID = std::max(maxClusterID, point);
+            }
+        }
+        for (size_t i = 0; i < clusterLabels.size(); ++i) {
+            int clusterId = clusterLabels[i];
+            if (clusterId == -1) {
+                clusterId = maxClusterID++;
+            }
+            clusters[clusterId].push_back(nodeIds[i]);
+        }
+    } else {
+        // 遍历当前层的所有节点
+        for (const auto &nodePair : *previousLevel.nodes) {
+            const std::string &nodeId = nodePair.first;
+            int clusterId = nodePair.second.cluster; // 获取节点的 cluster 属性
+
+            // 将节点 ID 添加到对应的簇中
+            clusters[clusterId].push_back(nodeId);
+        }
     }
 
     std::map<std::string, std::vector<std::string>> nodeMapping; // 原始节点到代表节点的映射
     std::map<Edge, std::vector<Edge>> edgeMapping;               // 边映射
     std::set<std::string> processedNodes;
     std::vector<std::string> remainingNodes; // 未处理的节点列表
+    int clusterIdCounter = 0;                // 簇ID计数器
 
     // 遍历每个簇，选择代表节点并合并
     for (const auto &clusterPair : clusters) {
         const std::vector<std::string> &nodesInCluster = clusterPair.second;
+        // 分配簇ID
+        for (const std::string &nodeId : nodesInCluster) {
+            previousLevel.nodes->at(nodeId).cluster = clusterIdCounter;
+        }
 
         if (nodesInCluster.size() > 1) {
             // 如果簇中有多个节点，选择权重最高的节点作为代表节点
@@ -1624,6 +1672,13 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             // 将代表节点添加到当前层次
             currentLevel.nodes->emplace(representativeNodeId,
                                         previousLevel.nodes->at(representativeNodeId));
+
+            // 设置代表节点的大小，基于簇中节点的数量
+            float representativeSize =
+                (static_cast<float>(nodesInCluster.size()) * 0.1 +
+                 previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
+            currentLevel.nodes->at(representativeNodeId).size = representativeSize;
+
             processedNodes.insert(representativeNodeId);
 
             // 更新簇中所有节点的映射关系
@@ -1637,6 +1692,8 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             nodeMapping[singleNodeId].push_back(singleNodeId);
             processedNodes.insert(singleNodeId);
         }
+        // 更新簇ID计数器
+        ++clusterIdCounter;
     }
 
     // 将未处理的节点放入 remainingNodes 列表
@@ -1720,59 +1777,59 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         }
     }
 
-    // 2. 为未直接连接但联通的节点添加新边
-    for (const auto &nodePair1 : *currentLevel.nodes) {
-        for (const auto &nodePair2 : *currentLevel.nodes) {
-            if (nodePair1.first == nodePair2.first)
-                continue; // 跳过自己与自己的边
+    //// 2. 为未直接连接但联通的节点添加新边
+    // for (const auto &nodePair1 : *currentLevel.nodes) {
+    //     for (const auto &nodePair2 : *currentLevel.nodes) {
+    //         if (nodePair1.first == nodePair2.first)
+    //             continue; // 跳过自己与自己的边
 
-            std::string from = std::min(nodePair1.first, nodePair2.first);
-            std::string to = std::max(nodePair1.first, nodePair2.first);
+    //        std::string from = std::min(nodePair1.first, nodePair2.first);
+    //        std::string to = std::max(nodePair1.first, nodePair2.first);
 
-            // 如果这条边已经处理过，则跳过
-            if (processedEdges.count({from, to}) > 0)
-                continue;
+    //        // 如果这条边已经处理过，则跳过
+    //        if (processedEdges.count({from, to}) > 0)
+    //            continue;
 
-            // 检查这两个节点在上一层是否通过某种方式连接
-            bool isConnected = false;
-            for (const std::string &originalNode1 : nodeMapping.at(nodePair1.first)) {
-                for (const std::string &originalNode2 : nodeMapping.at(nodePair2.first)) {
-                    // 检查是否有直接连接的边
-                    for (const Edge &edge : *previousLevel.edges) {
-                        if ((edge.from == originalNode1 && edge.to == originalNode2) ||
-                            (edge.from == originalNode2 && edge.to == originalNode1)) {
-                            isConnected = true;
-                            break;
-                        }
-                    }
-                    if (isConnected)
-                        break;
-                }
-                if (isConnected)
-                    break;
-            }
+    //        // 检查这两个节点在上一层是否通过某种方式连接
+    //        bool isConnected = false;
+    //        for (const std::string &originalNode1 : nodeMapping.at(nodePair1.first)) {
+    //            for (const std::string &originalNode2 : nodeMapping.at(nodePair2.first)) {
+    //                // 检查是否有直接连接的边
+    //                for (const Edge &edge : *previousLevel.edges) {
+    //                    if ((edge.from == originalNode1 && edge.to == originalNode2) ||
+    //                        (edge.from == originalNode2 && edge.to == originalNode1)) {
+    //                        isConnected = true;
+    //                        break;
+    //                    }
+    //                }
+    //                if (isConnected)
+    //                    break;
+    //            }
+    //            if (isConnected)
+    //                break;
+    //        }
 
-            // 如果两个节点在上一级中连接，则在当前层中添加一条直接的边
-            if (isConnected) {
-                Edge newEdge;
-                newEdge.from = from;
-                newEdge.to = to;
-                // 设置细分点
-                auto it = nodes->find(from);
-                newEdge.subDivs.emplace_back(it->second.pos);
-                it = nodes->find(to);
-                newEdge.subDivs.emplace_back(it->second.pos);
+    //        // 如果两个节点在上一级中连接，则在当前层中添加一条直接的边
+    //        if (isConnected) {
+    //            Edge newEdge;
+    //            newEdge.from = from;
+    //            newEdge.to = to;
+    //            // 设置细分点
+    //            auto it = nodes->find(from);
+    //            newEdge.subDivs.emplace_back(it->second.pos);
+    //            it = nodes->find(to);
+    //            newEdge.subDivs.emplace_back(it->second.pos);
 
-                currentLevel.edges->push_back(newEdge);
+    //            currentLevel.edges->push_back(newEdge);
 
-                // 记录边映射
-                edgeMapping[newEdge] = {};
+    //            // 记录边映射
+    //            edgeMapping[newEdge] = {};
 
-                // 标记已处理的边
-                processedEdges.insert({from, to});
-            }
-        }
-    }
+    //            // 标记已处理的边
+    //            processedEdges.insert({from, to});
+    //        }
+    //    }
+    //}
 
     // 保存节点映射和边映射到当前层次
     currentLevel.nodeMapping =

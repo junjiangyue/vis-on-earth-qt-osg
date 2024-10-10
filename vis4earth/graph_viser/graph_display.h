@@ -66,6 +66,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::string id;
         bool visible = true; // 默认可见
         double level;
+        int cluster;    // 簇ID
+        float size = 1; // 节点大小
     };
 
     struct Edge {
@@ -182,7 +184,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void setLevelGraph(int level);
         void generateHierarchicalGraphs(std::shared_ptr<std::map<std::string, Node>> &initialNodes,
                                         std::shared_ptr<std::vector<Edge>> &initialEdges);
-        void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel, float p);
+        void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel, int p);
 
       private:
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
