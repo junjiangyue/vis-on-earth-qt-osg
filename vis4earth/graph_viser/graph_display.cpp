@@ -3,6 +3,7 @@
 
 #include <ui_graph_layout.h>
 
+#include "LOUVAIN.h"
 #include <osgText/Font>
 #include <osgText/Text>
 
@@ -269,13 +270,17 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
                 edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
             }
         }
-
+        // 计算每个节点的度数
+        for (const auto &edge : *edges) {
+            (*nodes)[edge.from].degree++; // 增加起始节点的度数
+            (*nodes)[edge.to].degree++;   // 增加结束节点的度数（如果是无向图）
+        }
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
         // 更新图渲染
         auto graphParam = getGraph("LoadedGraph");
         if (graphParam) {
-
+            graphParam->graphTypeIndex = graphTypeIndex;
             graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
             graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
             graphParam->setHeightFromCenterRange(
@@ -284,6 +289,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->generateHierarchicalGraphs(nodes, edges);
+            graphParam->setLevelGraph(0);
             graphParam->update();
         }
         myGraph = graph;
@@ -359,6 +365,7 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
         auto graphParam = getGraph("LoadedGraph");
+        graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->generateHierarchicalGraphs(nodes, edges);
         graphParam->setLevelGraph(0);
         showGraph();
@@ -440,6 +447,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
     // 更新图渲染
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
+        graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
         graphParam->setHeightFromCenterRange(
@@ -513,6 +521,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     // 更新图渲染
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
+        graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
         graphParam->setLatitudeRange(latRng[0], latRng[1]);
         graphParam->setHeightFromCenterRange(
@@ -595,6 +604,7 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
     // 更新图渲染
     auto graphParam = getGraph("Layout_restrict");
     if (graphParam) {
+        graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
         graphParam->setHeightFromCenterRange(
@@ -760,10 +770,9 @@ void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
     // 更新resolutionLabel的文本
     ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
     auto graphParam = getGraph("LoadedGraph");
-    if (graphParam) {
-        graphParam->setLevelGraph(10 - value);
-        graphParam->update();
-    }
+    graphParam->graphTypeIndex = graphTypeIndex;
+    graphParam->setLevelGraph(10 - value);
+    graphParam->update();
 }
 // 检查两个矩形是否重叠，并返回重叠的距离
 osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
@@ -1616,12 +1625,27 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         positions.push_back(nodePair.second.pos);
         nodeIds.push_back(nodePair.first);
     }
+    std::vector<std::pair<std::string, std::string>> dbscanedges;
+    std::vector<float> weights;
+    // 提取边的from和to字段
+    for (const auto &edge : *previousLevel.edges) {
+        dbscanedges.push_back({edge.from, edge.to});
+        weights.push_back(edge.weight);
+    }
 
     // 将节点根据簇分类
     std::map<int, std::vector<std::string>> clusters; // 簇ID -> 节点ID列表
     // 使用 DBSCAN 对节点进行聚类
     if (level == 1) {
-        std::vector<int> clusterLabels = DBSCAN(positions, 4.2, /*minPts*/ 1);
+
+        std::vector<int> clusterLabels;
+
+        if (graphTypeIndex == 1) {
+            clusterLabels = Louvain(dbscanedges, weights); // 全都是一个社区的 数据再改变一下
+        } else {
+            clusterLabels = DBSCAN(positions, 3.5, /*minPts*/ 1, dbscanedges, nodeIds);
+        }
+        // 处理噪声节点，随机分配给邻居节点
         // 找到最大的标签
         int maxClusterID = -1;
         for (const auto &point : clusterLabels) {
@@ -1672,7 +1696,7 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             // 将代表节点添加到当前层次
             currentLevel.nodes->emplace(representativeNodeId,
                                         previousLevel.nodes->at(representativeNodeId));
-
+            currentLevel.nodes->at(representativeNodeId).isRepresent = true;
             // 设置代表节点的大小，基于簇中节点的数量
             float representativeSize =
                 (static_cast<float>(nodesInCluster.size()) * 0.1 +
@@ -1836,5 +1860,3 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         std::make_shared<std::map<std::string, std::vector<std::string>>>(nodeMapping);
     currentLevel.edgeMapping = std::make_shared<std::map<Edge, std::vector<Edge>>>(edgeMapping);
 }
-
-// 无固定位置的图的聚类

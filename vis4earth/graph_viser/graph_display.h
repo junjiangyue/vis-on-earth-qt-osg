@@ -65,9 +65,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::Vec3 color;
         std::string id;
         bool visible = true; // 默认可见
+        bool isRepresent = false;
         double level;
-        int cluster;    // 簇ID
         float size = 1; // 节点大小
+        int degree = 0;
+        int cluster; // 簇ID
     };
 
     struct Edge {
@@ -133,6 +135,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::ref_ptr<osg::Group> grp;
 
       public:
+        int graphTypeIndex;
         VIS4Earth::Area restriction;
         bool restrictionOFF = true;
 
@@ -185,6 +188,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void generateHierarchicalGraphs(std::shared_ptr<std::map<std::string, Node>> &initialNodes,
                                         std::shared_ptr<std::vector<Edge>> &initialEdges);
         void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel, int p);
+        void performLouvainClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel,
+                                      int p);
 
       private:
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
