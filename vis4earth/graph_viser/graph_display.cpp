@@ -558,7 +558,7 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
     nodeLayouter.setParameter(myLayoutParam);
     nodeLayouter.restrictedLayout(myRestriction, myLayoutParam.Iteration);
     myGraph = nodeLayouter.getLayoutedGraph();
-    auto existGraph = getGraph("Layout_restrict");
+    auto existGraph = getGraph("LoadedGraph");
     if (!existGraph) {
         auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
         lonRng[0] += lonOffs;
@@ -600,9 +600,9 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
         }
     }
     // 添加图到渲染器中
-    addGraph("Layout_restrict", nodes, edges);
+    addGraph("LoadedGraph", nodes, edges);
     // 更新图渲染
-    auto graphParam = getGraph("Layout_restrict");
+    auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
@@ -1456,10 +1456,12 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         }
 
         // TODO: 加入文字避让
-        text->setPosition(
-            p + osg::Vec3(0.5f * nodeGeomSize, 1.0f * nodeGeomSize,
-                          0.25f * nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-                                                  // 设置文字内容为点的ID
+        text->setPosition(p +
+                          osg::Vec3(itr->second.size * 0.5f * nodeGeomSize,
+                                    itr->second.size * 1.0f * nodeGeomSize,
+                                    itr->second.size * 0.25f *
+                                        nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
+                                                        // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
 
         osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
@@ -1487,12 +1489,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         osg::Vec3 endPos = edge.subDivs.back();
         endPos = vec3ToSphere(endPos);
 
-        // std::cout << "Edge from node " << edge.from << " to node " << edge.to << std::endl;
-        // std::cout << "Start position (sphere): (" << startPos.x() << ", " << startPos.y() << ", "
-        //           << startPos.z() << ")" << std::endl;
-        // std::cout << "End position (sphere): (" << endPos.x() << ", " << endPos.y() << ", "
-        //           << endPos.z() << ")" << std::endl;
-
         osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
         osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
         for (size_t i = 0; i < edge.subDivs.size(); ++i) {
@@ -1513,10 +1509,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
                 if (j > 0) { // 从第二个插值点开始创建线段
                     segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
                     segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
-                    // segCols->push_back(prevInterpolatedColor);
                     segVerts->push_back(vec3ToSphere(interpolatedPos));
                     segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
-                    // segCols->push_back(interpolatedColor);
                 }
 
                 prevInterpolatedPos = interpolatedPos;
@@ -1641,9 +1635,10 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         std::vector<int> clusterLabels;
 
         if (graphTypeIndex == 1) {
-            clusterLabels = Louvain(dbscanedges, weights); // 全都是一个社区的 数据再改变一下
+            clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
+            // clusterLabels = Louvain(dbscanedges, weights); // 全都是一个社区的 数据再改变一下
         } else {
-            clusterLabels = DBSCAN(positions, 3.5, /*minPts*/ 1, dbscanedges, nodeIds);
+            clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
         }
         // 处理噪声节点，随机分配给邻居节点
         // 找到最大的标签
@@ -1699,7 +1694,7 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             currentLevel.nodes->at(representativeNodeId).isRepresent = true;
             // 设置代表节点的大小，基于簇中节点的数量
             float representativeSize =
-                (static_cast<float>(nodesInCluster.size()) * 0.1 +
+                (static_cast<float>(nodesInCluster.size()) * 0.05 +
                  previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
             currentLevel.nodes->at(representativeNodeId).size = representativeSize;
 
@@ -1801,59 +1796,65 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         }
     }
 
-    //// 2. 为未直接连接但联通的节点添加新边
-    // for (const auto &nodePair1 : *currentLevel.nodes) {
-    //     for (const auto &nodePair2 : *currentLevel.nodes) {
-    //         if (nodePair1.first == nodePair2.first)
-    //             continue; // 跳过自己与自己的边
+    // 2. 为未直接连接但联通的代表节点添加新边
+    for (const auto &repNodePair1 : *currentLevel.nodes) {
+        if (!repNodePair1.second.isRepresent)
+            continue; // 只对代表节点进行处理
 
-    //        std::string from = std::min(nodePair1.first, nodePair2.first);
-    //        std::string to = std::max(nodePair1.first, nodePair2.first);
+        for (const auto &repNodePair2 : *currentLevel.nodes) {
+            if (repNodePair1.first == repNodePair2.first || !repNodePair2.second.isRepresent)
+                continue; // 跳过自己或非代表节点
 
-    //        // 如果这条边已经处理过，则跳过
-    //        if (processedEdges.count({from, to}) > 0)
-    //            continue;
+            std::string from = std::min(repNodePair1.first, repNodePair2.first);
+            std::string to = std::max(repNodePair1.first, repNodePair2.first);
 
-    //        // 检查这两个节点在上一层是否通过某种方式连接
-    //        bool isConnected = false;
-    //        for (const std::string &originalNode1 : nodeMapping.at(nodePair1.first)) {
-    //            for (const std::string &originalNode2 : nodeMapping.at(nodePair2.first)) {
-    //                // 检查是否有直接连接的边
-    //                for (const Edge &edge : *previousLevel.edges) {
-    //                    if ((edge.from == originalNode1 && edge.to == originalNode2) ||
-    //                        (edge.from == originalNode2 && edge.to == originalNode1)) {
-    //                        isConnected = true;
-    //                        break;
-    //                    }
-    //                }
-    //                if (isConnected)
-    //                    break;
-    //            }
-    //            if (isConnected)
-    //                break;
-    //        }
+            // 如果这条边已经处理过，则跳过
+            if (processedEdges.count({from, to}) > 0)
+                continue;
 
-    //        // 如果两个节点在上一级中连接，则在当前层中添加一条直接的边
-    //        if (isConnected) {
-    //            Edge newEdge;
-    //            newEdge.from = from;
-    //            newEdge.to = to;
-    //            // 设置细分点
-    //            auto it = nodes->find(from);
-    //            newEdge.subDivs.emplace_back(it->second.pos);
-    //            it = nodes->find(to);
-    //            newEdge.subDivs.emplace_back(it->second.pos);
+            // 检查这两个代表节点在上一层是否通过某种方式连接
+            bool isConnected = false;
+            for (const std::string &originalNode1 : nodeMapping.at(repNodePair1.first)) {
+                for (const std::string &originalNode2 : nodeMapping.at(repNodePair2.first)) {
+                    // 检查是否有直接连接的边
+                    for (const Edge &edge : *previousLevel.edges) {
+                        if ((edge.from == originalNode1 && edge.to == originalNode2) ||
+                            (edge.from == originalNode2 && edge.to == originalNode1)) {
+                            isConnected = true;
+                            break;
+                        }
+                    }
+                    if (isConnected)
+                        break;
+                }
+                if (isConnected)
+                    break;
+            }
 
-    //            currentLevel.edges->push_back(newEdge);
+            // 如果两个代表节点在上一级中连接，则在当前层中添加一条直接的边
+            if (isConnected) {
+                Edge newEdge;
+                newEdge.from = from;
+                newEdge.to = to;
 
-    //            // 记录边映射
-    //            edgeMapping[newEdge] = {};
+                // 设置细分点
+                auto itFrom = currentLevel.nodes->find(from);
+                auto itTo = currentLevel.nodes->find(to);
+                if (itFrom != currentLevel.nodes->end() && itTo != currentLevel.nodes->end()) {
+                    newEdge.subDivs.emplace_back(itFrom->second.pos);
+                    newEdge.subDivs.emplace_back(itTo->second.pos);
+                }
 
-    //            // 标记已处理的边
-    //            processedEdges.insert({from, to});
-    //        }
-    //    }
-    //}
+                currentLevel.edges->push_back(newEdge);
+
+                // 记录边映射
+                edgeMapping[newEdge] = {};
+
+                // 标记已处理的边
+                processedEdges.insert({from, to});
+            }
+        }
+    }
 
     // 保存节点映射和边映射到当前层次
     currentLevel.nodeMapping =
