@@ -368,7 +368,17 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->generateHierarchicalGraphs(nodes, edges);
         graphParam->setLevelGraph(0);
-        showGraph();
+        graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
+        graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
+        graphParam->setHeightFromCenterRange(
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setRestriction(myRestriction);
+        graphParam->restrictionOFF = !restrictionOn;
+        graphParam->update();
+        //showGraph();
         // 初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
         QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
@@ -549,10 +559,10 @@ void VIS4Earth::GraphRenderer::setIteration(int value) { myLayoutParam.Iteration
 // 区域控制的参数
 void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
     restrictionOn = true;
-    myRestriction.leftBound = -1000.0;
-    myRestriction.rightBound = -800.0;
-    myRestriction.upperBound = -300.0;
-    myRestriction.bottomBound = -400.0;
+    myRestriction.leftBound = 30.0;
+    myRestriction.rightBound = 60.0;
+    myRestriction.upperBound = 20.0;
+    myRestriction.bottomBound = -20.0;
     auto nodeLayouter = VIS4Earth::NodeLayouter();
     nodeLayouter.setGraph(myGraph);
     nodeLayouter.setParameter(myLayoutParam);
