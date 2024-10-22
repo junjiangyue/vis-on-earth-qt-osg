@@ -316,10 +316,10 @@ struct Graph {
   public:
     Graph()
         : K(0.000001), I(10), iter(I), cycles(6), compatibilityThreshold(0.6), smoothWidth(30.0),
-          S(0.000001), edgeDistance(1e-4), gravitationIsOn(false),
-          gravitationCenter(-900.0, -400.0, 0), gravitationExponent(-2.0),
+          S(0.000001), edgeDistance(1e-4), gravitationIsOn(true),
+          gravitationCenter(40.0, 0.0, 0), gravitationExponent(-2.0),
           edgeWeightThreshold(-1.0), edgePercentageThreshold(-1.0), edgeOpacity(0.1),
-          nodeRestrictionIsOn(false), repulsion(0.2), spring_k(5.4), attraction(0.32),
+          nodeRestrictionIsOn(false), repulsion(0.2), spring_k(5.4), attraction(25.1),
           n_iterations(0), edgeLength(50) {}
 
     int getLayoutIteration() const { return n_iterations; }
