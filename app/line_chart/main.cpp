@@ -16,10 +16,10 @@
 // D:/Project/OSG/vis-on-earth-qt-osg/data
 static const std::string volPath = DATA_PATH_PREFIX"OSS/OSS000.raw";
 // static const std::string volDPath0 = "C:/Code/bin/data/vis-osg-scatter-plot/linechart0.txt";
-static const std::string volDPath0 = "D:/Project/OSG/vis-on-earth-qt-osg/data/linechart0.txt";
-static const std::string volDPath1 = "C:/Code/bin/data/vis-osg-scatter-plot/linechart1.txt";
-static const std::string volDPath2 = "C:/Code/bin/data/vis-osg-scatter-plot/linechart2.txt";
-static const std::string volDPath3 = "C:/Code/bin/data/vis-osg-scatter-plot/linechart3.txt";
+static const std::string volDPath0 = DATA_PATH_PREFIX"linechart0.txt";
+static const std::string volDPath1 = DATA_PATH_PREFIX"linechart1.txt";
+static const std::string volDPath2 = DATA_PATH_PREFIX"linechart2.txt";
+static const std::string volDPath3 = DATA_PATH_PREFIX"linechart3.txt";
 static const std::string volName0 = "0";
 static const std::string volName1 = "1";
 static const std::string volName2 = "2";

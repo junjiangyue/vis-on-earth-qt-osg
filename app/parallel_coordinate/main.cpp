@@ -17,7 +17,7 @@
 #include <vis4earth/scalar_viser/marching_cube_renderer.h>
 
 #include <vis4earth/info_viser/parallel_coordinate.h>
-static const std::string filePath = "D:/Project/OSG/vis-on-earth-qt-osg/data/para_coor.json";
+static const std::string filePath = DATA_PATH_PREFIX"para_coor.json";
 
 static const std::array<uint32_t, 3> dim = { 300, 350, 50 };			// unused
 static const std::array<uint32_t, 3> graphDim = { 100, 100, 50 };		// unused

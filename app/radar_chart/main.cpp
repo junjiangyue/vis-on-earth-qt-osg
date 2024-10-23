@@ -10,7 +10,7 @@ static const std::array<float, 2> latRng = { -90.00f, 90.00f };
 static const std::array<float, 2> hRng = { 1.f, 21264.f };
 static const float hScale = 100.f;
 
-static const std::string filePath = "D:/Project/OSG/vis-on-earth-qt-osg/data/radar_chart.json";
+static const std::string filePath = DATA_PATH_PREFIX"radar_chart.json";
 
 int main(int argc, char** argv)
 {

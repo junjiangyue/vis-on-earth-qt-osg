@@ -17,7 +17,7 @@
 #include <vis4earth/info_viser/scatter_plot.h>
 
 static const std::string volPath = DATA_PATH_PREFIX"OSS/OSS000.raw";
-static const std::string volDPath = "D:/Project/OSG/vis-on-earth-qt-osg/data/linechart0.txt";
+static const std::string volDPath = DATA_PATH_PREFIX"/linechart0.txt";
 static const std::string volName = "0";
 static const std::array<uint32_t, 3> dim = { 300, 350, 50 };
 static const std::array<uint32_t, 3> graphDim = { 100, 100, 50 };

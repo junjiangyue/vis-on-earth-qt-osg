@@ -15,7 +15,7 @@
 #include <vis4earth/info_viser/cylinder_chart.h>
 // D:/Project/OSG/vis-on-earth-qt-osg/data
 static const std::string volPath = DATA_PATH_PREFIX"OSS/OSS000.raw"; // unused
-static const std::string volDPath0 = "D:/Project/OSG/vis-on-earth-qt-osg/data/linechart0.txt";
+static const std::string volDPath0 = DATA_PATH_PREFIX"linechart0.txt";
 static const std::string volName0 = "0";
 
 static const std::array<uint32_t, 3> dim = { 300, 350, 50 };			// unused
