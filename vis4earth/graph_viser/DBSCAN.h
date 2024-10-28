@@ -1,28 +1,28 @@
-#ifndef VIS4EARTH_GRAPH_VISER_DBSCAN_H
+ï»¿#ifndef VIS4EARTH_GRAPH_VISER_DBSCAN_H
 #define VIS4EARTH_GRAPH_VISER_DBSCAN_H
 
 #include <cmath>
 #include <limits>
-#include <unordered_map>
-#include <vector>
+#include <memory>
 #include <osg/Vec3>
 #include <set>
-#include <memory>
 #include <string>
+#include <unordered_map>
+#include <vector>
 
-// ¼ÆËãÅ·¼¸ÀïµÃ¾àÀë
+// è®¡ç®—æ¬§å‡ é‡Œå¾—è·ç¦»
 float calculateDistance(const osg::Vec3 &pos1, const osg::Vec3 &pos2) {
     osg::Vec3 diff = pos1 - pos2;
     return diff.length();
 }
 
-// »ñÈ¡¸ø¶¨µãµÄ epsilon ÁÚÓò
+// è·å–ç»™å®šç‚¹çš„ epsilon é‚»åŸŸ
 std::vector<int> regionQuery(int pointIndex, const std::vector<osg::Vec3> &positions,
                              float epsilon) {
     std::vector<int> neighbors;
     const osg::Vec3 &point = positions[pointIndex];
 
-    // ±éÀúËùÓĞµã£¬ÕÒµ½¾àÀëĞ¡ÓÚ epsilon µÄµã
+    // éå†æ‰€æœ‰ç‚¹ï¼Œæ‰¾åˆ°è·ç¦»å°äº epsilon çš„ç‚¹
     for (int i = 0; i < positions.size(); ++i) {
         if (i != pointIndex && calculateDistance(point, positions[i]) <= epsilon) {
             neighbors.push_back(i);
@@ -31,7 +31,7 @@ std::vector<int> regionQuery(int pointIndex, const std::vector<osg::Vec3> &posit
     return neighbors;
 }
 
-// ÅĞ¶ÏÁ½¸ö½ÚµãÊÇ·ñÍ¨¹ı±ßÁ¬½Ó
+// åˆ¤æ–­ä¸¤ä¸ªèŠ‚ç‚¹æ˜¯å¦é€šè¿‡è¾¹è¿æ¥
 bool areConnected(int pointA, int pointB,
                   const std::vector<std::pair<std::string, std::string>> &edges,
                   const std::vector<std::string> &nodeIds) {
@@ -40,13 +40,13 @@ bool areConnected(int pointA, int pointB,
     for (const auto &edge : edges) {
         if ((edge.first == idA && edge.second == idB) ||
             (edge.first == idB && edge.second == idA)) {
-            return true; // ÕÒµ½Á¬½Ó
+            return true; // æ‰¾åˆ°è¿æ¥
         }
     }
-    return false; // Ã»ÓĞÁ¬½Ó
+    return false; // æ²¡æœ‰è¿æ¥
 }
 
-// ²éÕÒ×î½üµÄ´ØID
+// æŸ¥æ‰¾æœ€è¿‘çš„ç°‡ID
 int findNearestCluster(int pointIndex, const std::vector<int> &labels,
                        const std::vector<osg::Vec3> &positions,
                        const std::vector<std::pair<std::string, std::string>> &edges,
@@ -54,52 +54,52 @@ int findNearestCluster(int pointIndex, const std::vector<int> &labels,
     int nearestCluster = -1;
     float minDistance = std::numeric_limits<float>::max();
 
-    // ±éÀúËùÓĞµã£¬ÕÒµ½Àë¸Ãµã×î½üµÄµã£¬ÇÒ¸ÃµãÒÑ¾­±»·ÖÅäÁË´Ø£¬²¢ÇÒÓĞÖ±½ÓÁ¬½Ó
+    // éå†æ‰€æœ‰ç‚¹ï¼Œæ‰¾åˆ°ç¦»è¯¥ç‚¹æœ€è¿‘çš„ç‚¹ï¼Œä¸”è¯¥ç‚¹å·²ç»è¢«åˆ†é…äº†ç°‡ï¼Œå¹¶ä¸”æœ‰ç›´æ¥è¿æ¥
     for (int i = 0; i < labels.size(); ++i) {
         if (labels[i] != -1 &&
-            areConnected(pointIndex, i, edges, nodeIds)) { // Ö»¿¼ÂÇÓĞÁ¬½ÓÇÒÒÑ·ÖÅäµÄ´Ø
+            areConnected(pointIndex, i, edges, nodeIds)) { // åªè€ƒè™‘æœ‰è¿æ¥ä¸”å·²åˆ†é…çš„ç°‡
             float distance = calculateDistance(positions[pointIndex], positions[i]);
             if (distance < minDistance) {
                 minDistance = distance;
-                nearestCluster = labels[i]; // ×î½üµÄ´ØID
+                nearestCluster = labels[i]; // æœ€è¿‘çš„ç°‡ID
             }
         }
     }
     return nearestCluster;
 }
 
-// DBSCAN Ëã·¨£º»ùÓÚµãµÄÎ»ÖÃ£¨osg::Vec3£©½øĞĞ¾ÛÀà
+// DBSCAN ç®—æ³•ï¼šåŸºäºç‚¹çš„ä½ç½®ï¼ˆosg::Vec3ï¼‰è¿›è¡Œèšç±»
 std::vector<int> DBSCAN(const std::vector<osg::Vec3> &positions, float epsilon, int minPts,
                         const std::vector<std::pair<std::string, std::string>> &dbscanedges,
                         const std::vector<std::string> &nodeIds) {
-    std::vector<int> labels(positions.size(), -1); // -1 ±íÊ¾Î´·ÖÀà
+    std::vector<int> labels(positions.size(), -1); // -1 è¡¨ç¤ºæœªåˆ†ç±»
     int clusterId = 0;
-    std::vector<bool> visited(positions.size(), false); // ¼ÇÂ¼Ã¿¸öµãÊÇ·ñ·ÃÎÊ¹ı
+    std::vector<bool> visited(positions.size(), false); // è®°å½•æ¯ä¸ªç‚¹æ˜¯å¦è®¿é—®è¿‡
 
-    // ±éÀúËùÓĞµã
+    // éå†æ‰€æœ‰ç‚¹
     for (int i = 0; i < positions.size(); ++i) {
         if (visited[i])
-            continue; // Ìø¹ıÒÑ¾­·ÃÎÊ¹ıµÄµã
+            continue; // è·³è¿‡å·²ç»è®¿é—®è¿‡çš„ç‚¹
 
         visited[i] = true;
 
-        // ÕÒµ½¸ÃµãµÄ epsilon ÁÚÓò
+        // æ‰¾åˆ°è¯¥ç‚¹çš„ epsilon é‚»åŸŸ
         std::vector<int> neighbors = regionQuery(i, positions, epsilon);
 
-        // Èç¹ûÁÚÓòÖĞµÄµãÊıĞ¡ÓÚ minPts£¬Ôò±ê¼ÇÎªÔëÉùµã
+        // å¦‚æœé‚»åŸŸä¸­çš„ç‚¹æ•°å°äº minPtsï¼Œåˆ™æ ‡è®°ä¸ºå™ªå£°ç‚¹
         if (neighbors.size() < minPts) {
             int nearestCluster = findNearestCluster(i, labels, positions, dbscanedges, nodeIds);
             if (nearestCluster != -1) {
-                labels[i] = nearestCluster; // ·ÖÅäµ½×î½üµÄ´Ø
+                labels[i] = nearestCluster; // åˆ†é…åˆ°æœ€è¿‘çš„ç°‡
             }
         } else {
-            // ·ñÔò£¬ĞÎ³ÉĞÂµÄ´Ø
+            // å¦åˆ™ï¼Œå½¢æˆæ–°çš„ç°‡
             labels[i] = clusterId;
 
-            // ½«ÁÚÓòÄÚµÄµãÖğ²½Ìí¼Óµ½´ØÖĞ
+            // å°†é‚»åŸŸå†…çš„ç‚¹é€æ­¥æ·»åŠ åˆ°ç°‡ä¸­
             std::set<int> neighborSet(neighbors.begin(), neighbors.end());
 
-            // À©Õ¹´Ø
+            // æ‰©å±•ç°‡
             while (!neighborSet.empty()) {
                 auto iter = neighborSet.begin();
                 int currentNeighborIndex = *iter;
@@ -108,7 +108,7 @@ std::vector<int> DBSCAN(const std::vector<osg::Vec3> &positions, float epsilon, 
                 if (!visited[currentNeighborIndex]) {
                     visited[currentNeighborIndex] = true;
 
-                    // ÕÒµ½µ±Ç°µãµÄ epsilon ÁÚÓò
+                    // æ‰¾åˆ°å½“å‰ç‚¹çš„ epsilon é‚»åŸŸ
                     std::vector<int> neighborNeighbors =
                         regionQuery(currentNeighborIndex, positions, epsilon);
                     if (neighborNeighbors.size() >= minPts) {
@@ -116,12 +116,12 @@ std::vector<int> DBSCAN(const std::vector<osg::Vec3> &positions, float epsilon, 
                     }
                 }
 
-                // Èç¹û¸Ãµã»¹Î´±»·ÖÅäµ½´ØÖĞ£¬Ôò½«ÆäÌí¼Óµ½µ±Ç°´Ø
+                // å¦‚æœè¯¥ç‚¹è¿˜æœªè¢«åˆ†é…åˆ°ç°‡ä¸­ï¼Œåˆ™å°†å…¶æ·»åŠ åˆ°å½“å‰ç°‡
                 if (labels[currentNeighborIndex] == -1) {
                     labels[currentNeighborIndex] = clusterId;
                 }
             }
-            // Íê³Éµ±Ç°´ØµÄÀ©Õ¹£¬×¼±¸ÏÂÒ»¸ö´Ø
+            // å®Œæˆå½“å‰ç°‡çš„æ‰©å±•ï¼Œå‡†å¤‡ä¸‹ä¸€ä¸ªç°‡
             clusterId++;
         }
     }

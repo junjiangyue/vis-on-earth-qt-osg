@@ -8,548 +8,541 @@
 #include <osgText/Text>
 
 using namespace VIS4Earth;
-static std::array<float, 2> lonRng = { -90.f, 90.f };
-const std::array<float, 2> latRng = { -90.f, 90.f };
-const std::array<float, 2> hRng = { 10000.f, 15000.f };
+static std::array<float, 2> lonRng = {-90.f, 90.f};
+const std::array<float, 2> latRng = {-90.f, 90.f};
+const std::array<float, 2> hRng = {10000.f, 15000.f};
 const float hScale = 10.f;
 
-VIS4Earth::GraphRenderer::CoordRange getCoordRange(const VIS4Earth::Graph& graph) {
-	VIS4Earth::GraphRenderer::CoordRange range = {
-		std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest(),
-		std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest() };
+VIS4Earth::GraphRenderer::CoordRange getCoordRange(const VIS4Earth::Graph &graph) {
+    VIS4Earth::GraphRenderer::CoordRange range = {
+        std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest(),
+        std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest()};
 
-	for (const auto& node : graph.getNodes()) {
-		if (node.second.pos.x < range.minX)
-			range.minX = node.second.pos.x;
-		if (node.second.pos.x > range.maxX)
-			range.maxX = node.second.pos.x;
-		if (node.second.pos.y < range.minY)
-			range.minY = node.second.pos.y;
-		if (node.second.pos.y > range.maxY)
-			range.maxY = node.second.pos.y;
-	}
+    for (const auto &node : graph.getNodes()) {
+        if (node.second.pos.x < range.minX)
+            range.minX = node.second.pos.x;
+        if (node.second.pos.x > range.maxX)
+            range.maxX = node.second.pos.x;
+        if (node.second.pos.y < range.minY)
+            range.minY = node.second.pos.y;
+        if (node.second.pos.y > range.maxY)
+            range.maxY = node.second.pos.y;
+    }
 
-	return range;
+    return range;
 }
 
-VIS4Earth::GraphRenderer::GraphRenderer(QWidget* parent) : QtOSGReflectableWidget(ui, parent) {
+VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidget(ui, parent) {
 
-	// 连接 comboBox 的信号来记录当前选择的索引
-	graphTypeIndex = 0; // 默认选择第一个（有经纬度的图）
+    // 连接 comboBox 的信号来记录当前选择的索引
+    graphTypeIndex = 0; // 默认选择第一个（有经纬度的图）
 
-	connect(ui->comboBoxGraphType, SIGNAL(currentIndexChanged(int)), this,
-		SLOT(onComboBoxGraphTypeChanged(int)));
+    connect(ui->comboBoxGraphType, SIGNAL(currentIndexChanged(int)), this,
+            SLOT(onComboBoxGraphTypeChanged(int)));
 
-	// 打开文件夹
-	connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
-	connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
-	// 加载图并绘制
-	connect(ui->loadAndDrawGraphButton, &QPushButton::clicked, this,
-		&GraphRenderer::loadAndDrawGraph);
+    // 打开文件夹
+    connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
+    connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
+    // 加载图并绘制
+    connect(ui->loadAndDrawGraphButton, &QPushButton::clicked, this,
+            &GraphRenderer::loadAndDrawGraph);
 
-	connect(ui->showGraphLayoutButton, &QPushButton::clicked, this, &GraphRenderer::showGraph);
-	connect(ui->showEdgeBundlingButton, &QPushButton::clicked, this, &GraphRenderer::showBundling);
+    connect(ui->showGraphLayoutButton, &QPushButton::clicked, this, &GraphRenderer::showGraph);
+    connect(ui->showEdgeBundlingButton, &QPushButton::clicked, this, &GraphRenderer::showBundling);
 
-	// Connect the slider's valueChanged signal to the slot function
-	connect(ui->sizeSlider, &QSlider::valueChanged, this, &GraphRenderer::onSizeSliderValueChanged);
-	connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
-		&GraphRenderer::onFontSizeSliderValueChanged);
-	connect(ui->resolutionSlider, &QSlider::valueChanged, this,
-		&GraphRenderer::onResolutionSliderValueChanged);
+    // Connect the slider's valueChanged signal to the slot function
+    connect(ui->sizeSlider, &QSlider::valueChanged, this, &GraphRenderer::onSizeSliderValueChanged);
+    connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
+            &GraphRenderer::onFontSizeSliderValueChanged);
+    connect(ui->resolutionSlider, &QSlider::valueChanged, this,
+            &GraphRenderer::onResolutionSliderValueChanged);
 
-	// 连接参数设置的信号到槽函数
-	connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setAttraction);
-	connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setEdgeLength);
-	connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setRepulsion);
-	connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setSpringK);
-	connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
-		&GraphRenderer::setIteration);
+    // 连接参数设置的信号到槽函数
+    connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setAttraction);
+    connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setEdgeLength);
+    connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setRepulsion);
+    connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setSpringK);
+    connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &GraphRenderer::setIteration);
 
-	connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
-		&GraphRenderer::setRegionRestriction);
-	/*connect(ui->checkBoxRegionRestriction, &QCheckBox::toggled, this,
-			&GraphRenderer::setRegionRestriction);*/
-	connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setMinX);
-	connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setMaxX);
-	connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setMinY);
-	connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::setMaxY);
+    connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
+            &GraphRenderer::setRegionRestriction);
+    /*connect(ui->checkBoxRegionRestriction, &QCheckBox::toggled, this,
+                    &GraphRenderer::setRegionRestriction);*/
+    connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMinX);
+    connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMaxX);
+    connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMinY);
+    connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMaxY);
 
-	// 连接全局弹簧常数 (K)
-	connect(ui->spinBoxGlobalSpringConstant, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-		this, &GraphRenderer::onGlobalSpringConstantChanged);
+    // 连接全局弹簧常数 (K)
+    connect(ui->spinBoxGlobalSpringConstant, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphRenderer::onGlobalSpringConstantChanged);
 
-	//// 连接迭代次数 (I)
-	// connect(ui->spinBoxNumberOfIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
-	//         &GraphRenderer::onNumberOfIterationsChanged);
+    //// 连接迭代次数 (I)
+    // connect(ui->spinBoxNumberOfIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //         &GraphRenderer::onNumberOfIterationsChanged);
 
-	//// 连接剩余迭代次数 (iter)
-	// connect(ui->spinBoxRemainingIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
-	//         &GraphRenderer::onRemainingIterationsChanged);
+    //// 连接剩余迭代次数 (iter)
+    // connect(ui->spinBoxRemainingIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //         &GraphRenderer::onRemainingIterationsChanged);
 
-	//// 连接剩余循环数
-	// connect(ui->spinBoxCyclesLeft, QOverload<int>::of(&QSpinBox::valueChanged), this,
-	//         &GraphRenderer::onCyclesLeftChanged);
+    //// 连接剩余循环数
+    // connect(ui->spinBoxCyclesLeft, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //         &GraphRenderer::onCyclesLeftChanged);
 
-	// 连接兼容性阈值
-	connect(ui->spinBoxCompatibilityThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-		this, &GraphRenderer::onCompatibilityThresholdChanged);
+    // 连接兼容性阈值
+    connect(ui->spinBoxCompatibilityThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphRenderer::onCompatibilityThresholdChanged);
 
-	// 连接平滑宽度
-	connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::onSmoothWidthChanged);
+    // 连接平滑宽度
+    connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onSmoothWidthChanged);
 
-	// 连接位移 (S)
-	connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::onDisplacementChanged);
+    // 连接位移 (S)
+    connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onDisplacementChanged);
 
-	// 连接边距离
-	connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::onEdgeDistanceChanged);
+    // 连接边距离
+    connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onEdgeDistanceChanged);
 
-	//// 连接引力开启
-	// connect(ui->checkBoxGravitationIsOn, &QCheckBox::toggled, this,
-	//         &GraphRenderer::onGravitationIsOnToggled);
+    //// 连接引力开启
+    // connect(ui->checkBoxGravitationIsOn, &QCheckBox::toggled, this,
+    //         &GraphRenderer::onGravitationIsOnToggled);
 
-	//// 连接引力中心
-	// connect(ui->spinBoxGravitationCenterX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-	//         this, &GraphRenderer::onGravitationCenterXChanged);
-	// connect(ui->spinBoxGravitationCenterY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-	//         this, &GraphRenderer::onGravitationCenterYChanged);
-	// connect(ui->spinBoxGravitationCenterZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-	//         this, &GraphRenderer::onGravitationCenterZChanged);
+    //// 连接引力中心
+    // connect(ui->spinBoxGravitationCenterX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationCenterXChanged);
+    // connect(ui->spinBoxGravitationCenterY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationCenterYChanged);
+    // connect(ui->spinBoxGravitationCenterZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationCenterZChanged);
 
-	//// 连接引力指数
-	// connect(ui->spinBoxGravitationExponent, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-	//         this, &GraphRenderer::onGravitationExponentChanged);
+    //// 连接引力指数
+    // connect(ui->spinBoxGravitationExponent, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGravitationExponentChanged);
 
-	// 连接边权重阈值
-	connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-		this, &GraphRenderer::onEdgeWeightThresholdChanged);
+    // 连接边权重阈值
+    connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphRenderer::onEdgeWeightThresholdChanged);
 
-	// 连接边百分比阈值
-	connect(ui->spinBoxEdgePercentageThreshold,
-		QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-		&GraphRenderer::onEdgePercentageThresholdChanged);
-	// 连接箭头流动
-	connect(ui->arrowFlowButton, &QPushButton::clicked, this,
-		&GraphRenderer::onArrowFlowButtonClicked);
-	connect(ui->highlightFlowButton, &QPushButton::clicked, this,
-		&GraphRenderer::onHighlightFlowButtonClicked);
-	connect(ui->textureFlowButton, &QPushButton::clicked, this,
-		&GraphRenderer::onTextureFlowButtonClicked);
+    // 连接边百分比阈值
+    connect(ui->spinBoxEdgePercentageThreshold,
+            QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onEdgePercentageThresholdChanged);
+    // 连接箭头流动
+    connect(ui->arrowFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onArrowFlowButtonClicked);
+    connect(ui->highlightFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onHighlightFlowButtonClicked);
+    connect(ui->textureFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onTextureFlowButtonClicked);
 
-	connect(ui->starFlowButton, &QPushButton::clicked, this,
-		&GraphRenderer::onStarFlowButtonClicked);
+    connect(ui->starFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onStarFlowButtonClicked);
 }
 
-void VIS4Earth::GraphRenderer::addGraph(const std::string& name,
-	std::shared_ptr<std::map<std::string, Node>> nodes,
-	std::shared_ptr<std::vector<Edge>> edges) {
-	auto itr = graphs.find(name);
-	if (itr != graphs.end()) {
-		param.grp->removeChild(itr->second.grp);
-		graphs.erase(itr);
-	}
-	auto opt = graphs.emplace(std::piecewise_construct, std::forward_as_tuple(name),
-		std::forward_as_tuple(nodes, edges, &param));
-	param.grp->addChild(opt.first->second.grp);
+void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
+                                        std::shared_ptr<std::map<std::string, Node>> nodes,
+                                        std::shared_ptr<std::vector<Edge>> edges) {
+    auto itr = graphs.find(name);
+    if (itr != graphs.end()) {
+        param.grp->removeChild(itr->second.grp);
+        graphs.erase(itr);
+    }
+    auto opt = graphs.emplace(std::piecewise_construct, std::forward_as_tuple(name),
+                              std::forward_as_tuple(nodes, edges, &param));
+    param.grp->addChild(opt.first->second.grp);
 }
 
 std::shared_ptr<std::map<std::string, GraphRenderer::Node>>
-GraphRenderer::getNodes(const std::string& graphName) {
-	auto itr = graphs.find(graphName);
-	if (itr != graphs.end()) {
-		return itr->second.getNodes();
-	}
-	return nullptr;
+GraphRenderer::getNodes(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        return itr->second.getNodes();
+    }
+    return nullptr;
 }
 
 std::shared_ptr<std::vector<GraphRenderer::Edge>>
-GraphRenderer::getEdges(const std::string& graphName) {
-	auto itr = graphs.find(graphName);
-	if (itr != graphs.end()) {
-		return itr->second.getEdges();
-	}
-	return nullptr;
+GraphRenderer::getEdges(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        return itr->second.getEdges();
+    }
+    return nullptr;
 }
 std::shared_ptr<std::map<std::string, std::vector<std::string>>>
-GraphRenderer::getNodeMapping(const std::string& graphName) {
-	auto itr = graphs.find(graphName);
-	if (itr != graphs.end()) {
-		return itr->second.getNodeMapping();
-	}
-	return nullptr;
+GraphRenderer::getNodeMapping(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        return itr->second.getNodeMapping();
+    }
+    return nullptr;
 }
 
-void GraphRenderer::update(const std::string& graphName) {
-	auto itr = graphs.find(graphName);
-	if (itr != graphs.end()) {
-		itr->second.update();
-	}
+void GraphRenderer::update(const std::string &graphName) {
+    auto itr = graphs.find(graphName);
+    if (itr != graphs.end()) {
+        itr->second.update();
+    }
 }
 void VIS4Earth::GraphRenderer::onComboBoxGraphTypeChanged(int index) { graphTypeIndex = index; }
 
 void GraphRenderer::loadPointsCSV() {
-	QString pointsFileName =
-		QFileDialog::getOpenFileName(this, tr("Open Points CSV"), "", tr("CSV Files (*.csv)"));
-	if (pointsFileName.isEmpty())
-		return;
+    QString pointsFileName =
+        QFileDialog::getOpenFileName(this, tr("Open Points CSV"), "", tr("CSV Files (*.csv)"));
+    if (pointsFileName.isEmpty())
+        return;
 
-	// 设置文件路径到对应的文本框
-	ui->pointsFilePath->setText(pointsFileName);
+    // 设置文件路径到对应的文本框
+    ui->pointsFilePath->setText(pointsFileName);
 }
 
 void VIS4Earth::GraphRenderer::loadEdgesCSV() {
-	// 打开文件对话框选择边文件
-	QString edgesFileName =
-		QFileDialog::getOpenFileName(this, tr("Open Edges CSV"), "", tr("CSV Files (*.csv)"));
-	if (edgesFileName.isEmpty())
-		return;
+    // 打开文件对话框选择边文件
+    QString edgesFileName =
+        QFileDialog::getOpenFileName(this, tr("Open Edges CSV"), "", tr("CSV Files (*.csv)"));
+    if (edgesFileName.isEmpty())
+        return;
 
-	// 设置文件路径到对应的文本框
-	ui->edgesFilePath->setText(edgesFileName);
+    // 设置文件路径到对应的文本框
+    ui->edgesFilePath->setText(edgesFileName);
 }
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
-	QString pointsFileName = ui->pointsFilePath->text();
-	QString edgesFileName = ui->edgesFilePath->text();
+    QString pointsFileName = ui->pointsFilePath->text();
+    QString edgesFileName = ui->edgesFilePath->text();
 
-	if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
-		QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
-		return;
-	}
+    if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
+        QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
+        return;
+    }
 
-	// 读取CSV文件中的图数据
-	try {
-		std::string nodesFile = pointsFileName.toStdString();
-		std::string edgesFile = edgesFileName.toStdString();
+    // 读取CSV文件中的图数据
+    try {
+        std::string nodesFile = pointsFileName.toStdString();
+        std::string edgesFile = edgesFileName.toStdString();
 
-		auto graph = VIS4Earth::GraphLoader::LoadFromFile(nodesFile, edgesFile);
-		auto nodes = std::make_shared<std::map<std::string, Node>>();
-		auto edges = std::make_shared<std::vector<Edge>>();
-		std::vector<osg::Vec3> colors;
-		coordRange = getCoordRange(graph);
-		colors.resize(graph.getNodes().size());
-		for (auto& col : colors) {
-			col.x() = 1.f * rand() / RAND_MAX;
-			col.y() = 1.f * rand() / RAND_MAX;
-			col.z() = 1.f * rand() / RAND_MAX;
-		}
-		size_t i = 0;
-		for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
-			VIS4Earth::GraphRenderer::Node node;
-			node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-			node.color = colors[i];
-			node.id = itr->first;
-			node.level = itr->second.level;
+        auto graph = VIS4Earth::GraphLoader::LoadFromFile(nodesFile, edgesFile);
+        auto nodes = std::make_shared<std::map<std::string, Node>>();
+        auto edges = std::make_shared<std::vector<Edge>>();
+        std::vector<osg::Vec3> colors;
+        coordRange = getCoordRange(graph);
+        colors.resize(graph.getNodes().size());
+        for (auto &col : colors) {
+            col.x() = 1.f * rand() / RAND_MAX;
+            col.y() = 1.f * rand() / RAND_MAX;
+            col.z() = 1.f * rand() / RAND_MAX;
+        }
+        size_t i = 0;
+        for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
+            VIS4Earth::GraphRenderer::Node node;
+            node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+            node.color = colors[i];
+            node.id = itr->first;
+            node.level = itr->second.level;
 
-			nodes->emplace(std::make_pair(itr->first, node));
-			++i;
-		}
+            nodes->emplace(std::make_pair(itr->first, node));
+            ++i;
+        }
 
-		for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
-			edges->emplace_back();
+        for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
+            edges->emplace_back();
 
-			auto& edge = edges->back();
-			edge.from = itr->sourceLabel;
-			edge.to = itr->targetLabel;
-			if (itr->subdivs.empty()) {
-				edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-				edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-			}
-			else {
-				edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-				for (auto& subdiv : itr->subdivs)
-					edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
-				edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-			}
-		}
-		// 计算每个节点的度数
-		for (const auto& edge : *edges) {
-			(*nodes)[edge.from].degree++; // 增加起始节点的度数
-			(*nodes)[edge.to].degree++;   // 增加结束节点的度数（如果是无向图）
-		}
-		// 添加图到渲染器中
-		addGraph("LoadedGraph", nodes, edges);
-		// 更新图渲染
-		auto graphParam = getGraph("LoadedGraph");
-		if (graphParam) {
-			graphParam->graphTypeIndex = graphTypeIndex;
-			graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
-			graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
-			graphParam->setHeightFromCenterRange(
-				static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-				static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-			graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-			graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-			graphParam->generateHierarchicalGraphs(nodes, edges);
-			graphParam->setLevelGraph(0);
-			graphParam->update();
-		}
-		myGraph = graph;
-		// 初始化 UI
-		QLabel* coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
-		QString text =
-			QString("当前坐标范围: 最低纬度: %1, 最高纬度: %2, 最大经度: %3, 最小经度: %4")
-			.arg(coordRange.minX)
-			.arg(coordRange.maxX)
-			.arg(coordRange.maxY)
-			.arg(coordRange.minY);
-		coordRangeLabel->setText(text);
-	}
-	catch (const std::exception& e) {
-		QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
-	}
+            auto &edge = edges->back();
+            edge.from = itr->sourceLabel;
+            edge.to = itr->targetLabel;
+            if (itr->subdivs.empty()) {
+                edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            } else {
+                edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+                for (auto &subdiv : itr->subdivs)
+                    edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            }
+        }
+        // 计算每个节点的度数
+        for (const auto &edge : *edges) {
+            (*nodes)[edge.from].degree++; // 增加起始节点的度数
+            (*nodes)[edge.to].degree++;   // 增加结束节点的度数（如果是无向图）
+        }
+        // 添加图到渲染器中
+        addGraph("LoadedGraph", nodes, edges);
+        // 更新图渲染
+        auto graphParam = getGraph("LoadedGraph");
+        if (graphParam) {
+            graphParam->graphTypeIndex = graphTypeIndex;
+            graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
+            graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
+            graphParam->setHeightFromCenterRange(
+                static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+                static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+            graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+            graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+            graphParam->generateHierarchicalGraphs(nodes, edges);
+            graphParam->setLevelGraph(0);
+            graphParam->update();
+        }
+        myGraph = graph;
+        // 初始化 UI
+        QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
+        QString text =
+            QString("当前坐标范围: 最低纬度: %1, 最高纬度: %2, 最大经度: %3, 最小经度: %4")
+                .arg(coordRange.minX)
+                .arg(coordRange.maxX)
+                .arg(coordRange.maxY)
+                .arg(coordRange.minY);
+        coordRangeLabel->setText(text);
+    } catch (const std::exception &e) {
+        QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
+    }
 }
 
 void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
-	QString pointsFileName = ui->pointsFilePath->text();
-	QString edgesFileName = ui->edgesFilePath->text();
+    QString pointsFileName = ui->pointsFilePath->text();
+    QString edgesFileName = ui->edgesFilePath->text();
 
-	if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
-		QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
-		return;
-	}
-	// 读取CSV文件中的图数据
-	try {
-		std::string nodesFile = pointsFileName.toStdString();
-		std::string edgesFile = edgesFileName.toStdString();
+    if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
+        QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
+        return;
+    }
+    // 读取CSV文件中的图数据
+    try {
+        std::string nodesFile = pointsFileName.toStdString();
+        std::string edgesFile = edgesFileName.toStdString();
 
-		auto graph = VIS4Earth::GraphLoader::LoadFromNoGeoFile(nodesFile, edgesFile);
-		auto nodes = std::make_shared<std::map<std::string, Node>>();
-		auto edges = std::make_shared<std::vector<Edge>>();
-		std::vector<osg::Vec3> colors;
-		coordRange = getCoordRange(graph);
-		colors.resize(graph.getNodes().size());
-		for (auto& col : colors) {
-			col.x() = 1.f * rand() / RAND_MAX;
-			col.y() = 1.f * rand() / RAND_MAX;
-			col.z() = 1.f * rand() / RAND_MAX;
-		}
-		size_t i = 0;
-		for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
-			VIS4Earth::GraphRenderer::Node node;
-			// 初始化pos
-			node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-			node.color = colors[i];
-			node.id = itr->first;
-			node.level = itr->second.level;
+        auto graph = VIS4Earth::GraphLoader::LoadFromNoGeoFile(nodesFile, edgesFile);
+        auto nodes = std::make_shared<std::map<std::string, Node>>();
+        auto edges = std::make_shared<std::vector<Edge>>();
+        std::vector<osg::Vec3> colors;
+        coordRange = getCoordRange(graph);
+        colors.resize(graph.getNodes().size());
+        for (auto &col : colors) {
+            col.x() = 1.f * rand() / RAND_MAX;
+            col.y() = 1.f * rand() / RAND_MAX;
+            col.z() = 1.f * rand() / RAND_MAX;
+        }
+        size_t i = 0;
+        for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
+            VIS4Earth::GraphRenderer::Node node;
+            // 初始化pos
+            node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+            node.color = colors[i];
+            node.id = itr->first;
+            node.level = itr->second.level;
 
-			nodes->emplace(std::make_pair(itr->first, node));
-			++i;
-		}
-		// pos有问题
-		for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
-			edges->emplace_back();
+            nodes->emplace(std::make_pair(itr->first, node));
+            ++i;
+        }
+        // pos有问题
+        for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
+            edges->emplace_back();
 
-			auto& edge = edges->back();
-			edge.from = itr->sourceLabel;
-			edge.to = itr->targetLabel;
-			edge.weight = itr->weight;
-			if (itr->subdivs.empty()) {
-				edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-				edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-			}
-			else {
-				edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-				for (auto& subdiv : itr->subdivs)
-					edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
-				edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-			}
-		}
-		myGraph = graph;
-		// 添加图到渲染器中
-		addGraph("LoadedGraph", nodes, edges);
-		auto graphParam = getGraph("LoadedGraph");
-		graphParam->graphTypeIndex = graphTypeIndex;
-		graphParam->generateHierarchicalGraphs(nodes, edges);
-		graphParam->setLevelGraph(0);
-		graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
-		graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
-		graphParam->setHeightFromCenterRange(
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-		graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setRestriction(myRestriction);
-		graphParam->restrictionOFF = !restrictionOn;
-		graphParam->update();
-		//showGraph();
-		// 初始化 UI
-		QLabel* coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
-		QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
-			.arg(coordRange.minX)
-			.arg(coordRange.maxX)
-			.arg(coordRange.maxY)
-			.arg(coordRange.minY);
-		coordRangeLabel->setText(text);
+            auto &edge = edges->back();
+            edge.from = itr->sourceLabel;
+            edge.to = itr->targetLabel;
+            edge.weight = itr->weight;
+            if (itr->subdivs.empty()) {
+                edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            } else {
+                edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+                for (auto &subdiv : itr->subdivs)
+                    edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            }
+        }
+        myGraph = graph;
+        // 添加图到渲染器中
+        addGraph("LoadedGraph", nodes, edges);
+        auto graphParam = getGraph("LoadedGraph");
+        graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->setLevelGraph(0);
+        graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
+        graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
+        graphParam->setHeightFromCenterRange(
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setRestriction(myRestriction);
+        graphParam->restrictionOFF = !restrictionOn;
+        graphParam->update();
+        // showGraph();
+        //  初始化 UI
+        QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
+        QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
+                           .arg(coordRange.minX)
+                           .arg(coordRange.maxX)
+                           .arg(coordRange.maxY)
+                           .arg(coordRange.minY);
+        coordRangeLabel->setText(text);
 
-	}
-	catch (const std::exception& e) {
-		QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
-	}
+    } catch (const std::exception &e) {
+        QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
+    }
 }
 
 void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
-	if (graphTypeIndex == 0) // 假设 index 0 是 "加载固定位置的图"
-	{
-		loadGeoTypeGraph();         // 调用加载函数1
-	}
-	else if (graphTypeIndex == 1) // 假设 index 1 是 "无固定位置的图"
-	{
-		loadNoGeoTypeGraph(); // 调用加载函数2
-	}
+    if (graphTypeIndex == 0) // 假设 index 0 是 "加载固定位置的图"
+    {
+        loadGeoTypeGraph();         // 调用加载函数1
+    } else if (graphTypeIndex == 1) // 假设 index 1 是 "无固定位置的图"
+    {
+        loadNoGeoTypeGraph(); // 调用加载函数2
+    }
 }
 
 void VIS4Earth::GraphRenderer::applyParams() {}
 
 void VIS4Earth::GraphRenderer::showGraph() {
-	auto nodeLayouter = VIS4Earth::NodeLayouter();
-	nodeLayouter.setGraph(myGraph);
-	nodeLayouter.setParameter(myLayoutParam);
-	nodeLayouter.layout(myLayoutParam.Iteration);
-	myGraph = nodeLayouter.getLayoutedGraph();
-	auto existGraph = getGraph("LoadedGraph");
-	if (!existGraph) {
-		auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-		lonRng[0] += lonOffs;
-		lonRng[1] += lonOffs;
-	}
-	auto nodes = std::make_shared<std::map<std::string, Node>>();
-	auto edges = std::make_shared<std::vector<Edge>>();
-	std::vector<osg::Vec3> colors;
-	colors.resize(myGraph.getNodes().size());
-	for (auto& col : colors) {
-		col.x() = 1.f * rand() / RAND_MAX;
-		col.y() = 1.f * rand() / RAND_MAX;
-		col.z() = 1.f * rand() / RAND_MAX;
-	}
-	size_t i = 0;
-	for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
-		VIS4Earth::GraphRenderer::Node node;
-		node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-		node.color = colors[i];
+    auto nodeLayouter = VIS4Earth::NodeLayouter();
+    nodeLayouter.setGraph(myGraph);
+    nodeLayouter.setParameter(myLayoutParam);
+    nodeLayouter.layout(myLayoutParam.Iteration);
+    myGraph = nodeLayouter.getLayoutedGraph();
+    auto existGraph = getGraph("LoadedGraph");
+    if (!existGraph) {
+        auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+        lonRng[0] += lonOffs;
+        lonRng[1] += lonOffs;
+    }
+    auto nodes = std::make_shared<std::map<std::string, Node>>();
+    auto edges = std::make_shared<std::vector<Edge>>();
+    std::vector<osg::Vec3> colors;
+    colors.resize(myGraph.getNodes().size());
+    for (auto &col : colors) {
+        col.x() = 1.f * rand() / RAND_MAX;
+        col.y() = 1.f * rand() / RAND_MAX;
+        col.z() = 1.f * rand() / RAND_MAX;
+    }
+    size_t i = 0;
+    for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
+        VIS4Earth::GraphRenderer::Node node;
+        node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+        node.color = colors[i];
 
-		nodes->emplace(std::make_pair(itr->first, node));
-		++i;
-	}
+        nodes->emplace(std::make_pair(itr->first, node));
+        ++i;
+    }
 
-	for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
-		edges->emplace_back();
+    for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
+        edges->emplace_back();
 
-		auto& edge = edges->back();
-		edge.from = itr->sourceLabel;
-		edge.to = itr->targetLabel;
-		if (itr->subdivs.empty()) {
-			edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-			edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-		}
-		else {
-			edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-			for (auto& subdiv : itr->subdivs)
-				edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
-			edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-		}
-	}
-	// 添加图到渲染器中
-	addGraph("LoadedGraph", nodes, edges);
-	// 更新图渲染
-	auto graphParam = getGraph("LoadedGraph");
-	if (graphParam) {
-		graphParam->graphTypeIndex = graphTypeIndex;
-		graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
-		graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
-		graphParam->setHeightFromCenterRange(
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-		graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setRestriction(myRestriction);
-		graphParam->restrictionOFF = !restrictionOn;
-		graphParam->generateHierarchicalGraphs(nodes, edges);
-		graphParam->setLevelGraph(0);
-		graphParam->update();
-	}
+        auto &edge = edges->back();
+        edge.from = itr->sourceLabel;
+        edge.to = itr->targetLabel;
+        if (itr->subdivs.empty()) {
+            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+        } else {
+            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+            for (auto &subdiv : itr->subdivs)
+                edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+        }
+    }
+    // 添加图到渲染器中
+    addGraph("LoadedGraph", nodes, edges);
+    // 更新图渲染
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
+        graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
+        graphParam->setHeightFromCenterRange(
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setRestriction(myRestriction);
+        graphParam->restrictionOFF = !restrictionOn;
+        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->setLevelGraph(0);
+        graphParam->update();
+    }
 }
 
 void VIS4Earth::GraphRenderer::showBundling() {
-	auto edgeBundling = VIS4Earth::EdgeBundling();
-	edgeBundling.SetGraph(myGraph);
-	glm::vec3 gravitationCenter(40.0, 0.0, 0.0);
-	mybundlingParam.K = 0.1, mybundlingParam.cycles = 5, mybundlingParam.I = 90,
-		mybundlingParam.compatibilityThreshold = 0.6, mybundlingParam.smoothWidth = 3,
-		mybundlingParam.edgeWeightThreshold = -1.0, mybundlingParam.edgePercentageThreshold = -1.0,
-		mybundlingParam.S = 0.4, mybundlingParam.edgeDistance = 1e-4,
-		mybundlingParam.gravitationCenter = gravitationCenter,
-		mybundlingParam.gravitationExponent = 1.0;
+    auto edgeBundling = VIS4Earth::EdgeBundling();
+    edgeBundling.SetGraph(myGraph);
+    glm::vec3 gravitationCenter(40.0, 0.0, 0.0);
+    mybundlingParam.K = 0.1, mybundlingParam.cycles = 5, mybundlingParam.I = 90,
+    mybundlingParam.compatibilityThreshold = 0.6, mybundlingParam.smoothWidth = 3,
+    mybundlingParam.edgeWeightThreshold = -1.0, mybundlingParam.edgePercentageThreshold = -1.0,
+    mybundlingParam.S = 0.4, mybundlingParam.edgeDistance = 1e-4,
+    mybundlingParam.gravitationCenter = gravitationCenter,
+    mybundlingParam.gravitationExponent = 1.0;
 
-	edgeBundling.SetParameter(mybundlingParam);
-	edgeBundling.EdgeBundle();
-	myGraph = edgeBundling.GetLayoutedGraph();
-	auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-	lonRng[0] += lonOffs;
-	lonRng[1] += lonOffs;
-	auto nodes = std::make_shared<std::map<std::string, Node>>();
-	auto edges = std::make_shared<std::vector<Edge>>();
-	std::vector<osg::Vec3> colors;
-	colors.resize(myGraph.getNodes().size());
-	for (auto& col : colors) {
-		col.x() = 1.f * rand() / RAND_MAX;
-		col.y() = 1.f * rand() / RAND_MAX;
-		col.z() = 1.f * rand() / RAND_MAX;
-	}
-	size_t i = 0;
-	for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
-		VIS4Earth::GraphRenderer::Node node;
-		node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-		node.color = colors[i];
+    edgeBundling.SetParameter(mybundlingParam);
+    edgeBundling.EdgeBundle();
+    myGraph = edgeBundling.GetLayoutedGraph();
+    auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+    lonRng[0] += lonOffs;
+    lonRng[1] += lonOffs;
+    auto nodes = std::make_shared<std::map<std::string, Node>>();
+    auto edges = std::make_shared<std::vector<Edge>>();
+    std::vector<osg::Vec3> colors;
+    colors.resize(myGraph.getNodes().size());
+    for (auto &col : colors) {
+        col.x() = 1.f * rand() / RAND_MAX;
+        col.y() = 1.f * rand() / RAND_MAX;
+        col.z() = 1.f * rand() / RAND_MAX;
+    }
+    size_t i = 0;
+    for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
+        VIS4Earth::GraphRenderer::Node node;
+        node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+        node.color = colors[i];
 
-		nodes->emplace(std::make_pair(itr->first, node));
-		++i;
-	}
+        nodes->emplace(std::make_pair(itr->first, node));
+        ++i;
+    }
 
-	for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
-		edges->emplace_back();
+    for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
+        edges->emplace_back();
 
-		auto& edge = edges->back();
-		edge.from = itr->sourceLabel;
-		edge.to = itr->targetLabel;
-		if (itr->subdivs.empty()) {
-			edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-			edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-		}
-		else {
-			edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-			for (auto& subdiv : itr->subdivs)
-				edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
-			edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-		}
-	}
+        auto &edge = edges->back();
+        edge.from = itr->sourceLabel;
+        edge.to = itr->targetLabel;
+        if (itr->subdivs.empty()) {
+            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+        } else {
+            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+            for (auto &subdiv : itr->subdivs)
+                edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+        }
+    }
 
-	// 添加图到渲染器中
-	addGraph("LoadedGraph", nodes, edges);
-	// 更新图渲染
-	auto graphParam = getGraph("LoadedGraph");
-	if (graphParam) {
-		graphParam->graphTypeIndex = graphTypeIndex;
-		graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
-		graphParam->setLatitudeRange(latRng[0], latRng[1]);
-		graphParam->setHeightFromCenterRange(
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-		graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setRestriction(myRestriction);
-		graphParam->restrictionOFF = !restrictionOn;
-		graphParam->update();
-	}
+    // 添加图到渲染器中
+    addGraph("LoadedGraph", nodes, edges);
+    // 更新图渲染
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
+        graphParam->setLatitudeRange(latRng[0], latRng[1]);
+        graphParam->setHeightFromCenterRange(
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setRestriction(myRestriction);
+        graphParam->restrictionOFF = !restrictionOn;
+        graphParam->update();
+    }
 }
 
 // 力导布局的参数
@@ -565,75 +558,74 @@ void VIS4Earth::GraphRenderer::setIteration(int value) { myLayoutParam.Iteration
 
 // 区域控制的参数
 void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
-	restrictionOn = true;
-	myRestriction.leftBound = 40.0;
-	myRestriction.rightBound = 60.0;
-	myRestriction.upperBound = 20.0;
-	myRestriction.bottomBound = -20.0;
-	auto nodeLayouter = VIS4Earth::NodeLayouter();
-	nodeLayouter.setGraph(myGraph);
-	nodeLayouter.setParameter(myLayoutParam);
-	nodeLayouter.restrictedLayout(myRestriction, myLayoutParam.Iteration);
-	myGraph = nodeLayouter.getLayoutedGraph();
-	auto existGraph = getGraph("LoadedGraph");
-	if (!existGraph) {
-		auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-		lonRng[0] += lonOffs;
-		lonRng[1] += lonOffs;
-	}
-	auto nodes = std::make_shared<std::map<std::string, Node>>();
-	auto edges = std::make_shared<std::vector<Edge>>();
-	std::vector<osg::Vec3> colors;
-	colors.resize(myGraph.getNodes().size());
-	for (auto& col : colors) {
-		col.x() = 1.f * rand() / RAND_MAX;
-		col.y() = 1.f * rand() / RAND_MAX;
-		col.z() = 1.f * rand() / RAND_MAX;
-	}
-	size_t i = 0;
-	for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
-		VIS4Earth::GraphRenderer::Node node;
-		node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-		node.color = colors[i];
+    restrictionOn = true;
+    myRestriction.leftBound = 40.0;
+    myRestriction.rightBound = 60.0;
+    myRestriction.upperBound = 20.0;
+    myRestriction.bottomBound = -20.0;
+    auto nodeLayouter = VIS4Earth::NodeLayouter();
+    nodeLayouter.setGraph(myGraph);
+    nodeLayouter.setParameter(myLayoutParam);
+    nodeLayouter.restrictedLayout(myRestriction, myLayoutParam.Iteration);
+    myGraph = nodeLayouter.getLayoutedGraph();
+    auto existGraph = getGraph("LoadedGraph");
+    if (!existGraph) {
+        auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+        lonRng[0] += lonOffs;
+        lonRng[1] += lonOffs;
+    }
+    auto nodes = std::make_shared<std::map<std::string, Node>>();
+    auto edges = std::make_shared<std::vector<Edge>>();
+    std::vector<osg::Vec3> colors;
+    colors.resize(myGraph.getNodes().size());
+    for (auto &col : colors) {
+        col.x() = 1.f * rand() / RAND_MAX;
+        col.y() = 1.f * rand() / RAND_MAX;
+        col.z() = 1.f * rand() / RAND_MAX;
+    }
+    size_t i = 0;
+    for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
+        VIS4Earth::GraphRenderer::Node node;
+        node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+        node.color = colors[i];
 
-		nodes->emplace(std::make_pair(itr->first, node));
-		++i;
-	}
+        nodes->emplace(std::make_pair(itr->first, node));
+        ++i;
+    }
 
-	for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
-		edges->emplace_back();
+    for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
+        edges->emplace_back();
 
-		auto& edge = edges->back();
-		edge.from = itr->sourceLabel;
-		edge.to = itr->targetLabel;
-		if (itr->subdivs.empty()) {
-			edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-			edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-		}
-		else {
-			edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-			for (auto& subdiv : itr->subdivs)
-				edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
-			edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
-		}
-	}
-	// 添加图到渲染器中
-	addGraph("LoadedGraph", nodes, edges);
-	// 更新图渲染
-	auto graphParam = getGraph("LoadedGraph");
-	if (graphParam) {
-		graphParam->graphTypeIndex = graphTypeIndex;
-		graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
-		graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
-		graphParam->setHeightFromCenterRange(
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-		graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->setRestriction(myRestriction);
-		graphParam->restrictionOFF = !restrictionOn;
-		graphParam->update();
-	}
+        auto &edge = edges->back();
+        edge.from = itr->sourceLabel;
+        edge.to = itr->targetLabel;
+        if (itr->subdivs.empty()) {
+            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+        } else {
+            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
+            for (auto &subdiv : itr->subdivs)
+                edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+        }
+    }
+    // 添加图到渲染器中
+    addGraph("LoadedGraph", nodes, edges);
+    // 更新图渲染
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
+        graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
+        graphParam->setHeightFromCenterRange(
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->setRestriction(myRestriction);
+        graphParam->restrictionOFF = !restrictionOn;
+        graphParam->update();
+    }
 }
 
 void VIS4Earth::GraphRenderer::setMinX(double value) { myRestriction.leftBound = value; }
@@ -645,1257 +637,1236 @@ void VIS4Earth::GraphRenderer::setMinY(double value) { myRestriction.bottomBound
 void VIS4Earth::GraphRenderer::setMaxY(double value) { myRestriction.upperBound = value; }
 
 void VIS4Earth::GraphRenderer::onArrowFlowButtonClicked() {
-	auto graphParam = getGraph("LoadedGraph");
-	graphParam->startArrowAnimation();
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startArrowAnimation();
 }
 
 void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {
-	auto graphParam = getGraph("LoadedGraph");
-	graphParam->startHighlightAnimation();
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startHighlightAnimation();
 }
 
 void VIS4Earth::GraphRenderer::onTextureFlowButtonClicked() {
-	auto graphParam = getGraph("LoadedGraph");
-	graphParam->startTextureAnimation();
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startTextureAnimation();
 }
 
 void VIS4Earth::GraphRenderer::onStarFlowButtonClicked() {
-	auto graphParam = getGraph("LoadedGraph");
-	graphParam->startStarAnimation();
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->startStarAnimation();
 }
 
 // 边绑定的参数
 void VIS4Earth::GraphRenderer::onGlobalSpringConstantChanged(double value) {
-	// 处理全局弹簧常数变化的逻辑
-	mybundlingParam.K = value;
+    // 处理全局弹簧常数变化的逻辑
+    mybundlingParam.K = value;
 }
 
 void VIS4Earth::GraphRenderer::onNumberOfIterationsChanged(int value) {
-	// 处理迭代次数变化的逻辑
-	mybundlingParam.I = value;
+    // 处理迭代次数变化的逻辑
+    mybundlingParam.I = value;
 }
 
 void VIS4Earth::GraphRenderer::onRemainingIterationsChanged(int value) {
-	// 处理剩余迭代次数变化的逻辑
-	mybundlingParam.iter = value;
+    // 处理剩余迭代次数变化的逻辑
+    mybundlingParam.iter = value;
 }
 
 void VIS4Earth::GraphRenderer::onCyclesLeftChanged(int value) {
-	// 处理剩余循环数变化的逻辑
-	mybundlingParam.cycles = value;
+    // 处理剩余循环数变化的逻辑
+    mybundlingParam.cycles = value;
 }
 
 void VIS4Earth::GraphRenderer::onCompatibilityThresholdChanged(double value) {
-	// 处理兼容性阈值变化的逻辑
-	mybundlingParam.compatibilityThreshold = value;
+    // 处理兼容性阈值变化的逻辑
+    mybundlingParam.compatibilityThreshold = value;
 }
 
 void VIS4Earth::GraphRenderer::onSmoothWidthChanged(double value) {
-	// 处理平滑宽度变化的逻辑
-	mybundlingParam.smoothWidth = value;
+    // 处理平滑宽度变化的逻辑
+    mybundlingParam.smoothWidth = value;
 }
 
 void VIS4Earth::GraphRenderer::onDisplacementChanged(double value) {
-	// 处理位移变化的逻辑
-	mybundlingParam.S = value;
+    // 处理位移变化的逻辑
+    mybundlingParam.S = value;
 }
 
 void VIS4Earth::GraphRenderer::onEdgeDistanceChanged(double value) {
-	// 处理边距离变化的逻辑
-	mybundlingParam.edgeDistance = value;
+    // 处理边距离变化的逻辑
+    mybundlingParam.edgeDistance = value;
 }
 
 void VIS4Earth::GraphRenderer::onGravitationIsOnToggled(bool checked) {
-	// 处理引力开关变化的逻辑
-	mybundlingParam.gravitationIsOn = checked;
+    // 处理引力开关变化的逻辑
+    mybundlingParam.gravitationIsOn = checked;
 }
 
 void VIS4Earth::GraphRenderer::onGravitationCenterXChanged(double value) {
-	// 处理引力中心X变化的逻辑
-	mybundlingParam.gravitationCenter.x = value;
+    // 处理引力中心X变化的逻辑
+    mybundlingParam.gravitationCenter.x = value;
 }
 
 void VIS4Earth::GraphRenderer::onGravitationCenterYChanged(double value) {
-	// 处理引力中心Y变化的逻辑
-	mybundlingParam.gravitationCenter.y = value;
+    // 处理引力中心Y变化的逻辑
+    mybundlingParam.gravitationCenter.y = value;
 }
 
 void VIS4Earth::GraphRenderer::onGravitationCenterZChanged(double value) {
-	// 处理引力中心Z变化的逻辑
-	mybundlingParam.gravitationCenter.z = value;
+    // 处理引力中心Z变化的逻辑
+    mybundlingParam.gravitationCenter.z = value;
 }
 
 void VIS4Earth::GraphRenderer::onGravitationExponentChanged(double value) {
-	// 处理引力指数变化的逻辑
-	mybundlingParam.gravitationExponent = value;
+    // 处理引力指数变化的逻辑
+    mybundlingParam.gravitationExponent = value;
 }
 
 void VIS4Earth::GraphRenderer::onEdgeWeightThresholdChanged(double value) {
-	// 处理边权重阈值变化的逻辑
-	mybundlingParam.edgeWeightThreshold = value;
+    // 处理边权重阈值变化的逻辑
+    mybundlingParam.edgeWeightThreshold = value;
 }
 
 void VIS4Earth::GraphRenderer::onEdgePercentageThresholdChanged(double value) {
-	// 处理边百分比阈值变化的逻辑
-	mybundlingParam.edgePercentageThreshold = value;
+    // 处理边百分比阈值变化的逻辑
+    mybundlingParam.edgePercentageThreshold = value;
 }
 
 void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value) {
-	// 处理边百分比阈值变化的逻辑
-	size = value * 0.01;
-	// Update the label text
-	ui->sizeLabel->setText(QString("分辨率: %1%").arg(value));
-	// 更新图渲染
-	auto graphParam = getGraph("LoadedGraph");
-	if (graphParam) {
-		graphParam->setLongitudeRange(
-			(lonRng[0] + lonRng[1]) / 2 - (lonRng[1] - lonRng[0]) * size / 2,
-			(lonRng[0] + lonRng[1]) / 2 + (lonRng[1] - lonRng[0]) * size / 2);
-		graphParam->setLatitudeRange(
-			(latRng[0] + latRng[1]) / 2 - (latRng[1] - latRng[0]) * size / 2,
-			(latRng[0] + latRng[1]) / 2 + (latRng[1] - latRng[0]) * size / 2);
-		graphParam->setHeightFromCenterRange(
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-		graphParam->setNodeGeometrySize(size * .02f *
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->update();
-	}
-	// 初始化 UI
-	QLabel* coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
-	QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
-		.arg(coordRange.minX)
-		.arg(coordRange.maxX)
-		.arg(coordRange.maxY)
-		.arg(coordRange.minY);
-	coordRangeLabel->setText(text);
+    // 处理边百分比阈值变化的逻辑
+    size = value * 0.01;
+    // Update the label text
+    ui->sizeLabel->setText(QString("分辨率: %1%").arg(value));
+    // 更新图渲染
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->setLongitudeRange(
+            (lonRng[0] + lonRng[1]) / 2 - (lonRng[1] - lonRng[0]) * size / 2,
+            (lonRng[0] + lonRng[1]) / 2 + (lonRng[1] - lonRng[0]) * size / 2);
+        graphParam->setLatitudeRange(
+            (latRng[0] + latRng[1]) / 2 - (latRng[1] - latRng[0]) * size / 2,
+            (latRng[0] + latRng[1]) / 2 + (latRng[1] - latRng[0]) * size / 2);
+        graphParam->setHeightFromCenterRange(
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+        graphParam->setNodeGeometrySize(size * .02f *
+                                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->update();
+    }
+    // 初始化 UI
+    QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
+    QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
+                       .arg(coordRange.minX)
+                       .arg(coordRange.maxX)
+                       .arg(coordRange.maxY)
+                       .arg(coordRange.minY);
+    coordRangeLabel->setText(text);
 }
 
 void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
-	// Update the label text
-	ui->fontSizeLabel->setText(QString("字体大小: %1").arg(value));
-	auto graphParam = getGraph("LoadedGraph");
-	if (graphParam) {
-		graphParam->setTextGeometrySize(value / 12.0 * .02f *
-			static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-		graphParam->update();
-	}
+    // Update the label text
+    ui->fontSizeLabel->setText(QString("字体大小: %1").arg(value));
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        graphParam->setTextGeometrySize(value / 12.0 * .02f *
+                                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+        graphParam->update();
+    }
 }
 void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
-	// 将滑块的值转换为百分比
-	int percentage = (value * 10);
+    // 将滑块的值转换为百分比
+    int percentage = (value * 10);
 
-	// 更新resolutionLabel的文本
-	ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
-	auto graphParam = getGraph("LoadedGraph");
-	graphParam->graphTypeIndex = graphTypeIndex;
-	graphParam->setLevelGraph(10 - value);
-	graphParam->update();
+    // 更新resolutionLabel的文本
+    ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
+    auto graphParam = getGraph("LoadedGraph");
+    graphParam->graphTypeIndex = graphTypeIndex;
+    graphParam->setLevelGraph(10 - value);
+    graphParam->update();
 }
 // 检查两个矩形是否重叠，并返回重叠的距离
-osg::Vec3 calculateOverlapDistance(const osg::BoundingBox& bb1, const osg::BoundingBox& bb2) {
-	float overlapY = std::min(bb1.yMax(), bb2.yMax()) - std::max(bb1.yMin(), bb2.yMin());
-	float overlapZ = std::min(bb1.zMax(), bb2.zMax()) - std::max(bb1.zMin(), bb2.zMin());
-	return osg::Vec3(0.0f, overlapY, overlapZ);
+osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
+    float overlapY = std::min(bb1.yMax(), bb2.yMax()) - std::max(bb1.yMin(), bb2.yMin());
+    float overlapZ = std::min(bb1.zMax(), bb2.zMax()) - std::max(bb1.zMin(), bb2.zMin());
+    return osg::Vec3(0.0f, overlapY, overlapZ);
 }
 
 // 检查两个矩形是否重叠
-bool checkOverlap(const osg::BoundingBox& bb1, const osg::BoundingBox& bb2) {
-	return !(bb1.zMax() < bb2.zMin() || bb1.zMin() > bb2.zMax() || bb1.yMax() < bb2.yMin() ||
-		bb1.yMin() > bb2.yMax());
+bool checkOverlap(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
+    return !(bb1.zMax() < bb2.zMin() || bb1.zMin() > bb2.zMax() || bb1.yMax() < bb2.yMin() ||
+             bb1.yMin() > bb2.yMax());
 }
 
 // 调整文字位置以避免重叠
-void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>>& texts, float nodeGeomSize) {
-	for (size_t i = 0; i < texts.size(); ++i) {
-		osg::BoundingBox bb1 = texts[i]->getBoundingBox();
-		for (size_t j = 0; j < i; ++j) {
-			osg::BoundingBox bb2 = texts[j]->getBoundingBox();
-			if (checkOverlap(bb1, bb2)) {
-				osg::Vec3 overlap = calculateOverlapDistance(bb1, bb2);
-				osg::Vec3 pos1 = texts[i]->getPosition();
-				osg::Vec3 pos2 = texts[j]->getPosition();
+void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize) {
+    for (size_t i = 0; i < texts.size(); ++i) {
+        osg::BoundingBox bb1 = texts[i]->getBoundingBox();
+        for (size_t j = 0; j < i; ++j) {
+            osg::BoundingBox bb2 = texts[j]->getBoundingBox();
+            if (checkOverlap(bb1, bb2)) {
+                osg::Vec3 overlap = calculateOverlapDistance(bb1, bb2);
+                osg::Vec3 pos1 = texts[i]->getPosition();
+                osg::Vec3 pos2 = texts[j]->getPosition();
 
-				// y 代表上下，z 代表左右
-				if (pos1.y() < pos2.y()) {
-					pos1.y() -= overlap.y() / 2;
-					pos2.y() += overlap.y() / 2;
-				}
-				else {
-					pos1.y() += overlap.y() / 2;
-					pos2.y() -= overlap.y() / 2;
-				}
+                // y 代表上下，z 代表左右
+                if (pos1.y() < pos2.y()) {
+                    pos1.y() -= overlap.y() / 2;
+                    pos2.y() += overlap.y() / 2;
+                } else {
+                    pos1.y() += overlap.y() / 2;
+                    pos2.y() -= overlap.y() / 2;
+                }
 
-				if (pos1.z() < pos2.z()) {
-					pos1.z() -= overlap.z() / 2;
-					pos2.z() += overlap.z() / 2;
-				}
-				else {
-					pos1.z() += overlap.z() / 2;
-					pos2.z() -= overlap.z() / 2;
-				}
+                if (pos1.z() < pos2.z()) {
+                    pos1.z() -= overlap.z() / 2;
+                    pos2.z() += overlap.z() / 2;
+                } else {
+                    pos1.z() += overlap.z() / 2;
+                    pos2.z() -= overlap.z() / 2;
+                }
 
-				texts[i]->setPosition(pos1);
-				texts[j]->setPosition(pos2);
+                texts[i]->setPosition(pos1);
+                texts[j]->setPosition(pos2);
 
-				bb1 = texts[i]->getBoundingBox();
-				bb2 = texts[j]->getBoundingBox();
-			}
-		}
-	}
+                bb1 = texts[i]->getBoundingBox();
+                bb2 = texts[j]->getBoundingBox();
+            }
+        }
+    }
 }
 class TimeController : public osg::Referenced {
-public:
-	TimeController() : startTime(osg::Timer::instance()->tick()) {}
+  public:
+    TimeController() : startTime(osg::Timer::instance()->tick()) {}
 
-	float getTime() {
-		return osg::Timer::instance()->delta_s(startTime, osg::Timer::instance()->tick());
-	}
+    float getTime() {
+        return osg::Timer::instance()->delta_s(startTime, osg::Timer::instance()->tick());
+    }
 
-private:
-	osg::Timer_t startTime;
+  private:
+    osg::Timer_t startTime;
 };
 
-void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Vec3& start,
-	const osg::Vec3& end,
-	const osg::Vec4& color) {
+void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Vec3 &start,
+                                                                   const osg::Vec3 &end,
+                                                                   const osg::Vec4 &color) {
 
-	auto vec3ToSphere = [&](const osg::Vec3& v3) -> osg::Vec3 {
-		// v3.x() 是纬度，v3.y() 是经度
-		float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-		float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
 
-		float h = 6371000.0f / 2 + v3.z(); // 固定为地球半径，单位为米
+        float h = 6371000.0f / 2 + v3.z(); // 固定为地球半径，单位为米
 
-		osg::Vec3 ret;
-		ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
 
-		h = h * cosf(lat); // 根据纬度调整水平投影的半径
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
 
-		ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-		ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
 
-		return ret;
-		};
+        return ret;
+    };
 
-	auto sphereToVec3 = [&](const osg::Vec3& sphere) -> osg::Vec3 {
-		// 固定的地球半径
-		float earthRadius = 6371000.0f / 2;
+    auto sphereToVec3 = [&](const osg::Vec3 &sphere) -> osg::Vec3 {
+        // 固定的地球半径
+        float earthRadius = 6371000.0f / 2;
 
-		// 计算出地心到球面点的实际半径 h
-		float h =
-			sqrtf(sphere.x() * sphere.x() + sphere.y() * sphere.y() + sphere.z() * sphere.z());
+        // 计算出地心到球面点的实际半径 h
+        float h =
+            sqrtf(sphere.x() * sphere.x() + sphere.y() * sphere.y() + sphere.z() * sphere.z());
 
-		// 根据高度计算地球表面的距离
-		float altitude = h - earthRadius;
+        // 根据高度计算地球表面的距离
+        float altitude = h - earthRadius;
 
-		// 计算纬度 lat = asin(z / h)
-		float lat = asinf(sphere.z() / h);
+        // 计算纬度 lat = asin(z / h)
+        float lat = asinf(sphere.z() / h);
 
-		// 计算经度 lon = atan2(y, x)
-		float lon = atan2f(sphere.y(), sphere.x());
+        // 计算经度 lon = atan2(y, x)
+        float lon = atan2f(sphere.y(), sphere.x());
 
-		// 将纬度和经度从弧度转换为角度
-		lat = osg::RadiansToDegrees(lat);
-		lon = osg::RadiansToDegrees(lon);
+        // 将纬度和经度从弧度转换为角度
+        lat = osg::RadiansToDegrees(lat);
+        lon = osg::RadiansToDegrees(lon);
 
-		// 返回值为纬度、经度和高度
-		return osg::Vec3(lat, lon, altitude); // z 分量为高度
-		};
+        // 返回值为纬度、经度和高度
+        return osg::Vec3(lat, lon, altitude); // z 分量为高度
+    };
 
-	// 计算箭头方向和长度
-	osg::Vec3 direction = end - start;
-	float length = direction.length();
-	direction.normalize();
+    // 计算箭头方向和长度
+    osg::Vec3 direction = end - start;
+    float length = direction.length();
+    direction.normalize();
 
-	// 计算插值点
-	const int numSubdivisions = 5; // 细分数量
-	osg::Vec3Array* lineVertices = new osg::Vec3Array;
-	osg::Vec4Array* lineColors = new osg::Vec4Array;
+    // 计算插值点
+    const int numSubdivisions = 5; // 细分数量
+    osg::Vec3Array *lineVertices = new osg::Vec3Array;
+    osg::Vec4Array *lineColors = new osg::Vec4Array;
 
-	std::cout << "length: " << length << std::endl;
-	osg::Vec3 sstart = vec3ToSphere(start);
-	osg::Vec3 send = vec3ToSphere(end);
-	osg::Vec3 newStart = sstart - (send - sstart) * 0.9;
-	newStart = sphereToVec3(newStart);
-	// 插值和渐变颜色处理
-	for (int i = 0; i <= numSubdivisions; ++i) {
-		float t = static_cast<float>(i) / numSubdivisions;
-		osg::Vec3 interpolatedPos = newStart * (1.0f - t) + end * t;
+    std::cout << "length: " << length << std::endl;
+    osg::Vec3 sstart = vec3ToSphere(start);
+    osg::Vec3 send = vec3ToSphere(end);
+    osg::Vec3 newStart = sstart - (send - sstart) * 0.9;
+    newStart = sphereToVec3(newStart);
+    // 插值和渐变颜色处理
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        float t = static_cast<float>(i) / numSubdivisions;
+        osg::Vec3 interpolatedPos = newStart * (1.0f - t) + end * t;
 
-		// 计算一个缩放因子，用来调整z值
-		float scaleFactor = 1.0f - (2.0f * t - 1.0f) * (2.0f * t - 1.0f); // (1 - (2t - 1)^2)
-		float zOffset = 600 * std::pow(length, 2); // 你可以调整这个值来控制下沉的幅度
+        // 计算一个缩放因子，用来调整z值
+        float scaleFactor = 1.0f - (2.0f * t - 1.0f) * (2.0f * t - 1.0f); // (1 - (2t - 1)^2)
+        float zOffset = 600 * std::pow(length, 2); // 你可以调整这个值来控制下沉的幅度
 
-		// 修改 z 值
-		interpolatedPos.z() += scaleFactor * zOffset;
-		osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+        // 修改 z 值
+        interpolatedPos.z() += scaleFactor * zOffset;
+        osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
 
-		// 添加顶点和颜色
-		lineVertices->push_back(spherePos);
-	}
+        // 添加顶点和颜色
+        lineVertices->push_back(spherePos);
+    }
 
-	// 创建箭头的几何体
-	osg::Vec3 arrowHeadBase = end - direction * 1.2f; // 箭头头部基点
-	osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.8f;
-	osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.8f;
+    // 创建箭头的几何体
+    osg::Vec3 arrowHeadBase = end - direction * 1.2f; // 箭头头部基点
+    osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.8f;
+    osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.8f;
 
-	osg::Vec3Array* arrowVertices = new osg::Vec3Array;
-	osg::Vec4Array* arrowColors = new osg::Vec4Array;
+    osg::Vec3Array *arrowVertices = new osg::Vec3Array;
+    osg::Vec4Array *arrowColors = new osg::Vec4Array;
 
-	// 定义箭头三角形的三个顶点
-	arrowVertices->push_back(vec3ToSphere(end));                  // 箭头顶点
-	arrowVertices->push_back(vec3ToSphere(arrowHeadBase + left)); // 左边
-	arrowVertices->push_back(
-		vec3ToSphere(arrowHeadBase + right)); // 右边
-	// 初始化颜色数组，alpha值为0（完全透明）
-	for (int i = 0; i <= 2; ++i) {
-		osg::Vec4 initialColor = color;
-		initialColor.a() = 0.4f; // 开始时完全透明
-		arrowColors->push_back(initialColor);
-	}
-	// arrowColors->push_back(color);
-	// arrowColors->push_back(color);
-	// arrowColors->push_back(color);
+    // 定义箭头三角形的三个顶点
+    arrowVertices->push_back(vec3ToSphere(end));                   // 箭头顶点
+    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + left));  // 左边
+    arrowVertices->push_back(vec3ToSphere(arrowHeadBase + right)); // 右边
+    // 初始化颜色数组，alpha值为0（完全透明）
+    for (int i = 0; i <= 2; ++i) {
+        osg::Vec4 initialColor = color;
+        initialColor.a() = 0.4f; // 开始时完全透明
+        arrowColors->push_back(initialColor);
+    }
+    // arrowColors->push_back(color);
+    // arrowColors->push_back(color);
+    // arrowColors->push_back(color);
 
-	class ArrowAnimationCallback : public osg::NodeCallback {
-	public:
-		ArrowAnimationCallback(osg::Vec4Array* colors, osg::Geometry* geometry,
-			osg::AnimationPathCallback* animationCallback)
-			: _colors(colors), _geometry(geometry), _animationCallback(animationCallback) {}
+    class ArrowAnimationCallback : public osg::NodeCallback {
+      public:
+        ArrowAnimationCallback(osg::Vec4Array *colors, osg::Geometry *geometry,
+                               osg::AnimationPathCallback *animationCallback)
+            : _colors(colors), _geometry(geometry), _animationCallback(animationCallback) {}
 
-		virtual void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
-			// 调用AnimationPathCallback来执行原来的动画路径逻辑
-			if (_animationCallback) {
-				(*_animationCallback)(node, nv);
-			}
+        virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+            // 调用AnimationPathCallback来执行原来的动画路径逻辑
+            if (_animationCallback) {
+                (*_animationCallback)(node, nv);
+            }
 
-			// 获取当前的动画时间进度
-			double currentTime = _animationCallback->getAnimationTime();
-			double duration = _animationCallback->getAnimationPath()->getPeriod();
+            // 获取当前的动画时间进度
+            double currentTime = _animationCallback->getAnimationTime();
+            double duration = _animationCallback->getAnimationPath()->getPeriod();
 
-			// 计算进度百分比，确保 t 始终在 0.0 到 1.0 之间
-			float t = fmod(static_cast<float>(currentTime / duration), 1.0f);
+            // 计算进度百分比，确保 t 始终在 0.0 到 1.0 之间
+            float t = fmod(static_cast<float>(currentTime / duration), 1.0f);
 
-			// 根据动画进度更新颜色的 alpha 值
-			for (size_t i = 0; i < _colors->size(); ++i) {
-				if (t <= 0.1f) {
-					// 在 0.0 到 0.2 的范围内，alpha 值从 0 逐渐增加到 1
-					(*_colors)[i].a() = t / 0.1f;
-				}
-				else if (t >= 0.9f) {
-					// 在 0.8 到 1.0 的范围内，alpha 值从 1 逐渐减少到 0
-					(*_colors)[i].a() = (1.0f - t) / 0.1f;
-				}
-				else {
-					// 在 0.2 到 0.8 的范围内，alpha 值保持为 1
-					(*_colors)[i].a() = 1.0f;
-				}
-			}
+            // 根据动画进度更新颜色的 alpha 值
+            for (size_t i = 0; i < _colors->size(); ++i) {
+                if (t <= 0.1f) {
+                    // 在 0.0 到 0.2 的范围内，alpha 值从 0 逐渐增加到 1
+                    (*_colors)[i].a() = t / 0.1f;
+                } else if (t >= 0.9f) {
+                    // 在 0.8 到 1.0 的范围内，alpha 值从 1 逐渐减少到 0
+                    (*_colors)[i].a() = (1.0f - t) / 0.1f;
+                } else {
+                    // 在 0.2 到 0.8 的范围内，alpha 值保持为 1
+                    (*_colors)[i].a() = 1.0f;
+                }
+            }
 
-			// 标记颜色数组已修改
-			_colors->dirty();
-			_geometry->setColorArray(_colors, osg::Array::BIND_PER_VERTEX); // 重新绑定颜色数组
-			_geometry->dirtyDisplayList(); // 标记显示列表为脏
-			_geometry->dirtyBound();       // 标记边界为脏（可选）
+            // 标记颜色数组已修改
+            _colors->dirty();
+            _geometry->setColorArray(_colors, osg::Array::BIND_PER_VERTEX); // 重新绑定颜色数组
+            _geometry->dirtyDisplayList(); // 标记显示列表为脏
+            _geometry->dirtyBound();       // 标记边界为脏（可选）
 
-			// 调用父类的traverse方法
-			traverse(node, nv);
-		}
+            // 调用父类的traverse方法
+            traverse(node, nv);
+        }
 
-	private:
-		osg::ref_ptr<osg::Vec4Array> _colors;
-		osg::ref_ptr<osg::Geometry> _geometry;
-		osg::ref_ptr<osg::AnimationPathCallback> _animationCallback;
-	};
+      private:
+        osg::ref_ptr<osg::Vec4Array> _colors;
+        osg::ref_ptr<osg::Geometry> _geometry;
+        osg::ref_ptr<osg::AnimationPathCallback> _animationCallback;
+    };
 
-	auto arrowGeom = new osg::Geometry;
-	arrowGeom->setVertexArray(arrowVertices);
-	arrowGeom->setColorArray(arrowColors, osg::Array::BIND_PER_VERTEX);
-	arrowGeom->addPrimitiveSet(
-		new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES, 0, arrowVertices->size()));
+    auto arrowGeom = new osg::Geometry;
+    arrowGeom->setVertexArray(arrowVertices);
+    arrowGeom->setColorArray(arrowColors, osg::Array::BIND_PER_VERTEX);
+    arrowGeom->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::TRIANGLES, 0, arrowVertices->size()));
 
-	auto arrowGeode = new osg::Geode;
-	arrowGeode->addDrawable(arrowGeom);
+    auto arrowGeode = new osg::Geode;
+    arrowGeode->addDrawable(arrowGeom);
 
-	// 禁用光照
-	auto arrowStates = arrowGeom->getOrCreateStateSet();
-	arrowStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-	arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
-	arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+    // 禁用光照
+    auto arrowStates = arrowGeom->getOrCreateStateSet();
+    arrowStates->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+    arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
+    arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
 
-	// 创建动画路径
-	osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
-	animationPath->setLoopMode(osg::AnimationPath::LOOP);
+    // 创建动画路径
+    osg::ref_ptr<osg::AnimationPath> animationPath = new osg::AnimationPath();
+    animationPath->setLoopMode(osg::AnimationPath::LOOP);
 
-	// 插入关键帧
-	const double animationDuration = 5.0; // 动画持续时间
-	for (int i = 0; i <= numSubdivisions; ++i) {
-		double time = animationDuration * static_cast<double>(i) / numSubdivisions;
-		osg::AnimationPath::ControlPoint point(lineVertices->at(i));
-		animationPath->insert(time, point);
-	}
+    // 插入关键帧
+    const double animationDuration = 5.0; // 动画持续时间
+    for (int i = 0; i <= numSubdivisions; ++i) {
+        double time = animationDuration * static_cast<double>(i) / numSubdivisions;
+        osg::AnimationPath::ControlPoint point(lineVertices->at(i));
+        animationPath->insert(time, point);
+    }
 
-	// 创建动画回调
-	osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
-		new osg::AnimationPathCallback(animationPath);
+    // 创建动画回调
+    osg::ref_ptr<osg::AnimationPathCallback> animationCallback =
+        new osg::AnimationPathCallback(animationPath);
 
-	// 创建动画 transform
-	auto transform = new osg::MatrixTransform;
-	transform->addChild(arrowGeode);
-	// transform->setUpdateCallback(animationCallback);
+    // 创建动画 transform
+    auto transform = new osg::MatrixTransform;
+    transform->addChild(arrowGeode);
+    // transform->setUpdateCallback(animationCallback);
 
-	// 创建自定义回调来更新颜色
-	osg::ref_ptr<ArrowAnimationCallback> colorCallback =
-		new ArrowAnimationCallback(arrowColors, arrowGeom, animationCallback);
+    // 创建自定义回调来更新颜色
+    osg::ref_ptr<ArrowAnimationCallback> colorCallback =
+        new ArrowAnimationCallback(arrowColors, arrowGeom, animationCallback);
 
-	// 添加回调
-	transform->setUpdateCallback(colorCallback);
+    // 添加回调
+    transform->setUpdateCallback(colorCallback);
 
-	grp->addChild(transform);
+    grp->addChild(transform);
 }
 
 void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
-	arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
+    arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
 
-	if (arrowFlowEnabled) {
-		std::cout << "Arrow flow enabled" << std::endl;
-		// 开始箭头流动效果
-		for (auto& edge : *edges) {
-			if (!edge.visible)
-				continue;                                                 // 只处理可见边
-			osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
-			osg::Vec3 startPos = edge.subDivs.front();
-			osg::Vec3 endPos = edge.subDivs.back();
-			osg::Vec3 offset(0.0f, 0.0f, -220.6f); // 定义垂直方向的偏移量
-			createArrowAnimation((startPos), (endPos), color);
-		}
-	}
-	else {
-		std::cout << "Arrow flow disabled" << std::endl;
-		// 停止箭头流动效果
-		// 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
-		grp->removeChildren(0, grp->getNumChildren());
-		update(); // 重新绘制图形，移除箭头效果
-	}
+    if (arrowFlowEnabled) {
+        std::cout << "Arrow flow enabled" << std::endl;
+        // 开始箭头流动效果
+        for (auto &edge : *edges) {
+            if (!edge.visible)
+                continue;                                                 // 只处理可见边
+            osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
+            osg::Vec3 startPos = edge.subDivs.front();
+            osg::Vec3 endPos = edge.subDivs.back();
+            osg::Vec3 offset(0.0f, 0.0f, -220.6f); // 定义垂直方向的偏移量
+            createArrowAnimation((startPos), (endPos), color);
+        }
+    } else {
+        std::cout << "Arrow flow disabled" << std::endl;
+        // 停止箭头流动效果
+        // 可以实现清除箭头效果的逻辑，例如清除相应的节点或设置动画停止等
+        grp->removeChildren(0, grp->getNumChildren());
+        update(); // 重新绘制图形，移除箭头效果
+    }
 }
 
 class HighlightFlowCallback : public osg::NodeCallback {
-public:
-	HighlightFlowCallback(osg::Geometry* geom, float speed, TimeController* timeController,
-		const std::vector<std::pair<int, int>>& edgeRanges)
-		: _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
-		// 保存原始颜色数组
-		_originalColors =
-			new osg::Vec4Array(*dynamic_cast<osg::Vec4Array*>(geom->getColorArray()));
-	}
+  public:
+    HighlightFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
+                          const std::vector<std::pair<int, int>> &edgeRanges)
+        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
+        // 保存原始颜色数组
+        _originalColors =
+            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
+    }
 
-	virtual void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
-		float t = _timeController->getTime() * _speed;
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        float t = _timeController->getTime() * _speed;
 
-		osg::Vec4Array* colors = dynamic_cast<osg::Vec4Array*>(_geom->getColorArray());
-		osg::Vec3Array* vertices = dynamic_cast<osg::Vec3Array*>(_geom->getVertexArray());
-		if (colors && vertices) {
-			for (const auto& range : _edgeRanges) {
-				int startIdx = range.first;
-				int endIdx = range.second;
+        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
+        if (colors && vertices) {
+            for (const auto &range : _edgeRanges) {
+                int startIdx = range.first;
+                int endIdx = range.second;
 
-				// 计算高光的位置
-				float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx) + startIdx;
+                // 计算高光的位置
+                float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx) + startIdx;
 
-				for (int i = startIdx; i < endIdx; ++i) {
-					// 计算高光与当前顶点的距离
-					float dist = fabs(static_cast<float>(i) - highlightPos);
-					// 控制高光范围，使其更加集中
-					float intensity =
-						std::max(0.0f, 1.0f - dist / 2.0f); // 调整 2.0f 以改变高光的范围
+                for (int i = startIdx; i < endIdx; ++i) {
+                    // 计算高光与当前顶点的距离
+                    float dist = fabs(static_cast<float>(i) - highlightPos);
+                    // 控制高光范围，使其更加集中
+                    float intensity =
+                        std::max(0.0f, 1.0f - dist / 2.0f); // 调整 2.0f 以改变高光的范围
 
-					osg::Vec4& color = (*colors)[i];
-					color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
-						(*_originalColors)[i] * (1.0f - intensity);
-				}
-			}
+                    osg::Vec4 &color = (*colors)[i];
+                    color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
+                            (*_originalColors)[i] * (1.0f - intensity);
+                }
+            }
 
-			// 标记几何体更新
-			_geom->dirtyDisplayList();
-			_geom->dirtyBound();
-		}
+            // 标记几何体更新
+            _geom->dirtyDisplayList();
+            _geom->dirtyBound();
+        }
 
-		traverse(node, nv);
-	}
+        traverse(node, nv);
+    }
 
-private:
-	osg::ref_ptr<osg::Geometry> _geom;
-	osg::ref_ptr<osg::Vec4Array> _originalColors;
-	float _speed;
-	osg::ref_ptr<TimeController> _timeController;
-	std::vector<std::pair<int, int>> _edgeRanges;
+  private:
+    osg::ref_ptr<osg::Geometry> _geom;
+    osg::ref_ptr<osg::Vec4Array> _originalColors;
+    float _speed;
+    osg::ref_ptr<TimeController> _timeController;
+    std::vector<std::pair<int, int>> _edgeRanges;
 };
 
 void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
-	if (isAnimating) {
-		// 停止动画
-		if (lineGeode) {
-			lineGeode->setUpdateCallback(nullptr);
-		}
-		isAnimating = false;
-		update(); // 重新绘制图形
-	}
-	else {
-		// 开始动画
-		if (lineGeode && lineGeometry) {
-			// 禁用光照
-			auto arrowStates = lineGeometry->getOrCreateStateSet();
-			arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
-			arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-			// 获取顶点数组
-			osg::Vec3Array* vertices =
-				dynamic_cast<osg::Vec3Array*>(lineGeometry->getVertexArray());
-			if (!vertices) {
-				std::cout << "No vertices found!" << std::endl;
-				return;
-			}
+    if (isAnimating) {
+        // 停止动画
+        if (lineGeode) {
+            lineGeode->setUpdateCallback(nullptr);
+        }
+        isAnimating = false;
+        update(); // 重新绘制图形
+    } else {
+        // 开始动画
+        if (lineGeode && lineGeometry) {
+            // 禁用光照
+            auto arrowStates = lineGeometry->getOrCreateStateSet();
+            arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
+            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+            // 获取顶点数组
+            osg::Vec3Array *vertices =
+                dynamic_cast<osg::Vec3Array *>(lineGeometry->getVertexArray());
+            if (!vertices) {
+                std::cout << "No vertices found!" << std::endl;
+                return;
+            }
 
-			std::vector<std::pair<int, int>> edgeRanges;
-			int currentIndex = 0;
+            std::vector<std::pair<int, int>> edgeRanges;
+            int currentIndex = 0;
 
-			for (auto& edge : *edges) {
-				if (!edge.visible)
-					continue;
+            for (auto &edge : *edges) {
+                if (!edge.visible)
+                    continue;
 
-				int numVerts = (edge.subDivs.size()) * 10; // 每个细分段有6个顶点
-				edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
-				currentIndex += numVerts;
-			}
+                int numVerts = (edge.subDivs.size()) * 10; // 每个细分段有6个顶点
+                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
+                currentIndex += numVerts;
+            }
 
-			osg::ref_ptr<TimeController> newTimeController = new TimeController();
-			lineGeode->setUpdateCallback(new HighlightFlowCallback(
-				lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
-		}
-		isAnimating = true;
-	}
+            osg::ref_ptr<TimeController> newTimeController = new TimeController();
+            lineGeode->setUpdateCallback(new HighlightFlowCallback(
+                lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
+        }
+        isAnimating = true;
+    }
 }
 
 class ColorFlowCallback : public osg::NodeCallback {
-public:
-	ColorFlowCallback(osg::Geometry* geom, float speed)
-		: _geom(geom), _speed(speed), _startTime(std::chrono::high_resolution_clock::now()) {}
+  public:
+    ColorFlowCallback(osg::Geometry *geom, float speed)
+        : _geom(geom), _speed(speed), _startTime(std::chrono::high_resolution_clock::now()) {}
 
-	virtual void operator()(osg::Node* node, osg::NodeVisitor* nv) {
-		if (nv->getVisitorType() == osg::NodeVisitor::UPDATE_VISITOR) {
-			// 计算动画时间
-			auto now = std::chrono::high_resolution_clock::now();
-			double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
-			float t = static_cast<float>(elapsedTime * _speed);
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
+        if (nv->getVisitorType() == osg::NodeVisitor::UPDATE_VISITOR) {
+            // 计算动画时间
+            auto now = std::chrono::high_resolution_clock::now();
+            double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
+            float t = static_cast<float>(elapsedTime * _speed);
 
-			// 计算渐变因子，确保在前几秒钟内逐渐改变颜色
-			float fadeFactor = std::min(t / 2, 1.0f); // 0 -> 1 over time
+            // 计算渐变因子，确保在前几秒钟内逐渐改变颜色
+            float fadeFactor = std::min(t / 2, 1.0f); // 0 -> 1 over time
 
-			// 更新颜色
-			osg::Vec4Array* colors = dynamic_cast<osg::Vec4Array*>(_geom->getColorArray());
-			if (colors) {
-				for (size_t i = 0; i < colors->size(); ++i) {
-					osg::Vec4& color = (*colors)[i];
-					float offset = static_cast<float>(i) * 0.1f; // 基于顶点索引的偏移
+            // 更新颜色
+            osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+            if (colors) {
+                for (size_t i = 0; i < colors->size(); ++i) {
+                    osg::Vec4 &color = (*colors)[i];
+                    float offset = static_cast<float>(i) * 0.1f; // 基于顶点索引的偏移
 
-					// 基于时间 t 和 offset 计算色相值（Hue）
-					float hue =
-						fmod((t + offset) * 60.0f, 360.0f); // 60度变化对应红-黄-绿-蓝-紫-红的循环
-					osg::Vec4 targetColor = hslToRgb(hue, 0.5f, 0.5f); // 使用 HSL 转 RGB
+                    // 基于时间 t 和 offset 计算色相值（Hue）
+                    float hue =
+                        fmod((t + offset) * 60.0f, 360.0f); // 60度变化对应红-黄-绿-蓝-紫-红的循环
+                    osg::Vec4 targetColor = hslToRgb(hue, 0.5f, 0.5f); // 使用 HSL 转 RGB
 
-					// 使用 fadeFactor 实现渐变效果
-					color = color * (1.0f - fadeFactor) + targetColor * fadeFactor;
-				}
-				_geom->dirtyDisplayList(); // 确保更新渲染
-				_geom->dirtyBound();
-			}
-		}
+                    // 使用 fadeFactor 实现渐变效果
+                    color = color * (1.0f - fadeFactor) + targetColor * fadeFactor;
+                }
+                _geom->dirtyDisplayList(); // 确保更新渲染
+                _geom->dirtyBound();
+            }
+        }
 
-		traverse(node, nv); // 继续遍历
-	}
+        traverse(node, nv); // 继续遍历
+    }
 
-private:
-	// HSL 转 RGB 的辅助函数
-	osg::Vec4 hslToRgb(float h, float s, float l) {
-		float c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
-		float x = c * (1.0f - fabs(fmod(h / 60.0f, 2) - 1.0f));
-		float m = l - c / 2.0f;
+  private:
+    // HSL 转 RGB 的辅助函数
+    osg::Vec4 hslToRgb(float h, float s, float l) {
+        float c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
+        float x = c * (1.0f - fabs(fmod(h / 60.0f, 2) - 1.0f));
+        float m = l - c / 2.0f;
 
-		float r, g, b;
-		if (h >= 0 && h < 60) {
-			r = c;
-			g = x;
-			b = 0;
-		}
-		else if (h >= 60 && h < 120) {
-			r = x;
-			g = c;
-			b = 0;
-		}
-		else if (h >= 120 && h < 180) {
-			r = 0;
-			g = c;
-			b = x;
-		}
-		else if (h >= 180 && h < 240) {
-			r = 0;
-			g = x;
-			b = c;
-		}
-		else if (h >= 240 && h < 300) {
-			r = x;
-			g = 0;
-			b = c;
-		}
-		else {
-			r = c;
-			g = 0;
-			b = x;
-		}
+        float r, g, b;
+        if (h >= 0 && h < 60) {
+            r = c;
+            g = x;
+            b = 0;
+        } else if (h >= 60 && h < 120) {
+            r = x;
+            g = c;
+            b = 0;
+        } else if (h >= 120 && h < 180) {
+            r = 0;
+            g = c;
+            b = x;
+        } else if (h >= 180 && h < 240) {
+            r = 0;
+            g = x;
+            b = c;
+        } else if (h >= 240 && h < 300) {
+            r = x;
+            g = 0;
+            b = c;
+        } else {
+            r = c;
+            g = 0;
+            b = x;
+        }
 
-		return osg::Vec4(r + m, g + m, b + m, 1.0f);
-	}
+        return osg::Vec4(r + m, g + m, b + m, 1.0f);
+    }
 
-	osg::ref_ptr<osg::Geometry> _geom;
-	float _speed;
-	std::chrono::high_resolution_clock::time_point _startTime;
+    osg::ref_ptr<osg::Geometry> _geom;
+    float _speed;
+    std::chrono::high_resolution_clock::time_point _startTime;
 };
 void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
 
-	if (lineGeode && lineGeometry) {
-		if (isAnimating) {
-			// 当前正在动画中，结束动画
-			lineGeode->setUpdateCallback(nullptr);
-			isAnimating = false;
-			update(); // 重新绘制图形
-		}
-		else {
-			// 当前没有动画，开始动画
-			lineGeode->setUpdateCallback(new ColorFlowCallback(lineGeometry, 1.f));
-			isAnimating = true;
-		}
-	}
+    if (lineGeode && lineGeometry) {
+        if (isAnimating) {
+            // 当前正在动画中，结束动画
+            lineGeode->setUpdateCallback(nullptr);
+            isAnimating = false;
+            update(); // 重新绘制图形
+        } else {
+            // 当前没有动画，开始动画
+            lineGeode->setUpdateCallback(new ColorFlowCallback(lineGeometry, 1.f));
+            isAnimating = true;
+        }
+    }
 }
 
 class StarFlowCallback : public osg::NodeCallback {
-public:
-	StarFlowCallback(osg::Geometry* geom, float speed, TimeController* timeController,
-		const std::vector<std::pair<int, int>>& edgeRanges)
-		: _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
-		// 保存原始颜色数组
-		_originalColors =
-			new osg::Vec4Array(*dynamic_cast<osg::Vec4Array*>(geom->getColorArray()));
-	}
+  public:
+    StarFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
+                     const std::vector<std::pair<int, int>> &edgeRanges)
+        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
+        // 保存原始颜色数组
+        _originalColors =
+            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
+    }
 
-	virtual void operator()(osg::Node* node, osg::NodeVisitor* nv) override {
-		float t = _timeController->getTime() * _speed;
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        float t = _timeController->getTime() * _speed;
 
-		osg::Vec4Array* colors = dynamic_cast<osg::Vec4Array*>(_geom->getColorArray());
-		osg::Vec3Array* vertices = dynamic_cast<osg::Vec3Array*>(_geom->getVertexArray());
-		if (colors && vertices) {
-			for (const auto& range : _edgeRanges) {
-				int startIdx = range.first;
-				int endIdx = range.second;
+        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
+        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
+        if (colors && vertices) {
+            for (const auto &range : _edgeRanges) {
+                int startIdx = range.first;
+                int endIdx = range.second;
 
-				// 计算高光的位置
-				float highlightPos = fmod(t, 1.0f) * (endIdx + 12.0f - startIdx) + startIdx;
-				// 拖尾长度的控制参数
-				float tailLengthFactor = 6.0f; // 拖尾长度控制
-				for (int i = startIdx; i < endIdx; ++i) {
-					// 计算高光与当前顶点的距离
-					float dist = static_cast<float>(i) - highlightPos;
-					// 控制高光范围和拖尾效果
-					float intensity = std::max(0.0f, 1.0f - fabs(dist) / tailLengthFactor);
+                // 计算高光的位置
+                float highlightPos = fmod(t, 1.0f) * (endIdx + 12.0f - startIdx) + startIdx;
+                // 拖尾长度的控制参数
+                float tailLengthFactor = 6.0f; // 拖尾长度控制
+                for (int i = startIdx; i < endIdx; ++i) {
+                    // 计算高光与当前顶点的距离
+                    float dist = static_cast<float>(i) - highlightPos;
+                    // 控制高光范围和拖尾效果
+                    float intensity = std::max(0.0f, 1.0f - fabs(dist) / tailLengthFactor);
 
-					osg::Vec4& color = (*colors)[i];
+                    osg::Vec4 &color = (*colors)[i];
 
-					if (dist == 0) {
-						// 前端高亮白色部分
-						color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f);
-					}
-					else if (dist < 0) {
-						// 拖尾部分：从白色渐变到原始颜色
-						color = osg::Vec4(
-							1.0f * intensity + (*_originalColors)[i].r() * (1.0f - intensity),
-							1.0f * intensity + (*_originalColors)[i].g() * (1.0f - intensity),
-							1.0f * intensity + (*_originalColors)[i].b() * (1.0f - intensity),
-							(*_originalColors)[i].a());
-					}
-					else {
-						color = (*_originalColors)[i];
-					}
-				}
-				// 处理 endIdx 之后的拖尾效果
-				for (int i = endIdx + 1; i < endIdx + tailLengthFactor && i < colors->size(); ++i) {
-					// 计算超出 endIdx 的部分
-					float dist = static_cast<float>(i) - highlightPos;
-					float intensity =
-						std::max(0.0f, 1.0f - (dist + (i - endIdx)) / tailLengthFactor);
+                    if (dist == 0) {
+                        // 前端高亮白色部分
+                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                    } else if (dist < 0) {
+                        // 拖尾部分：从白色渐变到原始颜色
+                        color = osg::Vec4(
+                            1.0f * intensity + (*_originalColors)[i].r() * (1.0f - intensity),
+                            1.0f * intensity + (*_originalColors)[i].g() * (1.0f - intensity),
+                            1.0f * intensity + (*_originalColors)[i].b() * (1.0f - intensity),
+                            (*_originalColors)[i].a());
+                    } else {
+                        color = (*_originalColors)[i];
+                    }
+                }
+                // 处理 endIdx 之后的拖尾效果
+                for (int i = endIdx + 1; i < endIdx + tailLengthFactor && i < colors->size(); ++i) {
+                    // 计算超出 endIdx 的部分
+                    float dist = static_cast<float>(i) - highlightPos;
+                    float intensity =
+                        std::max(0.0f, 1.0f - (dist + (i - endIdx)) / tailLengthFactor);
 
-					osg::Vec4& color = (*colors)[i];
-					color = osg::Vec4((*_originalColors)[endIdx - 1].r() * (1.0f - intensity),
-						(*_originalColors)[endIdx - 1].g() * (1.0f - intensity),
-						(*_originalColors)[endIdx - 1].b() * (1.0f - intensity),
-						(*_originalColors)[endIdx - 1].a() * intensity);
-				}
-			}
+                    osg::Vec4 &color = (*colors)[i];
+                    color = osg::Vec4((*_originalColors)[endIdx - 1].r() * (1.0f - intensity),
+                                      (*_originalColors)[endIdx - 1].g() * (1.0f - intensity),
+                                      (*_originalColors)[endIdx - 1].b() * (1.0f - intensity),
+                                      (*_originalColors)[endIdx - 1].a() * intensity);
+                }
+            }
 
-			// 标记几何体更新
-			_geom->dirtyDisplayList();
-			_geom->dirtyBound();
-		}
+            // 标记几何体更新
+            _geom->dirtyDisplayList();
+            _geom->dirtyBound();
+        }
 
-		traverse(node, nv);
-	}
+        traverse(node, nv);
+    }
 
-private:
-	osg::ref_ptr<osg::Geometry> _geom;
-	osg::ref_ptr<osg::Vec4Array> _originalColors;
-	float _speed;
-	osg::ref_ptr<TimeController> _timeController;
-	std::vector<std::pair<int, int>> _edgeRanges;
+  private:
+    osg::ref_ptr<osg::Geometry> _geom;
+    osg::ref_ptr<osg::Vec4Array> _originalColors;
+    float _speed;
+    osg::ref_ptr<TimeController> _timeController;
+    std::vector<std::pair<int, int>> _edgeRanges;
 };
 void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
 
-	if (isAnimating) {
-		// 停止动画
-		if (lineGeode) {
-			lineGeode->setUpdateCallback(nullptr);
-		}
-		isAnimating = false;
-		update(); // 重新绘制图形
-	}
-	else {
-		// 开始动画
-		if (lineGeode && lineGeometry) {
-			auto arrowStates = lineGeometry->getOrCreateStateSet();
-			arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
-			arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-			// 获取顶点数组
-			osg::Vec3Array* vertices =
-				dynamic_cast<osg::Vec3Array*>(lineGeometry->getVertexArray());
-			if (!vertices) {
-				std::cout << "No vertices found!" << std::endl;
-				return;
-			}
+    if (isAnimating) {
+        // 停止动画
+        if (lineGeode) {
+            lineGeode->setUpdateCallback(nullptr);
+        }
+        isAnimating = false;
+        update(); // 重新绘制图形
+    } else {
+        // 开始动画
+        if (lineGeode && lineGeometry) {
+            auto arrowStates = lineGeometry->getOrCreateStateSet();
+            arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
+            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+            // 获取顶点数组
+            osg::Vec3Array *vertices =
+                dynamic_cast<osg::Vec3Array *>(lineGeometry->getVertexArray());
+            if (!vertices) {
+                std::cout << "No vertices found!" << std::endl;
+                return;
+            }
 
-			std::vector<std::pair<int, int>> edgeRanges;
-			int currentIndex = 0;
+            std::vector<std::pair<int, int>> edgeRanges;
+            int currentIndex = 0;
 
-			for (auto& edge : *edges) {
-				if (!edge.visible)
-					continue;
+            for (auto &edge : *edges) {
+                if (!edge.visible)
+                    continue;
 
-				int numVerts = (edge.subDivs.size()) * 10;
-				edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts - 1));
-				currentIndex += numVerts;
-			}
+                int numVerts = (edge.subDivs.size()) * 10;
+                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts - 1));
+                currentIndex += numVerts;
+            }
 
-			osg::ref_ptr<TimeController> newTimeController = new TimeController();
-			lineGeode->setUpdateCallback(
-				new StarFlowCallback(lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
-		}
-		isAnimating = true;
-	}
+            osg::ref_ptr<TimeController> newTimeController = new TimeController();
+            lineGeode->setUpdateCallback(
+                new StarFlowCallback(lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
+        }
+        isAnimating = true;
+    }
 }
 osg::Vec4 generateColor(float index) {
-	std::vector<osg::Vec4> predefinedColors = {
-		osg::Vec4(1.0f, 0.0f, 0.0f, 1.0f), // 红色
-		osg::Vec4(0.0f, 1.0f, 0.0f, 1.0f), // 绿色
-		osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f), // 蓝色
-		osg::Vec4(1.0f, 1.0f, 0.0f, 1.0f), // 黄色
-		osg::Vec4(0.0f, 1.0f, 1.0f, 1.0f), // 青色
-		osg::Vec4(1.0f, 0.0f, 1.0f, 1.0f), // 品红色
-		osg::Vec4(0.5f, 0.5f, 0.5f, 1.0f), // 灰色
-		osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f), // 橙色
-		osg::Vec4(0.5f, 0.0f, 0.5f, 1.0f), // 紫色
-		osg::Vec4(0.0f, 0.5f, 0.5f, 1.0f), // 深青色
-		osg::Vec4(0.3f, 0.3f, 0.7f, 1.0f)  // 其他颜色
-	};
+    std::vector<osg::Vec4> predefinedColors = {
+        osg::Vec4(1.0f, 0.0f, 0.0f, 1.0f), // 红色
+        osg::Vec4(0.0f, 1.0f, 0.0f, 1.0f), // 绿色
+        osg::Vec4(0.0f, 0.0f, 1.0f, 1.0f), // 蓝色
+        osg::Vec4(1.0f, 1.0f, 0.0f, 1.0f), // 黄色
+        osg::Vec4(0.0f, 1.0f, 1.0f, 1.0f), // 青色
+        osg::Vec4(1.0f, 0.0f, 1.0f, 1.0f), // 品红色
+        osg::Vec4(0.5f, 0.5f, 0.5f, 1.0f), // 灰色
+        osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f), // 橙色
+        osg::Vec4(0.5f, 0.0f, 0.5f, 1.0f), // 紫色
+        osg::Vec4(0.0f, 0.5f, 0.5f, 1.0f), // 深青色
+        osg::Vec4(0.3f, 0.3f, 0.7f, 1.0f)  // 其他颜色
+    };
 
-	if (index < 0)
-		index = 0;
-	if (index >= predefinedColors.size())
-		index = predefinedColors.size() - 1;
-	return predefinedColors[index];
+    if (index < 0)
+        index = 0;
+    if (index >= predefinedColors.size())
+        index = predefinedColors.size() - 1;
+    return predefinedColors[index];
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
-	grp->removeChildren(0, grp->getNumChildren());
+    grp->removeChildren(0, grp->getNumChildren());
 
-	auto vec3ToSphere = [&](const osg::Vec3& v3) -> osg::Vec3 {
-		// v3.x() 是纬度，v3.y() 是经度
-		float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-		float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
 
-		float h = 6371000.0f; // 固定为地球半径，单位为米
+        float h = 6371000.0f; // 固定为地球半径，单位为米
 
-		osg::Vec3 ret;
-		ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
 
-		h = h * cosf(lat); // 根据纬度调整水平投影的半径
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
 
-		ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-		ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
 
-		return ret;
-		};
+        return ret;
+    };
 
-	auto tessl = new osg::TessellationHints;
-	tessl->setDetailRatio(1.f);
-	std::map<std::string, osg::ShapeDrawable*> osgNodes;
-	std::vector<osg::ref_ptr<osgText::Text>> textNodes;
+    auto tessl = new osg::TessellationHints;
+    tessl->setDetailRatio(1.f);
+    std::map<std::string, osg::ShapeDrawable *> osgNodes;
+    std::vector<osg::ref_ptr<osgText::Text>> textNodes;
 
-	for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
-		if (!itr->second.visible)
-			continue; // 只处理可见节点
-		osg::Vec4 color = generateColor(static_cast<float>(itr->second.cluster));
+    for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
+        if (!itr->second.visible)
+            continue; // 只处理可见节点
+        osg::Vec4 color = generateColor(static_cast<float>(itr->second.cluster));
 
-		if (!restrictionOFF) {
-			if (itr->second.pos.x() >= restriction.leftBound &&
-				itr->second.pos.x() <= restriction.rightBound &&
-				itr->second.pos.y() >= restriction.bottomBound &&
-				itr->second.pos.y() <= restriction.upperBound) {
-				color = osg::Vec4(1.0f, 1.0f, 1.0f, 0.5f); // 设置边框内的点为半透明白色
-			}
-		}
-		auto p = itr->second.pos;
+        if (!restrictionOFF) {
+            if (itr->second.pos.x() >= restriction.leftBound &&
+                itr->second.pos.x() <= restriction.rightBound &&
+                itr->second.pos.y() >= restriction.bottomBound &&
+                itr->second.pos.y() <= restriction.upperBound) {
+                color = osg::Vec4(1.0f, 1.0f, 1.0f, 0.5f); // 设置边框内的点为半透明白色
+            }
+        }
+        auto p = itr->second.pos;
 
-		p = vec3ToSphere(p);
-		auto sphere = new osg::ShapeDrawable(
-			new osg::Sphere(p, itr->second.size * .25f * nodeGeomSize), tessl);
-		osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
-		centerData->push_back(itr->second.pos);
-		sphere->setUserData(centerData);
+        p = vec3ToSphere(p);
+        auto sphere = new osg::ShapeDrawable(
+            new osg::Sphere(p, itr->second.size * .25f * nodeGeomSize), tessl);
+        osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
+        centerData->push_back(itr->second.pos);
+        sphere->setUserData(centerData);
 
-		sphere->setColor(color);
+        sphere->setColor(color);
 
-		auto states = grp->getOrCreateStateSet();
-		auto matr = new osg::Material;
-		matr->setColorMode(osg::Material::DIFFUSE);
-		states->setAttributeAndModes(matr, osg::StateAttribute::ON);
-		states->setMode(GL_LIGHTING, osg::StateAttribute::ON);
-		// osg::setNotifyLevel(osg::DEBUG_INFO);
+        auto states = grp->getOrCreateStateSet();
+        auto matr = new osg::Material;
+        matr->setColorMode(osg::Material::DIFFUSE);
+        states->setAttributeAndModes(matr, osg::StateAttribute::ON);
+        states->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+        // osg::setNotifyLevel(osg::DEBUG_INFO);
 
-		grp->addChild(sphere);
+        grp->addChild(sphere);
 
-		osg::ref_ptr<osgText::Text> text = new osgText::Text;
-		text->setText(itr->first);
-		text->setFont("Fonts/simhei.ttf"); // 设置字体
-		text->setAxisAlignment(osgText::Text::SCREEN);
-		if (textSize) {
-			text->setCharacterSize(textSize); // 设置字体大小
-		}
-		else {
-			text->setCharacterSize(nodeGeomSize);
-		}
+        osg::ref_ptr<osgText::Text> text = new osgText::Text;
+        text->setText(itr->first);
+        text->setFont("Fonts/simhei.ttf"); // 设置字体
+        text->setAxisAlignment(osgText::Text::SCREEN);
+        if (textSize) {
+            text->setCharacterSize(textSize); // 设置字体大小
+        } else {
+            text->setCharacterSize(nodeGeomSize);
+        }
 
-		// TODO: 加入文字避让
-		text->setPosition(p +
-			osg::Vec3(itr->second.size * 0.5f * nodeGeomSize,
-				itr->second.size * 1.0f * nodeGeomSize,
-				itr->second.size * 0.25f *
-				nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-		// 设置文字内容为点的ID
-		text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
+        // TODO: 加入文字避让
+        text->setPosition(p +
+                          osg::Vec3(itr->second.size * 0.5f * nodeGeomSize,
+                                    itr->second.size * 1.0f * nodeGeomSize,
+                                    itr->second.size * 0.25f *
+                                        nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
+        // 设置文字内容为点的ID
+        text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
 
-		osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
-		textGeode->addDrawable(text.get());
-		textNodes.push_back(text);
-		grp->addChild(textGeode.get());
+        osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
+        textGeode->addDrawable(text.get());
+        textNodes.push_back(text);
+        grp->addChild(textGeode.get());
 
-		osgNodes.emplace(std::make_pair(itr->first, sphere));
-	}
-	adjustTextPosition(textNodes, nodeGeomSize);
+        osgNodes.emplace(std::make_pair(itr->first, sphere));
+    }
+    adjustTextPosition(textNodes, nodeGeomSize);
 
-	auto segVerts = new osg::Vec3Array;
-	auto segCols = new osg::Vec4Array;
+    auto segVerts = new osg::Vec3Array;
+    auto segCols = new osg::Vec4Array;
 
-	for (auto& edge : *edges) {
-		if (!edge.visible)
-			continue; // 只处理可见边
+    for (auto &edge : *edges) {
+        if (!edge.visible)
+            continue; // 只处理可见边
 
-		osg::Vec4 prevColor = osg::Vec4(nodes->at(edge.from).color, 1.f);
-		auto dCol = osg::Vec4(nodes->at(edge.to).color, 1.f) - prevColor;
-		dCol /= (edge.subDivs.size() == 1 ? 1 : edge.subDivs.size() - 1);
+        osg::Vec4 prevColor = osg::Vec4(nodes->at(edge.from).color, 1.f);
+        auto dCol = osg::Vec4(nodes->at(edge.to).color, 1.f) - prevColor;
+        dCol /= (edge.subDivs.size() == 1 ? 1 : edge.subDivs.size() - 1);
 
-		osg::Vec3 prevPos = edge.subDivs.front();
-		osg::Vec3 startPos = vec3ToSphere(prevPos); // 起点
-		osg::Vec3 endPos = edge.subDivs.back();
-		endPos = vec3ToSphere(endPos);
+        osg::Vec3 prevPos = edge.subDivs.front();
+        osg::Vec3 startPos = vec3ToSphere(prevPos); // 起点
+        osg::Vec3 endPos = edge.subDivs.back();
+        endPos = vec3ToSphere(endPos);
 
-		osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
-		osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
-		for (size_t i = 0; i < edge.subDivs.size(); ++i) {
-			osg::Vec3 currentPos = edge.subDivs[i];
-			osg::Vec4 currentColor = prevColor + dCol;
+        osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
+        osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
+        for (size_t i = 0; i < edge.subDivs.size(); ++i) {
+            osg::Vec3 currentPos = edge.subDivs[i];
+            osg::Vec4 currentColor = prevColor + dCol;
 
-			// 在 prevPos 和 currentPos 之间插入 5 个细分点
-			for (int j = 0; j <= 5; ++j) { // 包含起点和终点，共 6 个点
-				float t = static_cast<float>(j) / 5.0f;
+            // 在 prevPos 和 currentPos 之间插入 5 个细分点
+            for (int j = 0; j <= 5; ++j) { // 包含起点和终点，共 6 个点
+                float t = static_cast<float>(j) / 5.0f;
 
-				osg::Vec3 interpolatedPos;
-				interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
-				interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
-				interpolatedPos.z() = prevPos.z() * (1.0f - t) + currentPos.z() * t;
+                osg::Vec3 interpolatedPos;
+                interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
+                interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
+                interpolatedPos.z() = prevPos.z() * (1.0f - t) + currentPos.z() * t;
 
-				osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
+                osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
 
-				if (j > 0) { // 从第二个插值点开始创建线段
-					segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
-					segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
-					segVerts->push_back(vec3ToSphere(interpolatedPos));
-					segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
-				}
+                if (j > 0) { // 从第二个插值点开始创建线段
+                    segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
+                    segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
+                    segVerts->push_back(vec3ToSphere(interpolatedPos));
+                    segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
+                }
 
-				prevInterpolatedPos = interpolatedPos;
-				prevInterpolatedColor = interpolatedColor;
-			}
+                prevInterpolatedPos = interpolatedPos;
+                prevInterpolatedColor = interpolatedColor;
+            }
 
-			prevPos = currentPos;
-			prevColor = currentColor;
-		}
-	}
-	if (!arrowFlowEnabled) {
-		auto geom = new osg::Geometry;
-		geom->setVertexArray(segVerts);
-		geom->setColorArray(segCols);
-		geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
+            prevPos = currentPos;
+            prevColor = currentColor;
+        }
+    }
+    if (!arrowFlowEnabled) {
+        auto geom = new osg::Geometry;
+        geom->setVertexArray(segVerts);
+        geom->setColorArray(segCols);
+        geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
 
-		auto states = geom->getOrCreateStateSet();
-		states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-		auto lw = new osg::LineWidth(2.f);
-		states->setAttribute(lw, osg::StateAttribute::ON);
+        auto states = geom->getOrCreateStateSet();
+        states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+        auto lw = new osg::LineWidth(2.f);
+        states->setAttribute(lw, osg::StateAttribute::ON);
 
-		geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
+        geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
 
-		auto geode = new osg::Geode;
-		geode->addDrawable(geom);
+        auto geode = new osg::Geode;
+        geode->addDrawable(geom);
 
-		// 保存 Geode 和 Geometry
-		lineGeode = geode;
-		lineGeometry = geom;
+        // 保存 Geode 和 Geometry
+        lineGeode = geode;
+        lineGeometry = geom;
 
-		grp->addChild(geode);
-	}
+        grp->addChild(geode);
+    }
 }
 
 void VIS4Earth::GraphRenderer::PerGraphParam::setRestriction(VIS4Earth::Area res) {
-	restriction = res;
+    restriction = res;
 }
 
 bool VIS4Earth::GraphRenderer::PerGraphParam::setLongitudeRange(float minLonDeg, float maxLonDeg) {
-	if (minLonDeg < -180.f || maxLonDeg > +180.f || minLonDeg >= maxLonDeg)
-		return false;
-	minLongitude = deg2Rad(minLonDeg);
-	maxLongitude = deg2Rad(maxLonDeg);
-	return true;
+    if (minLonDeg < -180.f || maxLonDeg > +180.f || minLonDeg >= maxLonDeg)
+        return false;
+    minLongitude = deg2Rad(minLonDeg);
+    maxLongitude = deg2Rad(maxLonDeg);
+    return true;
 }
 
 bool VIS4Earth::GraphRenderer::PerGraphParam::setLatitudeRange(float minLatDeg, float maxLatDeg) {
-	if (minLatDeg < -90.f || maxLatDeg > +90.f || minLatDeg >= maxLatDeg)
-		return false;
-	minLatitude = deg2Rad(minLatDeg);
-	maxLatitude = deg2Rad(maxLatDeg);
-	return true;
+    if (minLatDeg < -90.f || maxLatDeg > +90.f || minLatDeg >= maxLatDeg)
+        return false;
+    minLatitude = deg2Rad(minLatDeg);
+    maxLatitude = deg2Rad(maxLatDeg);
+    return true;
 }
 
 bool VIS4Earth::GraphRenderer::PerGraphParam::setHeightFromCenterRange(float minH, float maxH) {
-	if (minH < 0.f || minH >= maxH)
-		return false;
-	minHeight = minH;
-	maxHeight = maxH;
-	return true;
+    if (minH < 0.f || minH >= maxH)
+        return false;
+    minHeight = minH;
+    maxHeight = maxH;
+    return true;
 }
 
 void VIS4Earth::GraphRenderer::PerGraphParam::setLevelGraph(int level) {
-	nodes = levels[level].nodes;
-	edges = levels[level].edges;
-	nodeMapping = levels[level].nodeMapping;
-	edgeMapping = levels[level].edgeMapping;
+    nodes = levels[level].nodes;
+    edges = levels[level].edges;
+    nodeMapping = levels[level].nodeMapping;
+    edgeMapping = levels[level].edgeMapping;
 }
 
 void GraphRenderer::PerGraphParam::generateHierarchicalGraphs(
-	std::shared_ptr<std::map<std::string, Node>>& initialNodes,
-	std::shared_ptr<std::vector<Edge>>& initialEdges) {
+    std::shared_ptr<std::map<std::string, Node>> &initialNodes,
+    std::shared_ptr<std::vector<Edge>> &initialEdges) {
 
-	int numLevels = 11; // 总共生成11层图
-	std::vector<GraphLevel> mylevels(numLevels);
+    int numLevels = 11; // 总共生成11层图
+    std::vector<GraphLevel> mylevels(numLevels);
 
-	// 第0层次是原始图
-	mylevels[0].nodes = std::make_shared<std::map<std::string, Node>>(*initialNodes);
-	mylevels[0].edges = std::make_shared<std::vector<Edge>>(*initialEdges);
-	mylevels[0].nodeMapping =
-		std::shared_ptr<std::map<std::string, std::vector<std::string>>>(); // 节点映射
-	mylevels[0].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
+    // 第0层次是原始图
+    mylevels[0].nodes = std::make_shared<std::map<std::string, Node>>(*initialNodes);
+    mylevels[0].edges = std::make_shared<std::vector<Edge>>(*initialEdges);
+    mylevels[0].nodeMapping =
+        std::shared_ptr<std::map<std::string, std::vector<std::string>>>(); // 节点映射
+    mylevels[0].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
 
-	// 生成其他层次的图
-	for (int level = 1; level < numLevels; ++level) {
-		mylevels[level].nodes = std::make_shared<std::map<std::string, Node>>();
-		mylevels[level].edges = std::make_shared<std::vector<Edge>>();
-		mylevels[level].nodeMapping =
-			std::shared_ptr<std::map<std::string, std::vector<std::string>>>(); // 节点映射
-		mylevels[level].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
+    // 生成其他层次的图
+    for (int level = 1; level < numLevels; ++level) {
+        mylevels[level].nodes = std::make_shared<std::map<std::string, Node>>();
+        mylevels[level].edges = std::make_shared<std::vector<Edge>>();
+        mylevels[level].nodeMapping =
+            std::shared_ptr<std::map<std::string, std::vector<std::string>>>(); // 节点映射
+        mylevels[level].edgeMapping = std::shared_ptr<std::map<Edge, std::vector<Edge>>>();
 
-		// 对前一个层次的图执行 DBSCAN 聚类
-		performClustering(mylevels[level - 1], mylevels[level], level);
-	}
+        // 对前一个层次的图执行 DBSCAN 聚类
+        performClustering(mylevels[level - 1], mylevels[level], level);
+    }
 
-	levels = mylevels; // 将生成的层次存储到成员变量
+    levels = mylevels; // 将生成的层次存储到成员变量
 }
 
-void GraphRenderer::PerGraphParam::performClustering(const GraphLevel& previousLevel,
-	GraphLevel& currentLevel, int level) {
-	float threshold = static_cast<float>(level) / 10.f;
-	// 从上一个层次的节点中提取位置信息，用于 DBSCAN 聚类
-	std::vector<osg::Vec3> positions;
-	std::vector<std::string> nodeIds;
-	for (const auto& nodePair : *previousLevel.nodes) {
-		positions.push_back(nodePair.second.pos);
-		nodeIds.push_back(nodePair.first);
-	}
-	std::vector<std::pair<std::string, std::string>> dbscanedges;
-	std::vector<float> weights;
-	// 提取边的from和to字段
-	for (const auto& edge : *previousLevel.edges) {
-		dbscanedges.push_back({ edge.from, edge.to });
-		weights.push_back(edge.weight);
-	}
+void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousLevel,
+                                                     GraphLevel &currentLevel, int level) {
+    float threshold = static_cast<float>(level) / 10.f;
+    // 从上一个层次的节点中提取位置信息，用于 DBSCAN 聚类
+    std::vector<osg::Vec3> positions;
+    std::vector<std::string> nodeIds;
+    for (const auto &nodePair : *previousLevel.nodes) {
+        positions.push_back(nodePair.second.pos);
+        nodeIds.push_back(nodePair.first);
+    }
+    std::vector<std::pair<std::string, std::string>> dbscanedges;
+    std::vector<float> weights;
+    // 提取边的from和to字段
+    for (const auto &edge : *previousLevel.edges) {
+        dbscanedges.push_back({edge.from, edge.to});
+        weights.push_back(edge.weight);
+    }
 
-	// 将节点根据簇分类
-	std::map<int, std::vector<std::string>> clusters; // 簇ID -> 节点ID列表
-	// 使用 DBSCAN 对节点进行聚类
-	if (level == 1) {
+    // 将节点根据簇分类
+    std::map<int, std::vector<std::string>> clusters; // 簇ID -> 节点ID列表
+    // 使用 DBSCAN 对节点进行聚类
+    if (level == 1) {
 
-		std::vector<int> clusterLabels;
+        std::vector<int> clusterLabels;
 
-		if (graphTypeIndex == 1) {
-			clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
-			// clusterLabels = Louvain(dbscanedges, weights); // 全都是一个社区的 数据再改变一下
-		}
-		else {
-			clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
-		}
-		// 处理噪声节点，随机分配给邻居节点
-		// 找到最大的标签
-		int maxClusterID = -1;
-		for (const auto& point : clusterLabels) {
-			if (point != -1) {
-				maxClusterID = std::max(maxClusterID, point);
-			}
-		}
-		for (size_t i = 0; i < clusterLabels.size(); ++i) {
-			int clusterId = clusterLabels[i];
-			if (clusterId == -1) {
-				clusterId = maxClusterID++;
-			}
-			clusters[clusterId].push_back(nodeIds[i]);
-		}
-	}
-	else {
-		// 遍历当前层的所有节点
-		for (const auto& nodePair : *previousLevel.nodes) {
-			const std::string& nodeId = nodePair.first;
-			int clusterId = nodePair.second.cluster; // 获取节点的 cluster 属性
+        if (graphTypeIndex == 1) {
+            clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
+            // clusterLabels = Louvain(dbscanedges, weights); // 全都是一个社区的 数据再改变一下
+        } else {
+            clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
+        }
+        // 处理噪声节点，随机分配给邻居节点
+        // 找到最大的标签
+        int maxClusterID = -1;
+        for (const auto &point : clusterLabels) {
+            if (point != -1) {
+                maxClusterID = std::max(maxClusterID, point);
+            }
+        }
+        for (size_t i = 0; i < clusterLabels.size(); ++i) {
+            int clusterId = clusterLabels[i];
+            if (clusterId == -1) {
+                clusterId = maxClusterID++;
+            }
+            clusters[clusterId].push_back(nodeIds[i]);
+        }
+    } else {
+        // 遍历当前层的所有节点
+        for (const auto &nodePair : *previousLevel.nodes) {
+            const std::string &nodeId = nodePair.first;
+            int clusterId = nodePair.second.cluster; // 获取节点的 cluster 属性
 
-			// 将节点 ID 添加到对应的簇中
-			clusters[clusterId].push_back(nodeId);
-		}
-	}
+            // 将节点 ID 添加到对应的簇中
+            clusters[clusterId].push_back(nodeId);
+        }
+    }
 
-	std::map<std::string, std::vector<std::string>> nodeMapping; // 原始节点到代表节点的映射
-	std::map<Edge, std::vector<Edge>> edgeMapping;               // 边映射
-	std::set<std::string> processedNodes;
-	std::vector<std::string> remainingNodes; // 未处理的节点列表
-	int clusterIdCounter = 0;                // 簇ID计数器
+    std::map<std::string, std::vector<std::string>> nodeMapping; // 原始节点到代表节点的映射
+    std::map<Edge, std::vector<Edge>> edgeMapping;               // 边映射
+    std::set<std::string> processedNodes;
+    std::vector<std::string> remainingNodes; // 未处理的节点列表
+    int clusterIdCounter = 0;                // 簇ID计数器
 
-	// 遍历每个簇，选择代表节点并合并
-	for (const auto& clusterPair : clusters) {
-		const std::vector<std::string>& nodesInCluster = clusterPair.second;
-		// 分配簇ID
-		for (const std::string& nodeId : nodesInCluster) {
-			previousLevel.nodes->at(nodeId).cluster = clusterIdCounter;
-		}
+    // 遍历每个簇，选择代表节点并合并
+    for (const auto &clusterPair : clusters) {
+        const std::vector<std::string> &nodesInCluster = clusterPair.second;
+        // 分配簇ID
+        for (const std::string &nodeId : nodesInCluster) {
+            previousLevel.nodes->at(nodeId).cluster = clusterIdCounter;
+        }
 
-		if (nodesInCluster.size() > 1) {
-			// 如果簇中有多个节点，选择权重最高的节点作为代表节点
-			std::string representativeNodeId = *std::max_element(
-				nodesInCluster.begin(), nodesInCluster.end(),
-				[&](const std::string& a, const std::string& b) {
-					return previousLevel.nodes->at(a).level < previousLevel.nodes->at(b).level;
-				});
+        if (nodesInCluster.size() > 1) {
+            // 如果簇中有多个节点，选择权重最高的节点作为代表节点
+            std::string representativeNodeId = *std::max_element(
+                nodesInCluster.begin(), nodesInCluster.end(),
+                [&](const std::string &a, const std::string &b) {
+                    return previousLevel.nodes->at(a).level < previousLevel.nodes->at(b).level;
+                });
 
-			// 将代表节点添加到当前层次
-			currentLevel.nodes->emplace(representativeNodeId,
-				previousLevel.nodes->at(representativeNodeId));
-			currentLevel.nodes->at(representativeNodeId).isRepresent = true;
-			// 设置代表节点的大小，基于簇中节点的数量
-			float representativeSize =
-				(static_cast<float>(nodesInCluster.size()) * 0.05 +
-					previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
-			currentLevel.nodes->at(representativeNodeId).size = representativeSize;
+            // 将代表节点添加到当前层次
+            currentLevel.nodes->emplace(representativeNodeId,
+                                        previousLevel.nodes->at(representativeNodeId));
+            currentLevel.nodes->at(representativeNodeId).isRepresent = true;
+            // 设置代表节点的大小，基于簇中节点的数量
+            float representativeSize =
+                (static_cast<float>(nodesInCluster.size()) * 0.05 +
+                 previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
+            currentLevel.nodes->at(representativeNodeId).size = representativeSize;
 
-			processedNodes.insert(representativeNodeId);
+            processedNodes.insert(representativeNodeId);
 
-			// 更新簇中所有节点的映射关系
-			for (const std::string& nodeId : nodesInCluster) {
-				nodeMapping[representativeNodeId].push_back(nodeId);
-			}
-		}
-		else {
-			// 如果簇中只有一个节点，直接保留
-			const std::string& singleNodeId = nodesInCluster[0];
-			currentLevel.nodes->emplace(singleNodeId, previousLevel.nodes->at(singleNodeId));
-			nodeMapping[singleNodeId].push_back(singleNodeId);
-			processedNodes.insert(singleNodeId);
-		}
-		// 更新簇ID计数器
-		++clusterIdCounter;
-	}
+            // 更新簇中所有节点的映射关系
+            for (const std::string &nodeId : nodesInCluster) {
+                nodeMapping[representativeNodeId].push_back(nodeId);
+            }
+        } else {
+            // 如果簇中只有一个节点，直接保留
+            const std::string &singleNodeId = nodesInCluster[0];
+            currentLevel.nodes->emplace(singleNodeId, previousLevel.nodes->at(singleNodeId));
+            nodeMapping[singleNodeId].push_back(singleNodeId);
+            processedNodes.insert(singleNodeId);
+        }
+        // 更新簇ID计数器
+        ++clusterIdCounter;
+    }
 
-	// 将未处理的节点放入 remainingNodes 列表
-	for (const auto& nodePair : *previousLevel.nodes) {
-		const std::string& nodeId = nodePair.first;
-		if (processedNodes.find(nodeId) == processedNodes.end()) {
-			remainingNodes.push_back(nodeId);
-		}
-	}
-	// 计算目标节点数 N_simplified
-	int N_simplified = static_cast<int>(previousLevel.nodes->size() * (1 - threshold));
+    // 将未处理的节点放入 remainingNodes 列表
+    for (const auto &nodePair : *previousLevel.nodes) {
+        const std::string &nodeId = nodePair.first;
+        if (processedNodes.find(nodeId) == processedNodes.end()) {
+            remainingNodes.push_back(nodeId);
+        }
+    }
+    // 计算目标节点数 N_simplified
+    int N_simplified = static_cast<int>(previousLevel.nodes->size() * (1 - threshold));
 
-	// 如果当前层次的节点数大于 N_simplified，删除权重较低的节点
-	if (currentLevel.nodes->size() > N_simplified) {
-		// 获取所有节点并按权重升序排序
-		std::vector<std::pair<std::string, Node>> sortedNodes(currentLevel.nodes->begin(),
-			currentLevel.nodes->end());
-		std::sort(sortedNodes.begin(), sortedNodes.end(),
-			[](const std::pair<std::string, Node>& a, const std::pair<std::string, Node>& b) {
-				return a.second.level < b.second.level;
-			});
+    // 如果当前层次的节点数大于 N_simplified，删除权重较低的节点
+    if (currentLevel.nodes->size() > N_simplified) {
+        // 获取所有节点并按权重升序排序
+        std::vector<std::pair<std::string, Node>> sortedNodes(currentLevel.nodes->begin(),
+                                                              currentLevel.nodes->end());
+        std::sort(sortedNodes.begin(), sortedNodes.end(),
+                  [](const std::pair<std::string, Node> &a, const std::pair<std::string, Node> &b) {
+                      return a.second.level < b.second.level;
+                  });
 
-		// 删除权重较低的节点，直到节点数等于 N_simplified
-		int nodesToRemove = static_cast<int>(currentLevel.nodes->size()) - N_simplified;
-		for (int i = 0; i < nodesToRemove; ++i) {
-			std::string nodeIdToRemove = sortedNodes[i].first;
-			currentLevel.nodes->erase(nodeIdToRemove);
-			nodeMapping.erase(nodeIdToRemove); // 删除节点映射
+        // 删除权重较低的节点，直到节点数等于 N_simplified
+        int nodesToRemove = static_cast<int>(currentLevel.nodes->size()) - N_simplified;
+        for (int i = 0; i < nodesToRemove; ++i) {
+            std::string nodeIdToRemove = sortedNodes[i].first;
+            currentLevel.nodes->erase(nodeIdToRemove);
+            nodeMapping.erase(nodeIdToRemove); // 删除节点映射
 
-			// 删除与该节点相关的边
-			currentLevel.edges->erase(
-				std::remove_if(currentLevel.edges->begin(), currentLevel.edges->end(),
-					[&](const Edge& edge) {
-						return edge.from == nodeIdToRemove || edge.to == nodeIdToRemove;
-					}),
-				currentLevel.edges->end());
+            // 删除与该节点相关的边
+            currentLevel.edges->erase(
+                std::remove_if(currentLevel.edges->begin(), currentLevel.edges->end(),
+                               [&](const Edge &edge) {
+                                   return edge.from == nodeIdToRemove || edge.to == nodeIdToRemove;
+                               }),
+                currentLevel.edges->end());
 
-			// 删除边映射
-			for (auto it = edgeMapping.begin(); it != edgeMapping.end();) {
-				if (it->first.from == nodeIdToRemove || it->first.to == nodeIdToRemove) {
-					it = edgeMapping.erase(it);
-				}
-				else {
-					++it;
-				}
-			}
-		}
-	}
+            // 删除边映射
+            for (auto it = edgeMapping.begin(); it != edgeMapping.end();) {
+                if (it->first.from == nodeIdToRemove || it->first.to == nodeIdToRemove) {
+                    it = edgeMapping.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+    }
 
-	// 添加剩余节点，直到当前层次的节点数等于 N_simplified
-	if (currentLevel.nodes->size() < N_simplified && remainingNodes.size() > 0) {
-		// 将剩余节点按权重降序排列
-		std::sort(remainingNodes.begin(), remainingNodes.end(),
-			[&](const std::string& a, const std::string& b) {
-				return previousLevel.nodes->at(a).level > previousLevel.nodes->at(b).level;
-			});
+    // 添加剩余节点，直到当前层次的节点数等于 N_simplified
+    if (currentLevel.nodes->size() < N_simplified && remainingNodes.size() > 0) {
+        // 将剩余节点按权重降序排列
+        std::sort(remainingNodes.begin(), remainingNodes.end(),
+                  [&](const std::string &a, const std::string &b) {
+                      return previousLevel.nodes->at(a).level > previousLevel.nodes->at(b).level;
+                  });
 
-		// 添加足够数量的剩余节点，直到达到 N_simplified
-		int nodesToAdd = N_simplified - static_cast<int>(currentLevel.nodes->size());
-		for (int i = 0; i < nodesToAdd; ++i) {
-			const std::string& nodeIdToAdd = remainingNodes[i];
-			currentLevel.nodes->emplace(nodeIdToAdd, previousLevel.nodes->at(nodeIdToAdd));
+        // 添加足够数量的剩余节点，直到达到 N_simplified
+        int nodesToAdd = N_simplified - static_cast<int>(currentLevel.nodes->size());
+        for (int i = 0; i < nodesToAdd; ++i) {
+            const std::string &nodeIdToAdd = remainingNodes[i];
+            currentLevel.nodes->emplace(nodeIdToAdd, previousLevel.nodes->at(nodeIdToAdd));
 
-			// 更新节点映射，直接映射自己
-			nodeMapping[nodeIdToAdd].push_back(nodeIdToAdd);
-		}
-	}
-	// 处理边
-	std::set<std::pair<std::string, std::string>> processedEdges;
+            // 更新节点映射，直接映射自己
+            nodeMapping[nodeIdToAdd].push_back(nodeIdToAdd);
+        }
+    }
+    // 处理边
+    std::set<std::pair<std::string, std::string>> processedEdges;
 
-	// 1. 保留当前层次中已经存在的边
-	for (const Edge& edge : *previousLevel.edges) {
-		if (currentLevel.nodes->count(edge.from) > 0 && currentLevel.nodes->count(edge.to) > 0) {
-			Edge newEdge = edge;
-			currentLevel.edges->push_back(newEdge);
+    // 1. 保留当前层次中已经存在的边
+    for (const Edge &edge : *previousLevel.edges) {
+        if (currentLevel.nodes->count(edge.from) > 0 && currentLevel.nodes->count(edge.to) > 0) {
+            Edge newEdge = edge;
+            currentLevel.edges->push_back(newEdge);
 
-			// 记录边映射
-			edgeMapping[newEdge] = { edge };
+            // 记录边映射
+            edgeMapping[newEdge] = {edge};
 
-			// 标记已处理的边
-			processedEdges.insert({ std::min(edge.from, edge.to), std::max(edge.from, edge.to) });
-		}
-	}
+            // 标记已处理的边
+            processedEdges.insert({std::min(edge.from, edge.to), std::max(edge.from, edge.to)});
+        }
+    }
 
-	// 2. 为未直接连接但联通的代表节点添加新边
-	for (const auto& repNodePair1 : *currentLevel.nodes) {
-		if (!repNodePair1.second.isRepresent)
-			continue; // 只对代表节点进行处理
+    // 2. 为未直接连接但联通的代表节点添加新边
+    for (const auto &repNodePair1 : *currentLevel.nodes) {
+        if (!repNodePair1.second.isRepresent)
+            continue; // 只对代表节点进行处理
 
-		for (const auto& repNodePair2 : *currentLevel.nodes) {
-			if (repNodePair1.first == repNodePair2.first || !repNodePair2.second.isRepresent)
-				continue; // 跳过自己或非代表节点
+        for (const auto &repNodePair2 : *currentLevel.nodes) {
+            if (repNodePair1.first == repNodePair2.first || !repNodePair2.second.isRepresent)
+                continue; // 跳过自己或非代表节点
 
-			std::string from = std::min(repNodePair1.first, repNodePair2.first);
-			std::string to = std::max(repNodePair1.first, repNodePair2.first);
+            std::string from = std::min(repNodePair1.first, repNodePair2.first);
+            std::string to = std::max(repNodePair1.first, repNodePair2.first);
 
-			// 如果这条边已经处理过，则跳过
-			if (processedEdges.count({ from, to }) > 0)
-				continue;
+            // 如果这条边已经处理过，则跳过
+            if (processedEdges.count({from, to}) > 0)
+                continue;
 
-			// 检查这两个代表节点在上一层是否通过某种方式连接
-			bool isConnected = false;
-			for (const std::string& originalNode1 : nodeMapping.at(repNodePair1.first)) {
-				for (const std::string& originalNode2 : nodeMapping.at(repNodePair2.first)) {
-					// 检查是否有直接连接的边
-					for (const Edge& edge : *previousLevel.edges) {
-						if ((edge.from == originalNode1 && edge.to == originalNode2) ||
-							(edge.from == originalNode2 && edge.to == originalNode1)) {
-							isConnected = true;
-							break;
-						}
-					}
-					if (isConnected)
-						break;
-				}
-				if (isConnected)
-					break;
-			}
+            // 检查这两个代表节点在上一层是否通过某种方式连接
+            bool isConnected = false;
+            for (const std::string &originalNode1 : nodeMapping.at(repNodePair1.first)) {
+                for (const std::string &originalNode2 : nodeMapping.at(repNodePair2.first)) {
+                    // 检查是否有直接连接的边
+                    for (const Edge &edge : *previousLevel.edges) {
+                        if ((edge.from == originalNode1 && edge.to == originalNode2) ||
+                            (edge.from == originalNode2 && edge.to == originalNode1)) {
+                            isConnected = true;
+                            break;
+                        }
+                    }
+                    if (isConnected)
+                        break;
+                }
+                if (isConnected)
+                    break;
+            }
 
-			// 如果两个代表节点在上一级中连接，则在当前层中添加一条直接的边
-			if (isConnected) {
-				Edge newEdge;
-				newEdge.from = from;
-				newEdge.to = to;
+            // 如果两个代表节点在上一级中连接，则在当前层中添加一条直接的边
+            if (isConnected) {
+                Edge newEdge;
+                newEdge.from = from;
+                newEdge.to = to;
 
-				// 设置细分点
-				auto itFrom = currentLevel.nodes->find(from);
-				auto itTo = currentLevel.nodes->find(to);
-				if (itFrom != currentLevel.nodes->end() && itTo != currentLevel.nodes->end()) {
-					newEdge.subDivs.emplace_back(itFrom->second.pos);
-					newEdge.subDivs.emplace_back(itTo->second.pos);
-				}
+                // 设置细分点
+                auto itFrom = currentLevel.nodes->find(from);
+                auto itTo = currentLevel.nodes->find(to);
+                if (itFrom != currentLevel.nodes->end() && itTo != currentLevel.nodes->end()) {
+                    newEdge.subDivs.emplace_back(itFrom->second.pos);
+                    newEdge.subDivs.emplace_back(itTo->second.pos);
+                }
 
-				currentLevel.edges->push_back(newEdge);
+                currentLevel.edges->push_back(newEdge);
 
-				// 记录边映射
-				edgeMapping[newEdge] = {};
+                // 记录边映射
+                edgeMapping[newEdge] = {};
 
-				// 标记已处理的边
-				processedEdges.insert({ from, to });
-			}
-		}
-	}
+                // 标记已处理的边
+                processedEdges.insert({from, to});
+            }
+        }
+    }
 
-	// 保存节点映射和边映射到当前层次
-	currentLevel.nodeMapping =
-		std::make_shared<std::map<std::string, std::vector<std::string>>>(nodeMapping);
-	currentLevel.edgeMapping = std::make_shared<std::map<Edge, std::vector<Edge>>>(edgeMapping);
+    // 保存节点映射和边映射到当前层次
+    currentLevel.nodeMapping =
+        std::make_shared<std::map<std::string, std::vector<std::string>>>(nodeMapping);
+    currentLevel.edgeMapping = std::make_shared<std::map<Edge, std::vector<Edge>>>(edgeMapping);
 }
