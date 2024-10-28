@@ -51,9 +51,9 @@ class RAWVolumeData {
         return vol;
     }
 
-    enum class EFilterType { Linear = 0 };
+    enum class EFilterType { Linear = 0, Kriging };
     struct ResizeParameters {
-        EFilterType filterType = EFilterType::Linear;
+        EFilterType filterType = EFilterType::Kriging;
         std::array<uint32_t, 3> targetVoxPerVol;
     };
     ReteurnOrError<RAWVolumeData> GetResized(const ResizeParameters &param) const {
@@ -78,7 +78,6 @@ class RAWVolumeData {
         volOut.dat.resize(volOut.GetVoxelSize() * volOut.voxPerVolYxX * volOut.voxPerVol[2]);
         auto append = [&](uint32_t x, uint32_t y, uint32_t z) {
             auto offsOut = z * volOut.voxPerVolYxX + y * volOut.voxPerVol[0] + x;
-
             std::array<float, 3> posIn = {scale[0] * x, scale[1] * y, scale[2] * z};
 
             std::array<std::array<uint32_t, 2>, 3> posInRng = {
@@ -89,37 +88,112 @@ class RAWVolumeData {
                 std::array<uint32_t, 2>{static_cast<uint32_t>(std::floorf(posIn[2])),
                                         static_cast<uint32_t>(std::ceilf(posIn[2]))}};
 
-            std::array<float, 3> omegas = {posInRng[0][1] - posInRng[0][0],
-                                           posInRng[1][1] - posInRng[1][0],
-                                           posInRng[2][1] - posInRng[2][0]};
-            omegas[0] = omegas[0] == 0.f ? 0.f : (posIn[0] - posInRng[0][0]) / omegas[0];
-            omegas[1] = omegas[1] == 0.f ? 0.f : (posIn[1] - posInRng[1][0]) / omegas[1];
-            omegas[2] = omegas[2] == 0.f ? 0.f : (posIn[2] - posInRng[2][0]) / omegas[2];
-
             auto valIn = 0.f;
-            for (uint8_t zi = 0; zi < 2; ++zi)
-                for (uint8_t yi = 0; yi < 2; ++yi)
-                    for (uint8_t xi = 0; xi < 2; ++xi) {
-                        auto omega = (zi == 0 ? 1.f - omegas[2] : omegas[2]) *
-                                     (yi == 0 ? 1.f - omegas[1] : omegas[1]) *
-                                     (xi == 0 ? 1.f - omegas[0] : omegas[0]);
-                        switch (voxTy) {
-                        case VIS4Earth::ESupportedVoxelType::UInt8:
+
+            // 使用 switch 语句来选择插值方法
+            switch (param.filterType) {
+            case EFilterType::Linear: {
+                // 线性插值
+                std::array<float, 3> omegas = {posInRng[0][1] - posInRng[0][0],
+                                               posInRng[1][1] - posInRng[1][0],
+                                               posInRng[2][1] - posInRng[2][0]};
+                omegas[0] = omegas[0] == 0.f ? 0.f : (posIn[0] - posInRng[0][0]) / omegas[0];
+                omegas[1] = omegas[1] == 0.f ? 0.f : (posIn[1] - posInRng[1][0]) / omegas[1];
+                omegas[2] = omegas[2] == 0.f ? 0.f : (posIn[2] - posInRng[2][0]) / omegas[2];
+
+                for (uint8_t zi = 0; zi < 2; ++zi)
+                    for (uint8_t yi = 0; yi < 2; ++yi)
+                        for (uint8_t xi = 0; xi < 2; ++xi) {
+                            auto omega = (zi == 0 ? 1.f - omegas[2] : omegas[2]) *
+                                         (yi == 0 ? 1.f - omegas[1] : omegas[1]) *
+                                         (xi == 0 ? 1.f - omegas[0] : omegas[0]);
                             valIn += omega * Sample<uint8_t>(posInRng[0][xi], posInRng[1][yi],
                                                              posInRng[2][zi]);
-                            break;
-                        default:
-                            assert(false);
                         }
-                    }
-
-            switch (voxTy) {
-            case VIS4Earth::ESupportedVoxelType::UInt8:
-                volOut.dat[offsOut] = static_cast<uint8_t>(std::round(valIn));
                 break;
-            default:
-                assert(false);
             }
+
+            case EFilterType::Kriging: {
+                // 克里金插值相关的 Lambda 表达式
+                auto variogram = [](double h, double sill = 1.0, double nugget = 0.0,
+                                    double rangeParam = 1.0) {
+                    return nugget + sill * (1 - std::exp(-h / rangeParam));
+                };
+
+                auto euclideanDistance = [](const std::array<float, 3> &p1,
+                                            const std::array<float, 3> &p2) {
+                    double sum = 0.0;
+                    for (int i = 0; i < 3; ++i) {
+                        sum += (p1[i] - p2[i]) * (p1[i] - p2[i]);
+                    }
+                    return std::sqrt(sum);
+                };
+
+                auto computeKrigingWeights =
+                    [&](const std::array<std::array<uint32_t, 2>, 3> &posInRng,
+                        const std::array<float, 3> &posIn) {
+                        const int numPoints = 8; // 周围8个相邻点
+                        std::vector<std::array<float, 3>> points(numPoints);
+                        std::vector<double> variogramValues(numPoints + 1);
+
+                        // 获取相邻点坐标
+                        int index = 0;
+                        for (int zi = 0; zi < 2; ++zi) {
+                            for (int yi = 0; yi < 2; ++yi) {
+                                for (int xi = 0; xi < 2; ++xi) {
+                                    points[index] = {static_cast<float>(posInRng[0][xi]),
+                                                     static_cast<float>(posInRng[1][yi]),
+                                                     static_cast<float>(posInRng[2][zi])};
+                                    ++index;
+                                }
+                            }
+                        }
+
+                        // 计算相邻点的变异函数矩阵
+                        std::vector<std::vector<double>> matrix(numPoints,
+                                                                std::vector<double>(numPoints));
+                        for (int i = 0; i < numPoints; ++i) {
+                            for (int j = 0; j < numPoints; ++j) {
+                                matrix[i][j] = variogram(euclideanDistance(points[i], points[j]));
+                            }
+                        }
+
+                        // 计算目标点与相邻点的变异函数向量
+                        for (int i = 0; i < numPoints; ++i) {
+                            variogramValues[i] = variogram(euclideanDistance(points[i], posIn));
+                        }
+
+                        // 求解克里金权重 (这里使用简单的伪逆法)
+                        std::vector<double> weights(numPoints);
+                        double sumVariogramValues = 0.0;
+                        for (int i = 0; i < numPoints; ++i) {
+                            sumVariogramValues += variogramValues[i];
+                        }
+                        for (int i = 0; i < numPoints; ++i) {
+                            weights[i] = variogramValues[i] / sumVariogramValues;
+                        }
+
+                        return weights;
+                    };
+
+                std::vector<double> weights = computeKrigingWeights(posInRng, posIn);
+                int index = 0;
+                for (uint8_t zi = 0; zi < 2; ++zi)
+                    for (uint8_t yi = 0; yi < 2; ++yi)
+                        for (uint8_t xi = 0; xi < 2; ++xi) {
+                            valIn +=
+                                weights[index] *
+                                Sample<uint8_t>(posInRng[0][xi], posInRng[1][yi], posInRng[2][zi]);
+                            ++index;
+                        }
+                break;
+            }
+
+            default:
+                assert(false); // 未知的插值类型
+            }
+
+            volOut.dat[offsOut] = static_cast<uint8_t>(std::round(valIn));
         };
 
         for (uint32_t z = 0; z < volOut.voxPerVol[2]; ++z)
@@ -184,7 +258,7 @@ class RAWVolumeData {
             while (targetVoxPerVol[i] < voxPerVol[i])
                 targetVoxPerVol[i] *= 2;
 
-        auto volResized = GetResized(ResizeParameters{EFilterType::Linear, targetVoxPerVol});
+        auto volResized = GetResized(ResizeParameters{EFilterType::Kriging, targetVoxPerVol});
 
         osg::ref_ptr<osg::Image> img = new osg::Image;
         switch (voxTy) {
