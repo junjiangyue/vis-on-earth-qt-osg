@@ -133,8 +133,8 @@ class RAWVolumeData {
                     [&](const std::array<std::array<uint32_t, 2>, 3> &posInRng,
                         const std::array<float, 3> &posIn) {
                         const int numPoints = 8; // 周围8个相邻点
-                        std::vector<std::array<float, 3>> points(numPoints);
-                        std::vector<double> variogramValues(numPoints + 1);
+                        std::array<std::array<float, 3>, 8> points;
+                        std::array<double, 9> variogramValues;
 
                         // 获取相邻点坐标
                         int index = 0;
@@ -150,8 +150,7 @@ class RAWVolumeData {
                         }
 
                         // 计算相邻点的变异函数矩阵
-                        std::vector<std::vector<double>> matrix(numPoints,
-                                                                std::vector<double>(numPoints));
+                        std::array<std::array<double, 8>, 8> matrix;
                         for (int i = 0; i < numPoints; ++i) {
                             for (int j = 0; j < numPoints; ++j) {
                                 matrix[i][j] = variogram(euclideanDistance(points[i], points[j]));
@@ -164,7 +163,7 @@ class RAWVolumeData {
                         }
 
                         // 求解克里金权重 (这里使用简单的伪逆法)
-                        std::vector<double> weights(numPoints);
+                        std::array<double, 8> weights;
                         double sumVariogramValues = 0.0;
                         for (int i = 0; i < numPoints; ++i) {
                             sumVariogramValues += variogramValues[i];
@@ -176,7 +175,7 @@ class RAWVolumeData {
                         return weights;
                     };
 
-                std::vector<double> weights = computeKrigingWeights(posInRng, posIn);
+                auto weights = computeKrigingWeights(posInRng, posIn);
                 int index = 0;
                 for (uint8_t zi = 0; zi < 2; ++zi)
                     for (uint8_t yi = 0; yi < 2; ++yi)

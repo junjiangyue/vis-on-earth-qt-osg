@@ -406,7 +406,13 @@ void VIS4Earth::GraphRenderer::loadAndDrawGraph() {
 void VIS4Earth::GraphRenderer::applyParams() {}
 
 void VIS4Earth::GraphRenderer::showGraph() {
+    restrictionOn = false;
+    myRestriction.leftBound = 00.0;
+    myRestriction.rightBound = 00.0;
+    myRestriction.upperBound = 00.0;
+    myRestriction.bottomBound = 00.0;
     auto nodeLayouter = VIS4Earth::NodeLayouter();
+    myGraph.unableNodeRestriction(myRestriction);
     nodeLayouter.setGraph(myGraph);
     nodeLayouter.setParameter(myLayoutParam);
     nodeLayouter.layout(myLayoutParam.Iteration);
@@ -466,7 +472,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
         graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
-        graphParam->restrictionOFF = !restrictionOn;
+        graphParam->restrictionOFF = true;
         graphParam->generateHierarchicalGraphs(nodes, edges);
         graphParam->setLevelGraph(0);
         graphParam->update();

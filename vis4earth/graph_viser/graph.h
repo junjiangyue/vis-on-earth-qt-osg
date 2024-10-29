@@ -385,6 +385,10 @@ struct Graph {
         nodeRestrictionIsOn = true;
         restrictedArea = myRestrictedArea;
     }
+    void unableNodeRestriction(const Area &myRestrictedArea) {
+        nodeRestrictionIsOn = false;
+        restrictedArea = myRestrictedArea;
+    }
 
     void setNetworkParams(double edgeWeightThreshold_, double edgePercentageThreshold_) {
         if (edgeWeightThreshold_ > 0.0) {
