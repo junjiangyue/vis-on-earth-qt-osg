@@ -132,8 +132,8 @@ class TXTVolume {
     }
 
     // static std::vector<std::vector<float>> LoadFromRadarFile(const std::string& filePath,
-    // std::string* errMsg = nullptr) { 	std::ifstream is(filePath); 	if (!is.is_open()) { 		if
-    // (errMsg)
+    // std::string* errMsg = nullptr) { 	std::ifstream is(filePath); 	if (!is.is_open()) {
+    // if (errMsg)
     //			*errMsg = "Invalid File Path";
     //		return std::vector<std::vector<float>>();
     //	}
@@ -272,6 +272,38 @@ class RAWVolume {
         for (size_t i = 0; i < fDat.size(); ++i)
             dat[i] = fDat[i] * 255.f;
         return dat;
+    }
+    static std::vector<float> RoughFloatToSmooth(const std::vector<float> &fDat,
+                                                 const std::array<uint32_t, 3> &dim) {
+        std::vector<float> smoothed(fDat.size());
+        size_t dimYxX = dim[1] * dim[0];
+        auto sample = [&](uint32_t x, uint32_t y, uint32_t z) -> float {
+            x = std::min(x, dim[0] - 1);
+            y = std::min(y, dim[1] - 1);
+            z = std::min(z, dim[2] - 1);
+            return fDat[z * dimYxX + y * dim[0] + x];
+        };
+
+        for (uint32_t z = 0; z < dim[2]; ++z)
+            for (uint32_t y = 0; y < dim[1]; ++y)
+                for (uint32_t x = 0; x < dim[0]; ++x) {
+                    std::array<float, 27> field;
+                    for (int8_t dz = -1; dz < 2; ++dz)
+                        for (int8_t dy = -1; dy < 2; ++dy)
+                            for (int8_t dx = -1; dx < 2; ++dx) {
+                                auto i = (dz + 1) * 9 + (dy + 1) * 3 + (dx + 1);
+                                field[i] = sample(x == 0 && dx < 0 ? x : x + dx,
+                                                  y == 0 && dy < 0 ? y : y + dy,
+                                                  z == 0 && dz < 0 ? z : z + dz);
+                            }
+                    auto &val = smoothed[z * dimYxX + y * dim[0] + x];
+                    val = 0.f;
+                    for (uint8_t i = 0; i < 27; ++i)
+                        val += field[i];
+                    val /= 27.f;
+                }
+
+        return smoothed;
     }
 };
 } // namespace Convertor
