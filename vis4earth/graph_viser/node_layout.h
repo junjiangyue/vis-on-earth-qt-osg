@@ -1,6 +1,10 @@
 ﻿#ifndef VIS4EARTH_GRAPH_VISER_NODE_LAYOUT_H
 #define VIS4EARTH_GRAPH_VISER_NODE_LAYOUT_H
 
+#include <Eigen/Core>
+#include <Eigen/Dense>
+#include <Eigen/IterativeLinearSolvers>
+#include <Eigen/Sparse>
 #include <cmath>
 #include <iostream>
 #include <memory>
@@ -153,7 +157,7 @@ class NodeLayouter {
         auto nodes = graph.getNodes();
         auto nodePairs = graph.getNodePairs();
         auto nodesNotMove = graph.getNodesNotMove();
-
+        // 显式欧拉法
         for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
             std::string n1_id = std::to_string(i);
             if (graph.getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
@@ -198,29 +202,86 @@ class NodeLayouter {
     }
 
     void updateCenterSpring(VIS4Earth::Graph &graph) {
-        double dx, dy, dz, f, fx, fy, fz, d;
         auto nodes = graph.getNodes();
         auto nodesNotMove = graph.getNodesNotMove();
-        for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
+        int n = nodes.size();
+
+        // 初始化 Eigen 矩阵和向量
+        Eigen::VectorXd b(n * 3); // 目标力向量（每个节点的吸引力）
+        Eigen::VectorXd x(n * 3); // 待求解节点位置
+        Eigen::SparseMatrix<double> A(n * 3, n * 3); // 稀疏矩阵表示的力矩阵
+
+        b.setZero(); // 初始化 b 为 0
+        x.setZero(); // 初始化 x 为 0
+
+        std::vector<Eigen::Triplet<double>> coefficients; // 用于高效构造稀疏矩阵 A
+
+        glm::vec3 center = graph.getGravitationCenter(); // 获取重心
+        double attraction = graph.getAttraction();       // 吸引力系数
+
+        // 构造力矩阵和目标向量，同时保留 n1.force 的更新
+        for (int i = 0; i < n; ++i) {
             std::string n1_id = std::to_string(i);
             if (graph.getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
+                // 对静止节点，直接将其位置固定在当前点
+                x(i * 3 + 0) = nodes[n1_id].pos.x;
+                x(i * 3 + 1) = nodes[n1_id].pos.y;
+                x(i * 3 + 2) = nodes[n1_id].pos.z;
                 continue;
             }
+
             Node &n1 = nodes[n1_id];
-            glm::vec3 center = graph.getGravitationCenter();
-            d = distance(n1.pos, center);
-            f = graph.getAttraction() * d * d;
-            dx = n1.pos.x - center.x;
-            dy = n1.pos.y - center.y;
-            dz = n1.pos.z - center.z;
-            fx = f * dx / d;
-            fy = f * dy / d;
-            fz = f * dz / d;
-            n1.force -= glm::vec3(fx, fy, fz);
+
+            // 计算与重心的距离和方向
+            glm::vec3 delta = n1.pos - center;
+            double d = glm::length(delta);
+            if (d < 1e-5) {
+                d = 1e-5; // 避免除以零
+            }
+
+            // 吸引力大小
+            double f = attraction * d * d;
+
+            // 更新 n1.force
+            glm::vec3 force;
+            force.x = static_cast<float>(-f * (delta.x / d));
+            force.y = static_cast<float>(-f * (delta.y / d));
+            force.z = static_cast<float>(-f * (delta.z / d));
+            n1.force += force; // 更新节点力
+
+            // 目标力向量 b
+            b(i * 3 + 0) += n1.force.x;
+            b(i * 3 + 1) += n1.force.y;
+            b(i * 3 + 2) += n1.force.z;
+
+            // 力矩阵对角线系数（自身引力）
+            double coeff = attraction;
+            for (int dim = 0; dim < 3; ++dim) {
+                int i_dim = i * 3 + dim;
+                coefficients.emplace_back(i_dim, i_dim, coeff);
+            }
         }
+
+        // 将 coefficients 转化为稀疏矩阵 A
+        A.setFromTriplets(coefficients.begin(), coefficients.end());
+
+        // 使用共轭梯度法求解 Ax = b
+        Eigen::ConjugateGradient<Eigen::SparseMatrix<double>, Eigen::Lower | Eigen::Upper> solver;
+        solver.setMaxIterations(1000); // 最大迭代次数
+        solver.setTolerance(1e-6);     // 收敛条件
+        solver.compute(A);
+        if (solver.info() != Eigen::Success) {
+            throw std::runtime_error("Error: Unable to factorize matrix A in CG solver!");
+        }
+        x = solver.solve(b);
+        if (solver.info() != Eigen::Success) {
+            throw std::runtime_error("Error: Unable to solve Ax = b in CG solver!");
+        }
+
+        // 将更新后的节点返回到图中
         graph.setNodes(nodes);
     }
-
+    
     void updateLayout(VIS4Earth::Graph &graph, double deltaT) {
         updateRepulsion(graph);
         updateSpring(graph);
@@ -238,35 +299,45 @@ class NodeLayouter {
             std::string n1_id = std::to_string(i);
             // calculate acceleration
             nodes[n1_id].acc = nodes[n1_id].force;
-            // calculate velocity
-            glm::vec3 deltaVelocity = nodes[n1_id].acc;
 
-            deltaVelocity *= deltaT;
-            nodes[n1_id].vel += deltaVelocity;
-            // calculate position change
-            glm::vec3 translation = nodes[n1_id].vel;
-            translation *= deltaT;
-            // TODO: updata pos if new pos is in the restricted area
-            Area restriction = graph.getRestrictedArea();
-            // 计算新的坐标
-            glm::vec3 newPos = nodes[n1_id].pos + translation;
+            // 改进欧拉法 - 中点计算
+            glm::vec3 midVel = nodes[n1_id].vel +
+                               (nodes[n1_id].acc * static_cast<float>(deltaT) * 0.5f); // 中间速度
+            glm::vec3 midPos = nodes[n1_id].pos +
+                               (nodes[n1_id].vel * static_cast<float>(deltaT) * 0.5f); // 中间位置
 
-            // 检查新坐标是否在restrictArea内
-            if (!graph.getNodesRestriction() || !posWithin(restriction, newPos)) {
-                // 循环，直到新坐标在原始范围内
-                while (!(minPos.x <= newPos.x && newPos.x <= maxPos.x && minPos.y <= newPos.y &&
-                         newPos.y <= maxPos.y)) {
-                    // 将translation的值乘以0.5
-                    translation *= 0.5f;
-                    newPos = nodes[n1_id].pos + translation;
+            // 使用中点值更新速度和位置
+            nodes[n1_id].vel += nodes[n1_id].acc * static_cast<float>(deltaT);
+            nodes[n1_id].pos += midVel * static_cast<float>(deltaT);
+
+            glm::vec3 newPos = nodes[n1_id].pos; // 新计算的坐标
+            const int maxIterations = 100;       // 最大迭代次数
+            int iterationCount = 0;
+
+            while (!(minPos.x <= newPos.x && newPos.x <= maxPos.x && minPos.y <= newPos.y &&
+                     newPos.y <= maxPos.y)) {
+                glm::vec3 translation = (newPos - nodes[n1_id].pos) * 0.5f; // 定义并缩小位移
+                newPos = nodes[n1_id].pos + translation;
+
+                iterationCount++;
+                if (iterationCount >= maxIterations || glm::length(translation) < 1e-5f) {
+                    std::cerr << "Warning: Exceeded max iterations or translation too small!"
+                              << std::endl;
+                    // 直接限制在范围内，退出
+                    newPos.x = glm::clamp(newPos.x, minPos.x, maxPos.x);
+                    newPos.y = glm::clamp(newPos.y, minPos.y, maxPos.y);
+                    newPos.z = glm::clamp(newPos.z, minPos.z, maxPos.z);
+                    break;
                 }
-                // 更新坐标
-                nodes[n1_id].pos = newPos;
             }
-            glm::vec3 zero = glm::vec3(0, 0, 0);
-            nodes[n1_id].force = zero;
-            nodes[n1_id].acc = zero;
-            nodes[n1_id].vel *= 0.1;
+            nodes[n1_id].pos = newPos;
+
+            // 清零力和加速度，防止累积
+            nodes[n1_id].force = glm::vec3(0.0f, 0.0f, 0.0f);
+            nodes[n1_id].acc = glm::vec3(0.0f, 0.0f, 0.0f);
+
+            // 速度衰减处理
+            nodes[n1_id].vel *= 0.1f;
         }
         graph.setNodes(nodes);
         updateAllEdges(graph);

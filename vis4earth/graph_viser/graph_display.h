@@ -225,7 +225,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         return nullptr;
     }
     void update(const std::string &graphName);
-    void GraphRenderer::setEdges(const std::string &graphName,
+    void setEdges(const std::string &graphName,
                                  std::shared_ptr<std::vector<Edge>> edges) {
         auto it = graphs.find(graphName);
         if (it != graphs.end()) {
