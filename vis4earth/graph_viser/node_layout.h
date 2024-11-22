@@ -281,7 +281,7 @@ class NodeLayouter {
         // 将更新后的节点返回到图中
         graph.setNodes(nodes);
     }
-    
+
     void updateLayout(VIS4Earth::Graph &graph, double deltaT) {
         updateRepulsion(graph);
         updateSpring(graph);
@@ -299,7 +299,7 @@ class NodeLayouter {
             std::string n1_id = std::to_string(i);
             // calculate acceleration
             nodes[n1_id].acc = nodes[n1_id].force;
-
+            glm::vec3 newPos = nodes[n1_id].pos; // 新计算的坐标
             // 改进欧拉法 - 中点计算
             glm::vec3 midVel = nodes[n1_id].vel +
                                (nodes[n1_id].acc * static_cast<float>(deltaT) * 0.5f); // 中间速度
@@ -308,29 +308,32 @@ class NodeLayouter {
 
             // 使用中点值更新速度和位置
             nodes[n1_id].vel += nodes[n1_id].acc * static_cast<float>(deltaT);
-            nodes[n1_id].pos += midVel * static_cast<float>(deltaT);
+            newPos += midVel * static_cast<float>(deltaT);
 
-            glm::vec3 newPos = nodes[n1_id].pos; // 新计算的坐标
-            const int maxIterations = 100;       // 最大迭代次数
+            const int maxIterations = 100; // 最大迭代次数
             int iterationCount = 0;
-
-            while (!(minPos.x <= newPos.x && newPos.x <= maxPos.x && minPos.y <= newPos.y &&
-                     newPos.y <= maxPos.y)) {
-                glm::vec3 translation = (newPos - nodes[n1_id].pos) * 0.5f; // 定义并缩小位移
-                newPos = nodes[n1_id].pos + translation;
-
-                iterationCount++;
-                if (iterationCount >= maxIterations || glm::length(translation) < 1e-5f) {
-                    std::cerr << "Warning: Exceeded max iterations or translation too small!"
-                              << std::endl;
-                    // 直接限制在范围内，退出
-                    newPos.x = glm::clamp(newPos.x, minPos.x, maxPos.x);
-                    newPos.y = glm::clamp(newPos.y, minPos.y, maxPos.y);
-                    newPos.z = glm::clamp(newPos.z, minPos.z, maxPos.z);
-                    break;
+            Area restriction = graph.getRestrictedArea();
+            glm::vec3 translation = (newPos - nodes[n1_id].pos) * 0.5f; // 定义并缩小位移
+            newPos = nodes[n1_id].pos + translation;
+            // 检查新坐标是否在restrictArea内
+            if (!graph.getNodesRestriction() || !posWithin(restriction, newPos)) {
+                while (!(minPos.x <= newPos.x && newPos.x <= maxPos.x && minPos.y <= newPos.y &&
+                         newPos.y <= maxPos.y)) {
+                    translation *= 0.5f;
+                    newPos = nodes[n1_id].pos + translation;
+                    iterationCount++;
+                    if (iterationCount >= maxIterations || glm::length(translation) < 1e-5f) {
+                        std::cerr << "Warning: Exceeded max iterations or translation too small!"
+                                  << std::endl;
+                        // 直接限制在范围内，退出
+                        newPos.x = glm::clamp(newPos.x, minPos.x, maxPos.x);
+                        newPos.y = glm::clamp(newPos.y, minPos.y, maxPos.y);
+                        newPos.z = glm::clamp(newPos.z, minPos.z, maxPos.z);
+                        break;
+                    }
                 }
+                nodes[n1_id].pos = newPos;
             }
-            nodes[n1_id].pos = newPos;
 
             // 清零力和加速度，防止累积
             nodes[n1_id].force = glm::vec3(0.0f, 0.0f, 0.0f);

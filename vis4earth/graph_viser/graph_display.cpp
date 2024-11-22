@@ -343,7 +343,6 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
             nodes->emplace(std::make_pair(itr->first, node));
             ++i;
         }
-        // pos有问题
         for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
             edges->emplace_back();
 
@@ -362,6 +361,10 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
             }
         }
         myGraph = graph;
+        myRestriction.bottomBound = 0.0;
+        myRestriction.leftBound = 0.0;
+        myRestriction.rightBound = 0.0;
+        myRestriction.upperBound = 0.0;
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
         auto graphParam = getGraph("LoadedGraph");
@@ -482,13 +485,13 @@ void VIS4Earth::GraphRenderer::showGraph() {
 void VIS4Earth::GraphRenderer::showBundling() {
     auto edgeBundling = VIS4Earth::EdgeBundling();
     edgeBundling.SetGraph(myGraph);
-    glm::vec3 gravitationCenter(40.0, 0.0, 0.0);
+    glm::vec3 gravitationCenter(40.0, 10.0, 0.0);
     mybundlingParam.K = 0.1, mybundlingParam.cycles = 5, mybundlingParam.I = 90,
     mybundlingParam.compatibilityThreshold = 0.6, mybundlingParam.smoothWidth = 3,
     mybundlingParam.edgeWeightThreshold = -1.0, mybundlingParam.edgePercentageThreshold = -1.0,
     mybundlingParam.S = 0.4, mybundlingParam.edgeDistance = 1e-4,
     mybundlingParam.gravitationCenter = gravitationCenter,
-    mybundlingParam.gravitationExponent = 1.0;
+    mybundlingParam.gravitationExponent = -10.0;
 
     edgeBundling.SetParameter(mybundlingParam);
     edgeBundling.EdgeBundle();
@@ -1472,9 +1475,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
         // TODO: 加入文字避让
         text->setPosition(p +
-                          osg::Vec3(itr->second.size * 0.5f * nodeGeomSize,
-                                    itr->second.size * 1.0f * nodeGeomSize,
-                                    itr->second.size * 0.25f *
+                          osg::Vec3(itr->second.size * 0.25f * nodeGeomSize,
+                                    itr->second.size * 0.25f * nodeGeomSize,
+                                    itr->second.size * 0.55f *
                                         nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
         // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
