@@ -71,8 +71,6 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
             &GraphRenderer::setRegionRestriction);
-    /*connect(ui->checkBoxRegionRestriction, &QCheckBox::toggled, this,
-                    &GraphRenderer::setRegionRestriction);*/
     connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setMinX);
     connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -85,18 +83,6 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     // 连接全局弹簧常数 (K)
     connect(ui->spinBoxGlobalSpringConstant, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphRenderer::onGlobalSpringConstantChanged);
-
-    //// 连接迭代次数 (I)
-    // connect(ui->spinBoxNumberOfIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
-    //         &GraphRenderer::onNumberOfIterationsChanged);
-
-    //// 连接剩余迭代次数 (iter)
-    // connect(ui->spinBoxRemainingIterations, QOverload<int>::of(&QSpinBox::valueChanged), this,
-    //         &GraphRenderer::onRemainingIterationsChanged);
-
-    //// 连接剩余循环数
-    // connect(ui->spinBoxCyclesLeft, QOverload<int>::of(&QSpinBox::valueChanged), this,
-    //         &GraphRenderer::onCyclesLeftChanged);
 
     // 连接兼容性阈值
     connect(ui->spinBoxCompatibilityThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
@@ -114,21 +100,6 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::onEdgeDistanceChanged);
 
-    //// 连接引力开启
-    // connect(ui->checkBoxGravitationIsOn, &QCheckBox::toggled, this,
-    //         &GraphRenderer::onGravitationIsOnToggled);
-
-    //// 连接引力中心
-    // connect(ui->spinBoxGravitationCenterX, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onGravitationCenterXChanged);
-    // connect(ui->spinBoxGravitationCenterY, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onGravitationCenterYChanged);
-    // connect(ui->spinBoxGravitationCenterZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onGravitationCenterZChanged);
-
-    //// 连接引力指数
-    // connect(ui->spinBoxGravitationExponent, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onGravitationExponentChanged);
 
     // 连接边权重阈值
     connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),

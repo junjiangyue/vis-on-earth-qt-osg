@@ -25,15 +25,15 @@ bool NodeClickHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIAction
 
                     if (sphere) {
 
-                        std::cout << "You clicked on a sphere!" << std::endl;
+                        //std::cout << "You clicked on a sphere!" << std::endl;
                         std::string nodeId = getNodeIdFromSphere(sphere);
                         if (nodeId.empty()) {
-                            std::cout << "Node ID is Null " << std::endl;
+                            //std::cout << "Node ID is Null " << std::endl;
                             continue;
                         }
 
                         // 打印点击的节点 ID
-                        std::cout << "Clicked Node ID: " << nodeId << std::endl;
+                       // std::cout << "Clicked Node ID: " << nodeId << std::endl;
 
                         if (collapsedNodes.find(nodeId) != collapsedNodes.end()) {
                             expandNode(nodeId);
@@ -217,16 +217,16 @@ std::string NodeClickHandler::getNodeIdFromSphere(osg::ShapeDrawable *sphere) {
             if (!vec3Array->empty()) {
                 // 获取第一个 Vec3 数据
                 sphereCenter = vec3Array->at(0);
-                std::cout << "First Vec3: (" << sphereCenter.x() << ", " << sphereCenter.y() << ", "
-                          << sphereCenter.z() << ")" << std::endl;
+                //std::cout << "First Vec3: (" << sphereCenter.x() << ", " << sphereCenter.y() << ", "
+                 //         << sphereCenter.z() << ")" << std::endl;
             } else {
-                std::cout << "Vec3Array is empty" << std::endl;
+                //std::cout << "Vec3Array is empty" << std::endl;
             }
         } else {
-            std::cout << "User data is not of type osg::Vec3Array" << std::endl;
+            //std::cout << "User data is not of type osg::Vec3Array" << std::endl;
         }
     } else {
-        std::cout << "User data is null" << std::endl;
+       // std::cout << "User data is null" << std::endl;
     }
 
     // 查找与 sphereCenter 匹配的节点 ID
@@ -238,7 +238,7 @@ std::string NodeClickHandler::getNodeIdFromSphere(osg::ShapeDrawable *sphere) {
             }
         }
     }
-    std::cout << "No matching node found" << std::endl;
+    //std::cout << "No matching node found" << std::endl;
     return "";
 }
 } // namespace VIS4Earth
