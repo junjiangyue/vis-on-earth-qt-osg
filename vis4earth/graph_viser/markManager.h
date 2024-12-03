@@ -24,12 +24,16 @@ struct Marker {
     std::string label;
     double lat;
     double lon;
-    osg::Vec3 position;   // 用于存储球面坐标
+    osg::Vec3 position;  // 用于存储球面坐标
     bool visible = true; // 用于标记是否显示标签
 };
 struct ViewExtent {
     double minLon, maxLon;
     double minLat, maxLat;
+};
+
+struct GridCell {
+    std::vector<osg::Vec3> positions; // 存储网格内的标签位置
 };
 
 class EarthMarkerManager {
@@ -114,7 +118,6 @@ class EarthMarkerManager {
         updateLabelVisibility();
         _root->removeChildren(1, _root->getNumChildren() - 1);
         _root->addChild(createMarkerGeometry(_visibleMarkers));
-        
     }
 
   private:
@@ -133,8 +136,26 @@ class EarthMarkerManager {
 
     osg::ref_ptr<osgText::Font> _font; // 缓存字体对象
 
-    constexpr static double WGS_84_RADIUS_POLAR = 6356752.3142;
+    std::mutex gridMutex; // 定义一个互斥锁来保护 grid 访问
 
+    constexpr static double WGS_84_RADIUS_POLAR = 6356752.3142;
+    // 网格化设置
+    float gridLongitudeSpan = 5.0f; // 每个网格的经度跨度（单位：度）
+    float gridLatitudeSpan = 5.0f;  // 每个网格的纬度跨度（单位：度）
+
+    // 根据经纬度划分网格的行列
+    int numLongitudeCells = 72; // 经度的网格数量，全球范围 -180 到 180 度
+    int numLatitudeCells = 36;  // 纬度的网格数量，全球范围 -90 到 90 度
+
+    int getGridRow(double lat) {
+        // 纬度范围 -90 到 90，按照每个网格的纬度跨度计算网格的行
+        return std::min(std::max(int((lat + 90.0) / gridLatitudeSpan), 0), numLatitudeCells - 1);
+    }
+
+    int getGridCol(double lon) {
+        // 经度范围 -180 到 180，按照每个网格的经度跨度计算网格的列
+        return std::min(std::max(int((lon + 180.0) / gridLongitudeSpan), 0), numLongitudeCells - 1);
+    }
     // 经纬度转球面坐标
     osg::Vec3 latLonToSphere(double lon, double lat, double offset = 50000.0) {
         double radLat = osg::DegreesToRadians(lat);
@@ -149,53 +170,54 @@ class EarthMarkerManager {
 
     // 获取视图范围（假设全球范围）
     ViewExtent getViewExtent() {
-        //osg::Viewport *viewport = _camera->getViewport();
+        // osg::Viewport *viewport = _camera->getViewport();
 
         //// 获取相机的投影矩阵和视图矩阵
-        //osg::Matrixd projectionMatrix = _camera->getProjectionMatrix();
-        //osg::Matrixd viewMatrix = _camera->getViewMatrix();
+        // osg::Matrixd projectionMatrix = _camera->getProjectionMatrix();
+        // osg::Matrixd viewMatrix = _camera->getViewMatrix();
 
         //// 合成视图矩阵和投影矩阵
-        //osg::Matrixd projectionViewMatrix = projectionMatrix * viewMatrix;
+        // osg::Matrixd projectionViewMatrix = projectionMatrix * viewMatrix;
 
         //// 计算投影视图矩阵的逆矩阵
-        //osg::Matrixd invProjectionView = projectionViewMatrix.inverse(invProjectionView);
+        // osg::Matrixd invProjectionView = projectionViewMatrix.inverse(invProjectionView);
 
         //// 定义屏幕的四个角的 NDC 坐标
-        //osg::Vec3d lowerLeft(-1.0, -1.0, -1.0); // 左下角
-        //osg::Vec3d lowerRight(1.0, -1.0, -1.0); // 右下角
-        //osg::Vec3d upperLeft(-1.0, 1.0, -1.0);  // 左上角
-        //osg::Vec3d upperRight(1.0, 1.0, -1.0);  // 右上角
+        // osg::Vec3d lowerLeft(-1.0, -1.0, -1.0); // 左下角
+        // osg::Vec3d lowerRight(1.0, -1.0, -1.0); // 右下角
+        // osg::Vec3d upperLeft(-1.0, 1.0, -1.0);  // 左上角
+        // osg::Vec3d upperRight(1.0, 1.0, -1.0);  // 右上角
 
         //// 将 NDC 坐标转换为世界坐标
-        //osg::Vec3d worldLowerLeft = lowerLeft * invProjectionView;
-        //osg::Vec3d worldLowerRight = lowerRight * invProjectionView;
-        //osg::Vec3d worldUpperLeft = upperLeft * invProjectionView;
-        //osg::Vec3d worldUpperRight = upperRight * invProjectionView;
+        // osg::Vec3d worldLowerLeft = lowerLeft * invProjectionView;
+        // osg::Vec3d worldLowerRight = lowerRight * invProjectionView;
+        // osg::Vec3d worldUpperLeft = upperLeft * invProjectionView;
+        // osg::Vec3d worldUpperRight = upperRight * invProjectionView;
 
         //// 经纬度转换函数，假设是球面坐标
-        //auto latLonFromWorldCoords = [](const osg::Vec3d &worldPos) -> std::pair<double, double> {
-        //    double lat = osg::RadiansToDegrees(asin(worldPos.z() / WGS_84_RADIUS_POLAR));
-        //    double lon = osg::RadiansToDegrees(atan2(worldPos.y(), worldPos.x()));
-        //    return {lat, lon};
-        //};
+        // auto latLonFromWorldCoords = [](const osg::Vec3d &worldPos) -> std::pair<double, double>
+        // {
+        //     double lat = osg::RadiansToDegrees(asin(worldPos.z() / WGS_84_RADIUS_POLAR));
+        //     double lon = osg::RadiansToDegrees(atan2(worldPos.y(), worldPos.x()));
+        //     return {lat, lon};
+        // };
 
         //// 将世界坐标转换为经纬度
-        //std::pair<double, double> lowerLeftLatLon = latLonFromWorldCoords(worldLowerLeft);
-        //double minLat = lowerLeftLatLon.first;
-        //double minLon = lowerLeftLatLon.second;
+        // std::pair<double, double> lowerLeftLatLon = latLonFromWorldCoords(worldLowerLeft);
+        // double minLat = lowerLeftLatLon.first;
+        // double minLon = lowerLeftLatLon.second;
 
-        //std::pair<double, double> upperRightLatLon = latLonFromWorldCoords(worldUpperRight);
-        //double maxLat = upperRightLatLon.first;
-        //double maxLon = upperRightLatLon.second;
+        // std::pair<double, double> upperRightLatLon = latLonFromWorldCoords(worldUpperRight);
+        // double maxLat = upperRightLatLon.first;
+        // double maxLon = upperRightLatLon.second;
 
         //// 为了确保结果不出错，我们应该保证经度范围在 [-180, 180] 范围内
-        //if (maxLon < minLon) {
-        //    std::swap(minLon, maxLon);
-        //}
+        // if (maxLon < minLon) {
+        //     std::swap(minLon, maxLon);
+        // }
 
         // return {minLon, maxLon, minLat, maxLat};
-        return {-60.0, 60.0, -50.0, 50.0};
+        return {-10.0, 10.0, -90.0, 90.0};
     }
 
     // 筛选视图范围内的标记
@@ -264,7 +286,7 @@ class EarthMarkerManager {
 
         return R * 2 * atan2(sqrt(a), sqrt(1 - a)); // 返回两个点之间的距离（公里）
     }
-    
+
     // 计算相机与标签的距离
     float calculateDistanceToCamera(const osg::Vec3 &cameraPos, const osg::Vec3 &labelPos) {
         return (cameraPos - labelPos).length();
@@ -278,8 +300,8 @@ class EarthMarkerManager {
 
         // 基于距离的线性插值调整字体大小
         float fontSize = maxFontSize * (distance / 9000.0f); // 距离大，字体大
-        //fontSize =
-        //    std::max(minFontSize, std::min(maxFontSize, fontSize)); // 确保字体大小在合理范围内
+        // fontSize =
+        //     std::max(minFontSize, std::min(maxFontSize, fontSize)); // 确保字体大小在合理范围内
 
         return fontSize;
     }
@@ -291,7 +313,8 @@ class EarthMarkerManager {
         osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry();
         osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array();
         osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array();
-       
+        std::vector<osg::ref_ptr<osgText::Text>> textNodes;
+
         // 创建标记点
         for (const auto &marker : markers) {
             osg::Vec3 position = latLonToSphere(marker.lon, marker.lat);
@@ -312,9 +335,10 @@ class EarthMarkerManager {
                 label->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置标签颜色为白色
 
                 geode->addDrawable(label.get());
+                textNodes.push_back(label);
             }
         }
-
+        adjustMarkTextPosition(textNodes);
         geometry->setVertexArray(vertices);
         geometry->setColorArray(colors, osg::Array::BIND_PER_VERTEX);
         geometry->addPrimitiveSet(new osg::DrawArrays(GL_POINTS, 0, vertices->size()));
@@ -330,49 +354,170 @@ class EarthMarkerManager {
         geode->addDrawable(geometry);
         return geode;
     }
+    // 检查两个矩形是否重叠，并返回重叠的距离
+    osg::Vec3 calculateTextOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
+        float overlapY = std::min(bb1.yMax(), bb2.yMax()) - std::max(bb1.yMin(), bb2.yMin());
+        float overlapZ = std::min(bb1.zMax(), bb2.zMax()) - std::max(bb1.zMin(), bb2.zMin());
+        return osg::Vec3(0.0f, overlapY, overlapZ);
+    }
 
+    // 检查两个矩形是否重叠
+    bool checkTextOverlap(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
+        return !(bb1.zMax() < bb2.zMin() || bb1.zMin() > bb2.zMax() || bb1.yMax() < bb2.yMin() ||
+                 bb1.yMin() > bb2.yMax());
+    }
+    // 调整文字位置以避免重叠
+    void adjustMarkTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts) {
+        for (size_t i = 0; i < texts.size(); ++i) {
+            osg::BoundingBox bb1 = texts[i]->getBoundingBox();
+            for (size_t j = 0; j < i; ++j) {
+                osg::BoundingBox bb2 = texts[j]->getBoundingBox();
+                if (checkTextOverlap(bb1, bb2)) {
+                    osg::Vec3 overlap = calculateTextOverlapDistance(bb1, bb2);
+                    osg::Vec3 pos1 = texts[i]->getPosition();
+                    osg::Vec3 pos2 = texts[j]->getPosition();
+
+                    // y 代表上下，z 代表左右
+                    if (pos1.y() < pos2.y()) {
+                        pos1.y() -= overlap.y() / 2;
+                        pos2.y() += overlap.y() / 2;
+                    } else {
+                        pos1.y() += overlap.y() / 2;
+                        pos2.y() -= overlap.y() / 2;
+                    }
+
+                    if (pos1.z() < pos2.z()) {
+                        pos1.z() -= overlap.z() / 2;
+                        pos2.z() += overlap.z() / 2;
+                    } else {
+                        pos1.z() += overlap.z() / 2;
+                        pos2.z() -= overlap.z() / 2;
+                    }
+
+                    texts[i]->setPosition(pos1);
+                    texts[j]->setPosition(pos2);
+
+                    bb1 = texts[i]->getBoundingBox();
+                    bb2 = texts[j]->getBoundingBox();
+                }
+            }
+        }
+    }
     // 更新标签的可见性并判断是否被遮挡
     void updateLabelVisibility() {
+        std::vector<std::vector<GridCell>> grid(numLatitudeCells,
+                                                std::vector<GridCell>(numLongitudeCells));
+
         osg::Vec3 cameraPos = _camera->getViewMatrix().getTrans(); // 获取相机位置
         fontSize = calculateFontSize(cameraPos, _visibleMarkers[0].position);
         osg::Viewport *viewport = _camera->getViewport();
         std::vector<osg::Vec3> screenPositions;
-
+        // 计算世界坐标到屏幕坐标的转换
+        osg::Matrixd MVP = _camera->getViewMatrix() * _camera->getProjectionMatrix();
+        // 可视性检测的阈值
+        float overlapThreshold = 100.0f;
         for (auto &marker : _visibleMarkers) {
             if (!marker.visible)
                 continue; // 跳过不显示标签的点
 
             osg::Vec3 worldPos = marker.position;
-            // 计算世界坐标到屏幕坐标的转换
-            osg::Matrixd MVP = _camera->getViewMatrix() * _camera->getProjectionMatrix();
             osg::Vec3 screenPos = worldPos * MVP;
 
             // 将标准化设备坐标(NDC)转换为屏幕坐标
             screenPos.x() = (screenPos.x() * 0.5 + 0.5) * viewport->width();
             screenPos.y() = (screenPos.y() * 0.5 + 0.5) * viewport->height();
-
-            // 判断标签是否在屏幕范围内
             bool visible = (screenPos.x() >= 0.0 && screenPos.x() <= viewport->width()) &&
                            (screenPos.y() >= 0.0 && screenPos.y() <= viewport->height());
+            // 将世界坐标转换为经纬度
+            double lat = osg::RadiansToDegrees(asin(worldPos.z() / WGS_84_RADIUS_POLAR));
+            double lon = osg::RadiansToDegrees(atan2(worldPos.y(), worldPos.x()));
 
-            if (visible) {
-                // 检查标签是否与其他标签重叠
-                for (const auto &otherPos : screenPositions) {
-                    if (fabs(screenPos.x() - otherPos.x()) < 50.0 &&
-                        fabs(screenPos.y() - otherPos.y()) < 50.0) {
-                        visible = false;
-                        break;
+            // 计算标签所在网格的行列
+            int gridRow = getGridRow(lat);
+            int gridCol = getGridCol(lon);
+            if (gridRow < 0 || gridRow >= numLatitudeCells) {
+                std::cout << "chucuol ";
+            }
+            if (gridCol < 0 || gridCol >= numLongitudeCells) {
+                std::cout << "chucuol ";
+            }
+
+            // 检查当前网格和相邻的网格
+            for (int i = -1; i <= 1; ++i) {
+                for (int j = -1; j <= 1; ++j) {
+                    int neighborRow = gridRow + i;
+                    int neighborCol = gridCol + j;
+
+                    if (neighborRow >= 0 && neighborRow < numLatitudeCells && neighborCol >= 0 &&
+                        neighborCol < numLongitudeCells) {
+
+                        for (const auto &otherPos : grid[neighborRow][neighborCol].positions) {
+                            // 检查标签之间是否有重叠
+                            if (fabs(screenPos.x() - otherPos.x()) < overlapThreshold &&
+                                fabs(screenPos.y() - otherPos.y()) < overlapThreshold) {
+                                visible = false;
+                                break;
+                            }
+                        }
+
+                        if (!visible)
+                            break;
                     }
                 }
+                if (!visible)
+                    break;
             }
 
             // 设置标签的可见性
             marker.visible = visible;
 
-            if (visible) {
-                screenPositions.push_back(screenPos);
+            // 使用互斥锁保护对 grid 的访问
+            {
+                std::lock_guard<std::mutex> lock(gridMutex); // 加锁
+                if (visible) {
+                    // 将标签位置添加到相应的网格
+                    grid[gridRow][gridCol].positions.push_back(screenPos);
+                }
             }
         }
+         //for (auto &marker : _visibleMarkers) {
+         //    if (!marker.visible)
+         //        continue; // 跳过不显示标签的点
+
+         //   osg::Vec3 worldPos = marker.position;
+        
+         //   osg::Vec3 screenPos = worldPos * MVP;
+
+         //   // 将标准化设备坐标(NDC)转换为屏幕坐标
+         //   screenPos.x() = (screenPos.x() * 0.5 + 0.5) * viewport->width();
+         //   screenPos.y() = (screenPos.y() * 0.5 + 0.5) * viewport->height();
+
+         //   // 判断标签是否在屏幕范围内
+         //   bool visible = (screenPos.x() >= 0.0 && screenPos.x() <= viewport->width()) &&
+         //                  (screenPos.y() >= 0.0 && screenPos.y() <= viewport->height());
+
+         //   if (visible) {
+
+         //       // 优化：提前计算哪些标签是重叠的
+         //       bool overlapFound = false;
+         //       // 检查标签是否与其他标签重叠
+         //       for (const auto &otherPos : screenPositions) {
+         //           if (fabs(screenPos.x() - otherPos.x()) < overlapThreshold &&
+         //               fabs(screenPos.y() - otherPos.y()) < overlapThreshold) {
+         //               visible = false;
+         //               break;
+         //           }
+         //       }
+
+         //   }
+
+         //   // 设置标签的可见性
+         //   marker.visible = visible;
+
+         //   if (visible) {
+         //       screenPositions.push_back(screenPos);
+         //   }
+         //}
     }
 };
 
