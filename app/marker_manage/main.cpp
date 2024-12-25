@@ -1,4 +1,4 @@
-ï»¿#include <iostream>
+#include <iostream>
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QFileDialog>
@@ -35,16 +35,23 @@ int main(int argc, char **argv) {
 
     osg::ref_ptr<osg::Camera> camera = viewer->getCamera();
 
-    VIS4Earth::GraphRenderer *graphLayout = new VIS4Earth::GraphRenderer;
+    // ´´½¨µØÇòºÍ±ê¼Ç¹ÜÀíÆ÷
+    EarthMarkerManager *manager = new EarthMarkerManager(grp, camera);
+    manager->loadMarkers(DATA_PATH_PREFIX "usairportsfull.csv");
+    viewer->getCamera()->setFinalDrawCallback(new UpdateMarkersCallback(manager));
+    HoverEventHandler *nodeHoverHandler = new HoverEventHandler(manager, viewer);
+    viewer->addEventHandler(nodeHoverHandler);
 
-    grp->addChild(graphLayout->getGroup());
-    graphLayout->show();
+    // VIS4Earth::GraphRenderer *graphLayout = new VIS4Earth::GraphRenderer;
 
-    // æ·»åŠ ç‚¹å‡»äº‹ä»¶
-    VIS4Earth::NodeClickHandler *nodeClickHandler =
-         new VIS4Earth::NodeClickHandler(graphLayout, viewer);
-    // å°† NodeClickHandler æ·»åŠ åˆ° Viewer çš„äº‹ä»¶å¤„ç†å™¨ä¸­
-    viewer->addEventHandler(nodeClickHandler);
+    // grp->addChild(graphLayout->getGroup());
+    // graphLayout->show();
+
+    //// Ìí¼Óµã»÷ÊÂ¼þ
+    // VIS4Earth::NodeClickHandler *nodeClickHandler =
+    //      new VIS4Earth::NodeClickHandler(graphLayout, viewer);
+    //// ½« NodeClickHandler Ìí¼Óµ½ Viewer µÄÊÂ¼þ´¦ÀíÆ÷ÖÐ
+    // viewer->addEventHandler(nodeClickHandler);
 
     viewer->setSceneData(grp);
     auto prevClk = clock();

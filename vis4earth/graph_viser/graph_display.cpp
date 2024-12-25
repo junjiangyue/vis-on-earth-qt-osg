@@ -1518,7 +1518,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
         auto states = geom->getOrCreateStateSet();
         states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-        auto lw = new osg::LineWidth(2.f);
+        auto lw = new osg::LineWidth(1.f);
         states->setAttribute(lw, osg::StateAttribute::ON);
 
         geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
