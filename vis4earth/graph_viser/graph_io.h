@@ -247,7 +247,7 @@ class GraphLoader {
 
         VIS4Earth::Graph graph;
         graph.set(read_nodes, allEdges);
-        graph.calculateGeoNodeLevel();
+        // graph.calculateGeoNodeLevel();
         return graph;
     }
     static VIS4Earth::Graph LoadFromNoGeoFile(const std::string &nodesFile,

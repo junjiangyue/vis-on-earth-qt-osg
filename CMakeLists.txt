@@ -1,5 +1,7 @@
 ﻿cmake_minimum_required(VERSION 3.18)
-
+if (MSVC)
+    add_compile_options(/FS)
+endif()
 project("vis-on-earth-osg-qt" LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)

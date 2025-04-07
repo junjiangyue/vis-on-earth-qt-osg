@@ -286,10 +286,10 @@ struct Graph {
   private:
     std::unordered_map<std::string, Node> nodes;
     std::vector<Edge> edges;
-    std::unordered_map<std::string, std::vector<std::string>>
-        adj_list; // 邻接表，键为 string 类型的节点 id
+    std::unordered_map<std::string, std::vector<std::string>> adj_list;
     std::unordered_set<std::pair<int, int>, pair_hash> nodePairs;
     std::unordered_set<int> nodesNotMove;
+    bool compatibilityListsBuilt = false;
 
     double K;
     int I;
@@ -485,7 +485,13 @@ struct Graph {
         for (const auto &edge : edges) {
             nodePairs.insert({std::stoi(edge.sourceLabel), std::stoi(edge.targetLabel)});
         }
-        buildCompatibilityLists();
+    }
+
+    void buildCompatibilityListsIfNeeded() {
+        if (!compatibilityListsBuilt) {
+            buildCompatibilityLists();
+            compatibilityListsBuilt = true;
+        }
     }
 
     static double distance(const glm::vec3 &v1, const glm::vec3 &v2) {

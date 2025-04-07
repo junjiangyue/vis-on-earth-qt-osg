@@ -97,7 +97,7 @@ class HoverEventHandler : public osgGA::GUIEventHandler {
                          osg::Geometry *geometry, osg::FloatArray *vertexIDs) {
         if (!geometry || !vertexIDs)
             return -1;
-        float distanceThreshold = 65000.0f;
+        float distanceThreshold = 70000.0f;
         // 检查 indexList
         if (!intersection.indexList.empty()) {
             unsigned int hitVertexIndex = intersection.indexList[0];

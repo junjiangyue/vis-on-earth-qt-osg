@@ -4,6 +4,11 @@
 #include <ui_graph_layout.h>
 
 #include "LOUVAIN.h"
+#include "graph_draw.h"
+// #include <osg/Program>
+// #include <osg/Shader>
+// #include <osg/Uniform>
+// #include <osgDB/FileUtils>
 #include <osgText/Font>
 #include <osgText/Text>
 
@@ -100,7 +105,6 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::onEdgeDistanceChanged);
 
-
     // 连接边权重阈值
     connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, &GraphRenderer::onEdgeWeightThresholdChanged);
@@ -110,8 +114,8 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::onEdgePercentageThresholdChanged);
     // 连接箭头流动
-    connect(ui->arrowFlowButton, &QPushButton::clicked, this,
-            &GraphRenderer::onArrowFlowButtonClicked);
+    /*connect(ui->arrowFlowButton, &QPushButton::clicked, this,
+            &GraphRenderer::onArrowFlowButtonClicked);*/
     connect(ui->highlightFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onHighlightFlowButtonClicked);
     connect(ui->textureFlowButton, &QPushButton::clicked, this,
@@ -188,7 +192,26 @@ void VIS4Earth::GraphRenderer::loadEdgesCSV() {
     // 设置文件路径到对应的文本框
     ui->edgesFilePath->setText(edgesFileName);
 }
+
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
+    //   加载城市建筑物的 OBB 数据
+    VIS4Earth::CityLoader cityLoader;
+    if (!cityLoader.loadBuildingsFromCSV(DATA_PATH_PREFIX "buildings_obb.csv")) {
+        std::cerr << "Failed to load building data!" << std::endl;
+    }
+
+    // 设置经纬度范围（lat_min, lon_min）到（lat_max, lon_max）
+    std::vector<std::pair<float, float>> latLonBounds = {
+        {20.0f, -85.0f}, // 经纬度范围的左下角
+        {41.0f, -74.0f}  // 经纬度范围的右上角
+    };
+
+    // 设置比例因子，将建筑物的尺寸映射到地球表面
+    float scale = 1000.f; // 可调整的比例因子，根据需要调整
+
+    // 绘制建筑物
+    cityLoader.drawBuildings(param.grp, latLonBounds, scale);
+    heightMap = cityLoader.getHeightMap();
     QString pointsFileName = ui->pointsFilePath->text();
     QString edgesFileName = ui->edgesFilePath->text();
 
@@ -252,6 +275,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         auto graphParam = getGraph("LoadedGraph");
         if (graphParam) {
             graphParam->graphTypeIndex = graphTypeIndex;
+            graphParam->heightMap = heightMap;
             graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
             graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
             graphParam->setHeightFromCenterRange(
@@ -259,12 +283,14 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
                 static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
             graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-            graphParam->generateHierarchicalGraphs(nodes, edges);
-            graphParam->setLevelGraph(0);
+            // graphParam->generateHierarchicalGraphs(nodes, edges);
+            // graphParam->setLevelGraph(0);
             graphParam->update();
+            // loadMarker();
         }
         myGraph = graph;
-        // 初始化 UI
+        // myGraph.buildCompatibilityListsIfNeeded();
+        //  初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
         QString text =
             QString("当前坐标范围: 最低纬度: %1, 最高纬度: %2, 最大经度: %3, 最小经度: %4")
@@ -340,7 +366,8 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         addGraph("LoadedGraph", nodes, edges);
         auto graphParam = getGraph("LoadedGraph");
         graphParam->graphTypeIndex = graphTypeIndex;
-        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->heightMap = heightMap;
+        // graphParam->generateHierarchicalGraphs(nodes, edges);
         graphParam->setLevelGraph(0);
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
@@ -364,6 +391,170 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
 
     } catch (const std::exception &e) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
+    }
+}
+void sphereToLatLon(const osg::Vec3 &point, double &lon, double &lat, double offset = 60000.0) {
+    double radius = osg::WGS_84_RADIUS_POLAR + offset;
+    double x = point.x();
+    double y = point.y();
+    double z = point.z();
+
+    // 计算纬度
+    lat = std::asin(z / radius);
+    // 计算经度
+    lon = std::atan2(y, x);
+
+    // 将弧度转换为角度
+    lat = osg::RadiansToDegrees(lat);
+    lon = osg::RadiansToDegrees(lon);
+}
+
+void VIS4Earth::GraphRenderer::loadMarker() {
+
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+
+        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
+
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
+
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
+
+        return ret;
+    };
+
+    // 检查camera是否已设置
+    if (!param._camera) {
+        std::cerr << "Camera not set!" << std::endl;
+        return;
+    }
+
+    // 创建屏幕网格系统
+    ScreenGrid screenGrid(1000, 1000, 20.0f, 20.0f);
+
+    auto graphParam = getGraph("LoadedGraph");
+    if (!graphParam)
+        return;
+    // graphParam->grp->removeChildren(0, graphParam->grp->getNumChildren());
+    auto nodes = graphParam->getNodes();
+    if (!nodes)
+        return;
+
+    std::vector<osg::ref_ptr<osgText::Text>> textNodes;
+
+    for (const auto &nodePair : *nodes) {
+        const auto &node = nodePair.second;
+        if (!node.visible)
+            continue;
+
+        // 获取节点在屏幕空间的位置
+        osg::Vec3 worldPos = vec3ToSphere(node.pos);
+        osg::Vec3 screenPos = projectToScreen(worldPos, param._camera);
+        std::pair<int, int> gridCoords = screenGrid.screenToGrid(screenPos.x(), screenPos.y());
+
+        // 创建文本标签
+        osg::ref_ptr<osgText::Text> label = new osgText::Text;
+
+        label->setText(nodePair.first);
+        label->setFont("Fonts/simhei.ttf");
+        label->setAxisAlignment(osgText::Text::SCREEN);
+        label->setCharacterSize(graphParam->textSize ? graphParam->textSize * 0.25
+                                                     : graphParam->nodeGeomSize * 0.25);
+        // label->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
+        auto bbx = label->getBoundingBox();
+        //// 找到bbx的宽度经纬度
+        double lonMin, latMin, lonMax, latMax;
+        sphereToLatLon(bbx._min, lonMin, latMin);
+        sphereToLatLon(bbx._max, lonMax, latMax);
+        double lonDiff = abs(lonMax - lonMin);
+        double latDiff = abs(latMax - latMin);
+        if (node.isHover) {
+            label->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f));
+        } else {
+            label->setColor(osg::Vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        }
+
+        //// 检查网格占用情况
+        if (screenGrid.isOccupied(gridCoords.first, gridCoords.second)) {
+            // 寻找替代位置
+            bool foundSpace = false;
+            osg::Vec3 newLabelPosition;
+            for (int dx = -1; dx <= 1 && !foundSpace; dx++) {
+                for (int dy = -1; dy <= 1 && !foundSpace; ++dy) {
+                    int newDx = dx;
+                    if (dy == 0) {
+                        if (dx > -2 && dx < 1)
+                            newDx = -3;
+                        if (dx == 1) {
+                            newDx = 1;
+                        }
+                    }
+                    int newGridX = gridCoords.first + newDx;
+                    int newGridY = gridCoords.second + dy;
+
+                    if (newGridX < 0 || newGridX >= (1000 / 20) || newGridY < 0 ||
+                        newGridY >= (1000 / 20))
+                        continue;
+
+                    if (!screenGrid.isOccupied(newGridX, newGridY) &&
+                        !screenGrid.isOccupied(newGridX + 1, newGridY) &&
+                        !screenGrid.isOccupied(newGridX + 2, newGridY)) {
+
+                        // 计算新的标签位置
+                        osg::Vec3 newPos = node.pos;
+                        newPos.x() += newDx * lonDiff * 200;
+                        newPos.y() += dy * latDiff * 200;
+                        label->setPosition(vec3ToSphere(newPos));
+                        textNodes.push_back(label);
+                        osg::ref_ptr<osg::Geode> geode = new osg::Geode;
+                        geode->addDrawable(label.get());
+                        graphParam->grp->addChild(geode.get());
+
+                        // 标记网格为已占用
+                        screenGrid.markOccupied(newGridX, newGridY);
+                        screenGrid.markOccupied(newGridX + 1, newGridY);
+                        screenGrid.markOccupied(newGridX + 2, newGridY);
+                        foundSpace = true;
+                    }
+                }
+            }
+
+            if (!foundSpace) {
+                // 如果找不到合适位置，隐藏标签
+                label->setNodeMask(0x0);
+            }
+        } else {
+            // 如果当前位置未被占用，直接使用
+            label->setPosition(worldPos);
+            textNodes.push_back(label);
+            osg::ref_ptr<osg::Geode> geode = new osg::Geode;
+            geode->addDrawable(label.get());
+            graphParam->grp->addChild(geode.get());
+            for (int dx = 0; dx < 3; ++dx) {
+                for (int dy = 0; dy < 1; ++dy) {
+                    screenGrid.markOccupied(gridCoords.first + dx, gridCoords.second + dy);
+                }
+            }
+        }
+        /*label->setPosition(vec3ToSphere(worldPos) +
+                           osg::Vec3(node.size * (-0.25f) * graphParam->nodeGeomSize,
+                                     node.size * (-0.5f) * graphParam->nodeGeomSize,
+                                     node.size * 0.30f * graphParam->nodeGeomSize));*/
+        // text->setPosition(p +
+        //                   osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
+        //                             itr->second.size * (-0.5f) * nodeGeomSize,
+        //                             itr->second.size * 0.30f *
+        //                                 nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
+        // 设置标签颜色
+
+        // 添加到场景图
+        // graphParam->grp->addChild(geode.get());
     }
 }
 
@@ -438,6 +629,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->heightMap = heightMap;
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
         graphParam->setHeightFromCenterRange(
@@ -447,22 +639,20 @@ void VIS4Earth::GraphRenderer::showGraph() {
         graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = true;
-        graphParam->generateHierarchicalGraphs(nodes, edges);
+        // graphParam->generateHierarchicalGraphs(nodes, edges);
         graphParam->setLevelGraph(0);
         graphParam->update();
+        // loadMarker();
     }
 }
 
 void VIS4Earth::GraphRenderer::showBundling() {
     auto edgeBundling = VIS4Earth::EdgeBundling();
     edgeBundling.SetGraph(myGraph);
-    glm::vec3 gravitationCenter(40.0, 10.0, 0.0);
-    mybundlingParam.K = 0.1, mybundlingParam.cycles = 5, mybundlingParam.I = 90,
-    mybundlingParam.compatibilityThreshold = 0.6, mybundlingParam.smoothWidth = 3,
-    mybundlingParam.edgeWeightThreshold = -1.0, mybundlingParam.edgePercentageThreshold = -1.0,
-    mybundlingParam.S = 0.4, mybundlingParam.edgeDistance = 1e-4,
-    mybundlingParam.gravitationCenter = gravitationCenter,
-    mybundlingParam.gravitationExponent = -10.0;
+    glm::vec3 gravitationCenter(-75.0, 30.0, 0.0);
+
+    // 在需要边绑定效果时才计算兼容性
+    myGraph.buildCompatibilityListsIfNeeded();
 
     edgeBundling.SetParameter(mybundlingParam);
     edgeBundling.EdgeBundle();
@@ -512,6 +702,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->heightMap = heightMap;
         graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
         graphParam->setLatitudeRange(latRng[0], latRng[1]);
         graphParam->setHeightFromCenterRange(
@@ -595,6 +786,7 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->graphTypeIndex = graphTypeIndex;
+        graphParam->heightMap = heightMap;
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
         graphParam->setHeightFromCenterRange(
@@ -811,6 +1003,9 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
                 bb1 = texts[i]->getBoundingBox();
                 bb2 = texts[j]->getBoundingBox();
             }
+            if (checkOverlap(bb1, bb2)) {
+                texts[j]->setNodeMask(0x0);
+            }
         }
     }
 }
@@ -828,14 +1023,16 @@ class TimeController : public osg::Referenced {
 
 void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Vec3 &start,
                                                                    const osg::Vec3 &end,
-                                                                   const osg::Vec4 &color) {
+                                                                   const osg::Vec4 &color,
+                                                                   const int startIndex,
+                                                                   const int endIndex) {
 
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
         // v3.x() 是纬度，v3.y() 是经度
         float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
         float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
 
-        float h = 6371000.0f / 2 + v3.z(); // 固定为地球半径，单位为米
+        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
 
         osg::Vec3 ret;
         ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
@@ -850,7 +1047,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
 
     auto sphereToVec3 = [&](const osg::Vec3 &sphere) -> osg::Vec3 {
         // 固定的地球半径
-        float earthRadius = 6371000.0f / 2;
+        float earthRadius = osg::WGS_84_RADIUS_POLAR;
 
         // 计算出地心到球面点的实际半径 h
         float h =
@@ -879,33 +1076,41 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     direction.normalize();
 
     // 计算插值点
-    const int numSubdivisions = 5; // 细分数量
+
     osg::Vec3Array *lineVertices = new osg::Vec3Array;
     osg::Vec4Array *lineColors = new osg::Vec4Array;
 
-    std::cout << "length: " << length << std::endl;
-    osg::Vec3 sstart = vec3ToSphere(start);
-    osg::Vec3 send = vec3ToSphere(end);
-    osg::Vec3 newStart = sstart - (send - sstart) * 0.9;
-    newStart = sphereToVec3(newStart);
-    // 插值和渐变颜色处理
-    for (int i = 0; i <= numSubdivisions; ++i) {
-        float t = static_cast<float>(i) / numSubdivisions;
-        osg::Vec3 interpolatedPos = newStart * (1.0f - t) + end * t;
-
-        // 计算一个缩放因子，用来调整z值
-        float scaleFactor = 1.0f - (2.0f * t - 1.0f) * (2.0f * t - 1.0f); // (1 - (2t - 1)^2)
-        float zOffset = 600 * std::pow(length, 2); // 你可以调整这个值来控制下沉的幅度
-
-        // 修改 z 值
-        interpolatedPos.z() += scaleFactor * zOffset;
-        osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
-
-        // 添加顶点和颜色
-        lineVertices->push_back(spherePos);
+    const int numSubdivisions = 84; // 细分数量
+    for (int i = startIndex; i <= endIndex; i++) {
+        lineVertices->push_back(segVerts->at(i));
     }
+    // osg::Vec3 sstart = (start);
+    // osg::Vec3 send = (end);
+    // osg::Vec3 newStart = sstart - (send - sstart);
+    // osg::Vec3 newEnd = sstart + (send - sstart) * 1;
+    // newStart = (newStart);
+    // newEnd = (newEnd);
+    // osg::Vec3 temp(0.0f, 0.0f, 0.0f);
+    //// 插值和渐变颜色处理
+    // for (int i = 0; i <= numSubdivisions; ++i) {
+    //     float t = static_cast<float>(i) / numSubdivisions;
+    //     osg::Vec3 interpolatedPos = start * (1.0f - t) + end * t;
 
-    // 创建箭头的几何体
+    //    float globalT = (i) / static_cast<float>(numSubdivisions);
+    //    interpolatedPos.z() = maxHeight * sin(osg::PI * (globalT));
+
+    //    if (i == numSubdivisions)
+    //        interpolatedPos.z() = 0.0f;
+    //    osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+    //    printf("%f,%f 。。。", interpolatedPos.z(), maxHeight);
+    //    // printf("%f,%f,%f,%f", spherePos.x(), spherePos.y(), spherePos.z()-65535,maxHeight);
+
+    //    // 添加顶点
+    //    lineVertices->push_back(spherePos);
+    //}
+
+    // lineVertices->push_back(vec3ToSphere(newEnd));
+    //  创建箭头的几何体
     osg::Vec3 arrowHeadBase = end - direction * 1.2f; // 箭头头部基点
     osg::Vec3 left = osg::Vec3(-direction.y(), direction.x(), 0.0f) * 0.8f;
     osg::Vec3 right = osg::Vec3(direction.y(), -direction.x(), 0.0f) * 0.8f;
@@ -923,9 +1128,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
         initialColor.a() = 0.4f; // 开始时完全透明
         arrowColors->push_back(initialColor);
     }
-    // arrowColors->push_back(color);
-    // arrowColors->push_back(color);
-    // arrowColors->push_back(color);
 
     class ArrowAnimationCallback : public osg::NodeCallback {
       public:
@@ -951,7 +1153,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
                 if (t <= 0.1f) {
                     // 在 0.0 到 0.2 的范围内，alpha 值从 0 逐渐增加到 1
                     (*_colors)[i].a() = t / 0.1f;
-                } else if (t >= 0.9f) {
+                } else if (t >= 0.9995f) {
                     // 在 0.8 到 1.0 的范围内，alpha 值从 1 逐渐减少到 0
                     (*_colors)[i].a() = (1.0f - t) / 0.1f;
                 } else {
@@ -997,7 +1199,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
 
     // 插入关键帧
     const double animationDuration = 5.0; // 动画持续时间
-    for (int i = 0; i <= numSubdivisions; ++i) {
+    for (int i = 0; i < numSubdivisions; ++i) {
         double time = animationDuration * static_cast<double>(i) / numSubdivisions;
         osg::AnimationPath::ControlPoint point(lineVertices->at(i));
         animationPath->insert(time, point);
@@ -1027,15 +1229,21 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
 
     if (arrowFlowEnabled) {
         std::cout << "Arrow flow enabled" << std::endl;
+        std::vector<std::pair<int, int>> edgeRanges;
+        int currentIndex = 0;
         // 开始箭头流动效果
         for (auto &edge : *edges) {
             if (!edge.visible)
                 continue;                                                 // 只处理可见边
             osg::Vec4 color = osg::Vec4(nodes->at(edge.from).color, 1.f); // 边的颜色
-            osg::Vec3 startPos = edge.subDivs.front();
-            osg::Vec3 endPos = edge.subDivs.back();
-            osg::Vec3 offset(0.0f, 0.0f, -220.6f); // 定义垂直方向的偏移量
-            createArrowAnimation((startPos), (endPos), color);
+            osg::Vec3 startPos = nodes->at(edge.from).pos;
+            osg::Vec3 endPos = nodes->at(edge.to).pos;
+
+            int numVerts = ((edge.subDivs.size() - 1) * 20 + 2) * 2;
+            // float maxHeight = edge.maxHeight;
+            createArrowAnimation((startPos), (endPos), color, currentIndex,
+                                 currentIndex + numVerts - 1);
+            currentIndex += numVerts;
         }
     } else {
         std::cout << "Arrow flow disabled" << std::endl;
@@ -1065,7 +1273,10 @@ class HighlightFlowCallback : public osg::NodeCallback {
             for (const auto &range : _edgeRanges) {
                 int startIdx = range.first;
                 int endIdx = range.second;
-
+                int sum = endIdx - startIdx;
+                int scale = 1;
+                if (sum > 1000)
+                    scale *= 5;
                 // 计算高光的位置
                 float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx) + startIdx;
 
@@ -1074,11 +1285,25 @@ class HighlightFlowCallback : public osg::NodeCallback {
                     float dist = fabs(static_cast<float>(i) - highlightPos);
                     // 控制高光范围，使其更加集中
                     float intensity =
-                        std::max(0.0f, 1.0f - dist / 2.0f); // 调整 2.0f 以改变高光的范围
+                        std::max(0.0f, 1.0f * scale - dist / 9.0f); // 调整 2.0f 以改变高光的范围
 
                     osg::Vec4 &color = (*colors)[i];
-                    color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) * intensity +
-                            (*_originalColors)[i] * (1.0f - intensity);
+
+                    // 在高光最高点（dist == 0）时，确保透明度为 1
+                    float alpha =
+                        (dist == 0.0f)
+                            ? 1.0f
+                            : ((*_originalColors)[i].a() * (1.0f - intensity) + 1.0f * intensity);
+
+                    // 插值颜色分量（RGB 保持逻辑一致）
+                    osg::Vec3 interpolatedRGB =
+                        osg::Vec3(1.0f, 1.0f, 1.0f) * intensity +
+                        osg::Vec3((*_originalColors)[i].r(), (*_originalColors)[i].g(),
+                                  (*_originalColors)[i].b()) *
+                            (1.0f - intensity);
+
+                    // 组合最终的颜色和透明度
+                    color = osg::Vec4(interpolatedRGB, alpha);
                 }
             }
 
@@ -1128,14 +1353,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
                 if (!edge.visible)
                     continue;
 
-                int numVerts = (edge.subDivs.size()) * 10; // 每个细分段有6个顶点
+                int numVerts = ((edge.subDivs.size() - 1) * 81) * 2;
                 edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
                 currentIndex += numVerts;
             }
 
             osg::ref_ptr<TimeController> newTimeController = new TimeController();
-            lineGeode->setUpdateCallback(new HighlightFlowCallback(
-                lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
+            lineGeode->setUpdateCallback(
+                new HighlightFlowCallback(lineGeometry, 0.2f, newTimeController.get(), edgeRanges));
         }
         isAnimating = true;
     }
@@ -1253,47 +1478,37 @@ class StarFlowCallback : public osg::NodeCallback {
         osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
         if (colors && vertices) {
             for (const auto &range : _edgeRanges) {
-                int startIdx = range.first;
-                int endIdx = range.second;
 
+                int startIdx = range.first;
+                int endIdx = (range.second);
+                int sum = endIdx - startIdx;
+                int scale = 1;
+                if (sum > 1000)
+                    scale *= 5;
                 // 计算高光的位置
-                float highlightPos = fmod(t, 1.0f) * (endIdx + 12.0f - startIdx) + startIdx;
-                // 拖尾长度的控制参数
-                float tailLengthFactor = 6.0f; // 拖尾长度控制
-                for (int i = startIdx; i < endIdx; ++i) {
+                float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx + 10.f) + startIdx;
+                float tailLengthFactor = 10.0f * scale; // 拖尾长度控制
+                for (int i = startIdx; i <= endIdx; ++i) {
                     // 计算高光与当前顶点的距离
                     float dist = static_cast<float>(i) - highlightPos;
                     // 控制高光范围和拖尾效果
-                    float intensity = std::max(0.0f, 1.0f - fabs(dist) / tailLengthFactor);
+                    float intensity = std::max(0.0f, 2.0f - fabs(dist) / tailLengthFactor);
 
                     osg::Vec4 &color = (*colors)[i];
 
                     if (dist == 0) {
                         // 前端高亮白色部分
-                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f);
+                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 3.0f);
                     } else if (dist < 0) {
                         // 拖尾部分：从白色渐变到原始颜色
                         color = osg::Vec4(
                             1.0f * intensity + (*_originalColors)[i].r() * (1.0f - intensity),
                             1.0f * intensity + (*_originalColors)[i].g() * (1.0f - intensity),
                             1.0f * intensity + (*_originalColors)[i].b() * (1.0f - intensity),
-                            (*_originalColors)[i].a());
+                            1.0f * intensity + (*_originalColors)[i].a() * (1.0f - intensity));
                     } else {
                         color = (*_originalColors)[i];
                     }
-                }
-                // 处理 endIdx 之后的拖尾效果
-                for (int i = endIdx + 1; i < endIdx + tailLengthFactor && i < colors->size(); ++i) {
-                    // 计算超出 endIdx 的部分
-                    float dist = static_cast<float>(i) - highlightPos;
-                    float intensity =
-                        std::max(0.0f, 1.0f - (dist + (i - endIdx)) / tailLengthFactor);
-
-                    osg::Vec4 &color = (*colors)[i];
-                    color = osg::Vec4((*_originalColors)[endIdx - 1].r() * (1.0f - intensity),
-                                      (*_originalColors)[endIdx - 1].g() * (1.0f - intensity),
-                                      (*_originalColors)[endIdx - 1].b() * (1.0f - intensity),
-                                      (*_originalColors)[endIdx - 1].a() * intensity);
                 }
             }
 
@@ -1342,14 +1557,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
                 if (!edge.visible)
                     continue;
 
-                int numVerts = (edge.subDivs.size()) * 10;
+                int numVerts = ((edge.subDivs.size() - 1) * 81) * 2;
                 edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts - 1));
                 currentIndex += numVerts;
             }
 
             osg::ref_ptr<TimeController> newTimeController = new TimeController();
             lineGeode->setUpdateCallback(
-                new StarFlowCallback(lineGeometry, 0.25f, newTimeController.get(), edgeRanges));
+                new StarFlowCallback(lineGeometry, 0.2f, newTimeController.get(), edgeRanges));
         }
         isAnimating = true;
     }
@@ -1375,6 +1590,54 @@ osg::Vec4 generateColor(float index) {
         index = predefinedColors.size() - 1;
     return predefinedColors[index];
 }
+// 模拟根据经纬度返回高度值
+float getSimulatedElevation(float latitude, float longitude) {
+    // 简单的正弦函数模拟地形变化（可以根据需要修改）
+    float baseHeight = 10.0f;
+    float scale = 80000.0f; // 高度变化范围（单位：米）
+    baseHeight +=
+        scale * sinf(osg::DegreesToRadians(latitude)) * cosf(osg::DegreesToRadians(longitude));
+    return baseHeight;
+}
+// 找到满足条件的最小顶点高度 h'
+float findOptimalHeight(float p, float max, const std::vector<float> &heightArray,
+                        float maxHeightInArray) {
+
+    float h_max = maxHeightInArray * 1.1; // 最大顶点高度
+
+    // 检查是否满足条件
+    while (true) {
+        // 计算系数 a1 和 a2
+        float a1 = (heightArray[0] - h_max) / (p * p);
+        float a2 = (heightArray.back() - h_max) / ((max - p) * (max - p));
+
+        // 检查是否满足上界条件
+        bool valid = true;
+        for (size_t i = 0; i < heightArray.size(); ++i) {
+            float x = static_cast<float>(i);
+            float f_x;
+            if (x <= p) {
+                f_x = a1 * (x - p) * (x - p) + h_max;
+            } else {
+                f_x = a2 * (x - p) * (x - p) + h_max;
+            }
+            if (f_x < heightArray[i]) {
+                valid = false;
+                break;
+            }
+        }
+
+        // 如果满足条件，返回 h'
+        if (valid) {
+            return h_max;
+        }
+
+        // 否则增加 h'
+        h_max *= 1.1f; // 增加 10%
+    }
+
+    return h_max;
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     grp->removeChildren(0, grp->getNumChildren());
 
@@ -1383,7 +1646,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
         float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
 
-        float h = 6371000.0f; // 固定为地球半径，单位为米
+        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
 
         osg::Vec3 ret;
         ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
@@ -1415,10 +1678,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             }
         }
         auto p = itr->second.pos;
-
+        p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
         p = vec3ToSphere(p);
         auto sphere = new osg::ShapeDrawable(
-            new osg::Sphere(p, itr->second.size * .25f * nodeGeomSize), tessl);
+            new osg::Sphere(p, itr->second.size * .10f * nodeGeomSize), tessl);
         osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
         centerData->push_back(itr->second.pos);
         sphere->setUserData(centerData);
@@ -1430,6 +1693,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         matr->setColorMode(osg::Material::DIFFUSE);
         states->setAttributeAndModes(matr, osg::StateAttribute::ON);
         states->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+        states->setMode(GL_BLEND, osg::StateAttribute::ON); // 开启混合模式
         // osg::setNotifyLevel(osg::DEBUG_INFO);
 
         grp->addChild(sphere);
@@ -1439,27 +1703,28 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         text->setFont("Fonts/simhei.ttf"); // 设置字体
         text->setAxisAlignment(osgText::Text::SCREEN);
         if (textSize) {
-            text->setCharacterSize(textSize); // 设置字体大小
+            text->setCharacterSize(textSize * 0.25); // 设置字体大小
         } else {
-            text->setCharacterSize(nodeGeomSize);
+            text->setCharacterSize(nodeGeomSize * 0.25);
         }
-
-        // TODO: 加入文字避让
+        // text->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
+        //  TODO: 加入文字避让
         text->setPosition(p +
-                          osg::Vec3(itr->second.size * 0.25f * nodeGeomSize,
-                                    itr->second.size * 0.25f * nodeGeomSize,
-                                    itr->second.size * 0.55f *
+                          osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
+                                    itr->second.size * (-0.25f) * nodeGeomSize,
+                                    itr->second.size * 0.30f *
                                         nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-        // 设置文字内容为点的ID
+                                                        // 设置文字内容为点的ID
         text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
-
+        text->setAxisAlignment(osgText::Text::SCREEN);     // 屏幕对齐，始终面向相机
         osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
         textGeode->addDrawable(text.get());
         textNodes.push_back(text);
         grp->addChild(textGeode.get());
-
         osgNodes.emplace(std::make_pair(itr->first, sphere));
     }
+    // 调用新的loadMarker函数来处理标签
+    // loadMarker();
     adjustTextPosition(textNodes, nodeGeomSize);
 
     auto segVerts = new osg::Vec3Array;
@@ -1469,59 +1734,189 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         if (!edge.visible)
             continue; // 只处理可见边
 
-        osg::Vec4 prevColor = osg::Vec4(nodes->at(edge.from).color, 1.f);
+        osg::Vec4 prevColor = osg::Vec4(nodes->at(edge.from).color, 0.5f);
         auto dCol = osg::Vec4(nodes->at(edge.to).color, 1.f) - prevColor;
         dCol /= (edge.subDivs.size() == 1 ? 1 : edge.subDivs.size() - 1);
 
-        osg::Vec3 prevPos = edge.subDivs.front();
+        osg::Vec3 prevPos = nodes->at(edge.from).pos;
         osg::Vec3 startPos = vec3ToSphere(prevPos); // 起点
-        osg::Vec3 endPos = edge.subDivs.back();
+        osg::Vec3 endPos = nodes->at(edge.to).pos;
         endPos = vec3ToSphere(endPos);
 
-        osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
-        osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
-        for (size_t i = 0; i < edge.subDivs.size(); ++i) {
-            osg::Vec3 currentPos = edge.subDivs[i];
-            osg::Vec4 currentColor = prevColor + dCol;
+        // 总点数，包括起点、所有细分点和终点
+        size_t totalPoints = (edge.subDivs.size() - 1) * 81; // 起点 + 细分点 + 终点
+        // 首先得到采样点的高度,进而计算这条边上的最大高度
+        // 计算每个路径上的maxHeight 用Asin(pi*x)绘制
+        float maxRequiredAmplitude = 0.0f;
+        std::vector<float> heightArray;
+        float maxHeightInArray = 0.0;
+        int maxLocation = 0;
+        for (int i = 1; i < totalPoints + 1; i++) {
+            float t = static_cast<float>(i) / (totalPoints);
+            osg::Vec3 interpolatedPos;
+            interpolatedPos.x() = prevPos.x() * (1.0f - t) + edge.subDivs.back().x() * t;
+            interpolatedPos.y() = prevPos.y() * (1.0f - t) + edge.subDivs.back().y() * t;
+            interpolatedPos.z() =
+                getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+            heightArray.push_back(interpolatedPos.z());
+            maxHeightInArray = std::max(maxHeightInArray, interpolatedPos.z());
+            if (interpolatedPos.z() >= maxHeightInArray) {
+                maxLocation = i;
+            }
+        }
+        int flag = 1;
+        if (flag == 2) {
+            // 方法1 *TODO:二次函数法获得平滑曲线
+            // 找到最优顶点高度 h'
+            osg::Vec3 prevInterpolatedPos = prevPos; // 初始插值位置
+            prevInterpolatedPos.z() =
+                getBuildingHeightAtLatLon(prevInterpolatedPos.x(), prevInterpolatedPos.y());
+            osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
+            float h_prime =
+                findOptimalHeight(maxLocation, heightArray.size(), heightArray, maxHeightInArray);
 
-            // 在 prevPos 和 currentPos 之间插入 5 个细分点
-            for (int j = 0; j <= 5; ++j) { // 包含起点和终点，共 6 个点
-                float t = static_cast<float>(j) / 5.0f;
+            // 计算系数 a1 和 a2
+            float a1 = -h_prime / (maxLocation * maxLocation);
+            float a2 = -h_prime /
+                       ((heightArray.size() - maxLocation) * (heightArray.size() - maxLocation));
 
-                osg::Vec3 interpolatedPos;
-                interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
-                interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
-                interpolatedPos.z() = prevPos.z() * (1.0f - t) + currentPos.z() * t;
+            // 插值并生成路径
+            for (size_t i = 1; i < edge.subDivs.size(); ++i) {
+                osg::Vec3 currentPos = edge.subDivs[i];
+                osg::Vec4 currentColor = prevColor + dCol;
 
-                osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
+                // 在 prevPos 和 currentPos 之间插入细分点
+                for (int j = 0; j <= 20; ++j) { // 包含起点和终点
+                    float t = static_cast<float>(j) / 20.0f;
 
-                if (j > 0) { // 从第二个插值点开始创建线段
-                    segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
-                    segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
-                    segVerts->push_back(vec3ToSphere(interpolatedPos));
-                    segCols->push_back(osg::Vec4(1.0f, 0.5f, 0.0f, 1.0f));
+                    osg::Vec3 interpolatedPos;
+                    interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
+                    interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
+
+                    // 计算全局参数 t
+                    float globalT = ((i - 1) * 18 + (j + 1)) / static_cast<float>(totalPoints);
+
+                    // 判断当前点属于哪个区间
+                    if ((i - 1) * 81 + (j + 1) <= maxLocation) {
+                        // 0 ~ p 区间：使用 f1(x) = a1 * (x - p)^2 + h'
+                        float x = (i - 1) * 81 + (j + 1);
+                        interpolatedPos.z() = a1 * (x - maxLocation) * (x - maxLocation) + h_prime;
+                    } else {
+                        // p ~ max 区间：使用 f2(x) = a2 * (x - p)^2 + h'
+                        float x = (i - 1) * 81 + (j + 1);
+                        interpolatedPos.z() = a2 * (x - maxLocation) * (x - maxLocation) + h_prime;
+                    }
+
+                    // 确保高度大于 heightArray
+                    int index = static_cast<int>(interpolatedPos.x()); // 假设 x 是整数索引
+                    if (index >= 0 && index < heightArray.size()) {
+                        interpolatedPos.z() = std::max(interpolatedPos.z(), heightArray[index]);
+                    }
+
+                    interpolatedPos.z() = 0.f;
+
+                    // 插值颜色
+                    osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
+
+                    // 存储顶点和颜色
+                    if (j >= 0) {
+                        segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
+                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.65f));
+                        segVerts->push_back(vec3ToSphere(interpolatedPos));
+                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.65f));
+                    }
+
+                    prevInterpolatedPos = interpolatedPos;
+                    prevInterpolatedColor = interpolatedColor;
                 }
 
-                prevInterpolatedPos = interpolatedPos;
-                prevInterpolatedColor = interpolatedColor;
+                prevPos = currentPos;
+                prevColor = currentColor;
+            }
+        } else {
+            osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
+            osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
+            prevInterpolatedPos.z() =
+                getBuildingHeightAtLatLon(prevInterpolatedPos.x(), prevInterpolatedPos.y());
+            for (int i = 1; i < 42; i++) {
+                float t = static_cast<float>(i) / (42);
+                float sinValue = std::sin(osg::PI * t); // 计算 sin(π * x)
+
+                // 计算出对应位置所需的振幅 A，确保 A * sin(π * x) >= arr[i]
+                if (heightArray[i] < 1.f)
+                    continue;
+                float requiredAmplitude = heightArray[i] / sinValue;
+                maxRequiredAmplitude = std::max(maxRequiredAmplitude, requiredAmplitude);
             }
 
-            prevPos = currentPos;
-            prevColor = currentColor;
+            // 方法2：全局控制的最大高度,绘制sin曲线
+            float maxHeight = std::max(maxRequiredAmplitude, 100000.f);
+            edge.maxHeight = maxHeight;
+            int count = 0;
+
+            for (size_t i = 1; i < edge.subDivs.size(); ++i) {
+                osg::Vec3 currentPos = edge.subDivs[i];
+                osg::Vec4 currentColor = prevColor + dCol;
+                // 在 prevPos 和 currentPos 之间插入细分点
+                for (int j = 0; j <= 80; ++j) { // 包含起点和终点
+                    float t = static_cast<float>(j) / 80.0f;
+
+                    osg::Vec3 interpolatedPos;
+                    interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
+                    interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
+                    float globalT = ((i - 1) * 81 + (j + 1)) / static_cast<float>(totalPoints);
+                    interpolatedPos.z() = std::max(
+                        getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y()),
+                        float(maxHeight * sin(osg::PI * globalT))); // 平滑高度变化
+                    // interpolatedPos.z() = 0.f;
+                    osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
+
+                    if (j >= 0) {
+                        segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
+                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.55f));
+                        segVerts->push_back(vec3ToSphere(interpolatedPos));
+                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.55f));
+                        count++;
+                    }
+
+                    prevInterpolatedPos = interpolatedPos;
+                    prevInterpolatedColor = interpolatedColor;
+                }
+
+                prevPos = currentPos;
+                prevColor = currentColor;
+            }
+            count++;
         }
     }
     if (!arrowFlowEnabled) {
         auto geom = new osg::Geometry;
         geom->setVertexArray(segVerts);
+        this->segVerts = segVerts;
         geom->setColorArray(segCols);
         geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
 
         auto states = geom->getOrCreateStateSet();
         states->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+        states->setMode(GL_BLEND, osg::StateAttribute::ON); // 开启混合模式
+        osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc();
+        blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        states->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
         auto lw = new osg::LineWidth(1.f);
         states->setAttribute(lw, osg::StateAttribute::ON);
 
         geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
+        // 启用混合（Blending）以支持透明度
+        geom->getOrCreateStateSet()->setMode(GL_BLEND, osg::StateAttribute::ON);
+
+        // 设置混合函数
+        geom->getOrCreateStateSet()->setAttributeAndModes(
+            new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg::StateAttribute::ON);
+
+        // 设置渲染顺序以确保透明物体正确渲染
+        geom->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        geom->getOrCreateStateSet()->setAttributeAndModes(
+            new osg::Depth(osg::Depth::LESS, 0.0, 1.0, false), osg::StateAttribute::ON);
 
         auto geode = new osg::Geode;
         geode->addDrawable(geom);
@@ -1849,4 +2244,33 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
     currentLevel.nodeMapping =
         std::make_shared<std::map<std::string, std::vector<std::string>>>(nodeMapping);
     currentLevel.edgeMapping = std::make_shared<std::map<Edge, std::vector<Edge>>>(edgeMapping);
+}
+
+float VIS4Earth::GraphRenderer::PerGraphParam::getBuildingHeightAtLatLon(float lat, float lon) {
+    std::vector<std::pair<float, float>> latLonBounds = {
+        {20.0f, -85.0f}, // 经纬度范围的左下角
+        {41.0f, -74.0f}  // 经纬度范围的右上角
+    };
+    // 将经纬度映射到高度图的行列
+    int row = static_cast<int>((lat - latLonBounds[0].first) /
+                               (latLonBounds[1].first - latLonBounds[0].first) * (100 - 1));
+    int col = static_cast<int>((lon - latLonBounds[0].second) /
+                               (latLonBounds[1].second - latLonBounds[0].second) * (100 - 1));
+
+    // 获取四邻点的索引
+    int x1 = std::max(0, row - 1);
+    int y1 = std::max(0, col - 1);
+    int x2 = std::min(100 - 1, row + 1);
+    int y2 = std::min(100 - 1, col + 1);
+    if (x1 >= 100 || y1 >= 100 || x2 >= 100 || y2 >= 100 || x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0) {
+        return 0;
+    }
+    // 获取四个邻近点的高度
+    float height1 = heightMap[x1][y1];
+    float height2 = heightMap[x1][y2];
+    float height3 = heightMap[x2][y1];
+    float height4 = heightMap[x2][y2];
+
+    // 返回最大高度
+    return std::max({height1, height2, height3, height4});
 }

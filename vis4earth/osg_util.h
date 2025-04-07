@@ -23,8 +23,10 @@ inline osg::Node *CreateEarth() {
     geode->addDrawable(sd);
 
     auto filename = osgDB::findDataFile(DATA_PATH_PREFIX "land_shallow_topo_2048.jpg");
+    //auto filename = osgDB::findDataFile("C://Users//shan//Desktop//graph_data//gebco_08_rev_elev_D1_grey_geo.tif");
     geode->getOrCreateStateSet()->setTextureAttributeAndModes(
         0, new osg::Texture2D(osgDB::readImageFile(filename)));
+    
 
     return geode;
 }

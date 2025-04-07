@@ -1,4 +1,4 @@
-#include <iostream>
+ï»¿#include <iostream>
 
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QFileDialog>
@@ -7,10 +7,10 @@
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>
 
-#include <vis4earth/graph_viser/NodeClickHandler.h>
-#include <vis4earth/graph_viser/graph_display.h>
 #include <vis4earth/graph_viser/markManager.h>
 #include <vis4earth/graph_viser/nodeHoverHandler.h>
+#include <vis4earth/graph_viser/resizeWindowHandler.h>
+#include <vis4earth/osg_util.h>
 
 class UpdateMarkersCallback : public osg::Camera::DrawCallback {
   public:
@@ -35,23 +35,18 @@ int main(int argc, char **argv) {
 
     osg::ref_ptr<osg::Camera> camera = viewer->getCamera();
 
-    // ´´½¨µØÇòºÍ±ê¼Ç¹ÜÀíÆ÷
+    // åˆ›å»ºåœ°çƒå’Œæ ‡è®°ç®¡ç†å™¨
     EarthMarkerManager *manager = new EarthMarkerManager(grp, camera);
     manager->loadMarkers(DATA_PATH_PREFIX "usairportsfull.csv");
+    // manager->updateMarkers();
+
+    viewer->setThreadingModel(osgViewer::Viewer::SingleThreaded);
+
     viewer->getCamera()->setFinalDrawCallback(new UpdateMarkersCallback(manager));
     HoverEventHandler *nodeHoverHandler = new HoverEventHandler(manager, viewer);
+    ResizeHandler *resizeHandler = new ResizeHandler(manager, viewer);
     viewer->addEventHandler(nodeHoverHandler);
-
-    // VIS4Earth::GraphRenderer *graphLayout = new VIS4Earth::GraphRenderer;
-
-    // grp->addChild(graphLayout->getGroup());
-    // graphLayout->show();
-
-    //// Ìí¼Óµã»÷ÊÂ¼þ
-    // VIS4Earth::NodeClickHandler *nodeClickHandler =
-    //      new VIS4Earth::NodeClickHandler(graphLayout, viewer);
-    //// ½« NodeClickHandler Ìí¼Óµ½ Viewer µÄÊÂ¼þ´¦ÀíÆ÷ÖÐ
-    // viewer->addEventHandler(nodeClickHandler);
+    viewer->addEventHandler(resizeHandler);
 
     viewer->setSceneData(grp);
     auto prevClk = clock();
