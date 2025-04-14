@@ -27,20 +27,20 @@ class NodeLayouter {
     };
 
   private:
-    VIS4Earth::Graph origGraph; // 原图，全程不修改
-    VIS4Earth::Graph layoutedGraph;
+    std::shared_ptr<VIS4Earth::Graph> origGraph; // 原图，全程不修改
+    std::shared_ptr<VIS4Earth::Graph> layoutedGraph;
 
   public:
-    VIS4Earth::Graph getLayoutedGraph() const { return layoutedGraph; }
+    std::shared_ptr<VIS4Earth::Graph> getLayoutedGraph() const { return layoutedGraph; }
 
-    void setGraph(const VIS4Earth::Graph &graph) {
+    void setGraph(std::shared_ptr<VIS4Earth::Graph> graph) {
         origGraph = graph;
-        layoutedGraph = graph;
+        layoutedGraph = graph; // 深拷贝
     }
 
     void setParameter(const LayoutParam &param) {
-        layoutedGraph.setGraphLayoutParams(param.repulsion, param.spring_k, param.attraction,
-                                           param.edgeLength);
+        layoutedGraph->setGraphLayoutParams(param.repulsion, param.spring_k, param.attraction,
+                                            param.edgeLength);
     }
 
     void layout(int iterations) {
@@ -50,9 +50,9 @@ class NodeLayouter {
     }
 
     void restrictedLayout(const Area &restrictedArea, int iterations) {
-        layoutedGraph.enableNodeRestriction(restrictedArea);
+        layoutedGraph->enableNodeRestriction(restrictedArea);
         std::unordered_set<int> fixedNodes;
-        auto nodes = layoutedGraph.getNodes();
+        auto nodes = layoutedGraph->getNodes();
 
         for (int k = 0; k < nodes.size(); k++) {
             std::string id = std::to_string(k);
@@ -74,7 +74,7 @@ class NodeLayouter {
             // }
         }
 
-        layoutedGraph.setNodesRestriction(fixedNodes);
+        layoutedGraph->setNodesRestriction(fixedNodes);
 
         for (int i = 0; i < iterations; ++i) {
             updateLayout(layoutedGraph, 0.05);
@@ -86,9 +86,9 @@ class NodeLayouter {
                 pos.y <= restrictedArea.upperBound && pos.y >= restrictedArea.bottomBound);
     }
 
-    void updateAllEdges(VIS4Earth::Graph &graph) {
-        auto nodes = graph.getNodes();
-        auto edges = graph.getEdges();
+    void updateAllEdges(std::shared_ptr<VIS4Earth::Graph> graph) {
+        auto nodes = graph->getNodes();
+        auto edges = graph->getEdges();
         for (auto &edge : edges) {
             edge.start = nodes[edge.sourceLabel].pos;
             edge.end = nodes[edge.targetLabel].pos;
@@ -96,20 +96,20 @@ class NodeLayouter {
                 edge.subdivs[0] = Edge::center(edge.start, edge.end);
             }
         }
-        graph.setEdges(edges);
+        graph->setEdges(edges);
     }
 
-    void updateRepulsion(VIS4Earth::Graph &graph) {
+    void updateRepulsion(std::shared_ptr<VIS4Earth::Graph> graph) {
         double dx, dy, dz, f, fx, fy, fz, d;
-        auto nodes = graph.getNodes();
-        auto nodesNotMove = graph.getNodesNotMove();
-        double maxDistance = graph.getEdgeLength() * 2; // 限制排斥力作用范围为边长的两倍
+        auto nodes = graph->getNodes();
+        auto nodesNotMove = graph->getNodesNotMove();
+        double maxDistance = graph->getEdgeLength() * 2; // 限制排斥力作用范围为边长的两倍
 
         for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
             std::string n1_id = std::to_string(i);
 
             // 如果节点受到限制，不进行移动
-            if (graph.getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
+            if (graph->getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
                 continue;
             }
 
@@ -133,8 +133,8 @@ class NodeLayouter {
                     continue;
 
                 // 计算排斥力，排斥力与距离的平方成反比，避免过于靠近
-                double dsq = std::max(d * d, graph.getEdgeLength()); // 确保不会除以零
-                f = graph.getRepulsion() * 128 * 128 / dsq;          // 调整排斥系数
+                double dsq = std::max(d * d, graph->getEdgeLength()); // 确保不会除以零
+                f = graph->getRepulsion() * 128 * 128 / dsq;          // 调整排斥系数
 
                 // 计算每个方向上的排斥力分量
                 fx = f * dx / d;
@@ -147,20 +147,20 @@ class NodeLayouter {
         }
 
         // 更新计算后的力
-        graph.setNodes(nodes);
+        graph->setNodes(nodes);
     }
 
-    void updateSpring(VIS4Earth::Graph &graph) {
+    void updateSpring(std::shared_ptr<VIS4Earth::Graph> graph) {
         double dx, dy, dz, f, fx, fy, fz, d, dsq;
-        double targetEdgeLength = graph.getEdgeLength();
+        double targetEdgeLength = graph->getEdgeLength();
         double minForceThreshold = 0.01; // 最小力阈值
-        auto nodes = graph.getNodes();
-        auto nodePairs = graph.getNodePairs();
-        auto nodesNotMove = graph.getNodesNotMove();
+        auto nodes = graph->getNodes();
+        auto nodePairs = graph->getNodePairs();
+        auto nodesNotMove = graph->getNodesNotMove();
         // 显式欧拉法
         for (int i = 0; i < static_cast<int>(nodes.size()); ++i) {
             std::string n1_id = std::to_string(i);
-            if (graph.getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
+            if (graph->getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
                 continue;
             }
             for (int j = 0; j < static_cast<int>(nodes.size()); ++j) {
@@ -182,7 +182,7 @@ class NodeLayouter {
                     dsq = (d > targetEdgeLength) ? (d - targetEdgeLength) : (targetEdgeLength - d);
 
                     // 保证施加的力不会过小
-                    f = graph.getSpring() * dsq;
+                    f = graph->getSpring() * dsq;
                     if (f < minForceThreshold) {
                         f = minForceThreshold;
                     }
@@ -198,12 +198,12 @@ class NodeLayouter {
                 }
             }
         }
-        graph.setNodes(nodes);
+        graph->setNodes(nodes);
     }
 
-    void updateCenterSpring(VIS4Earth::Graph &graph) {
-        auto nodes = graph.getNodes();
-        auto nodesNotMove = graph.getNodesNotMove();
+    void updateCenterSpring(std::shared_ptr<VIS4Earth::Graph> graph) {
+        auto nodes = graph->getNodes();
+        auto nodesNotMove = graph->getNodesNotMove();
         int n = nodes.size();
 
         // 初始化 Eigen 矩阵和向量
@@ -216,13 +216,13 @@ class NodeLayouter {
 
         std::vector<Eigen::Triplet<double>> coefficients; // 用于高效构造稀疏矩阵 A
 
-        glm::vec3 center = graph.getGravitationCenter(); // 获取重心
-        double attraction = graph.getAttraction();       // 吸引力系数
+        glm::vec3 center = graph->getGravitationCenter(); // 获取重心
+        double attraction = graph->getAttraction();       // 吸引力系数
 
         // 构造力矩阵和目标向量，同时保留 n1.force 的更新
         for (int i = 0; i < n; ++i) {
             std::string n1_id = std::to_string(i);
-            if (graph.getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
+            if (graph->getNodesRestriction() && nodesNotMove.find(i) != nodesNotMove.end()) {
                 // 对静止节点，直接将其位置固定在当前点
                 x(i * 3 + 0) = nodes[n1_id].pos.x;
                 x(i * 3 + 1) = nodes[n1_id].pos.y;
@@ -279,17 +279,17 @@ class NodeLayouter {
         }
 
         // 将更新后的节点返回到图中
-        graph.setNodes(nodes);
+        graph->setNodes(nodes);
     }
 
-    void updateLayout(VIS4Earth::Graph &graph, double deltaT) {
+    void updateLayout(std::shared_ptr<VIS4Earth::Graph> graph, double deltaT) {
         updateRepulsion(graph);
         updateSpring(graph);
         updateCenterSpring(graph);
         glm::vec3 minPos = glm::vec3(std::numeric_limits<float>::max());
         glm::vec3 maxPos = glm::vec3(std::numeric_limits<float>::lowest());
 
-        auto nodes = graph.getNodes();
+        auto nodes = graph->getNodes();
         // 计算所有节点的最小和最大坐标
         for (const auto &node : nodes) {
             minPos = glm::vec3(30.0, -20.0, 0.0);
@@ -312,11 +312,11 @@ class NodeLayouter {
 
             const int maxIterations = 100; // 最大迭代次数
             int iterationCount = 0;
-            Area restriction = graph.getRestrictedArea();
+            Area restriction = graph->getRestrictedArea();
             glm::vec3 translation = (newPos - nodes[n1_id].pos) * 0.5f; // 定义并缩小位移
             newPos = nodes[n1_id].pos + translation;
             // 检查新坐标是否在restrictArea内
-            if (!graph.getNodesRestriction() || !posWithin(restriction, newPos)) {
+            if (!graph->getNodesRestriction() || !posWithin(restriction, newPos)) {
                 while (!(minPos.x <= newPos.x && newPos.x <= maxPos.x && minPos.y <= newPos.y &&
                          newPos.y <= maxPos.y)) {
                     translation *= 0.5f;
@@ -342,7 +342,7 @@ class NodeLayouter {
             // 速度衰减处理
             nodes[n1_id].vel *= 0.1f;
         }
-        graph.setNodes(nodes);
+        graph->setNodes(nodes);
         updateAllEdges(graph);
     }
 };

@@ -5,10 +5,6 @@
 
 #include "LOUVAIN.h"
 #include "graph_draw.h"
-// #include <osg/Program>
-// #include <osg/Shader>
-// #include <osg/Uniform>
-// #include <osgDB/FileUtils>
 #include <osgText/Font>
 #include <osgText/Text>
 
@@ -18,12 +14,12 @@ const std::array<float, 2> latRng = {-90.f, 90.f};
 const std::array<float, 2> hRng = {10000.f, 15000.f};
 const float hScale = 10.f;
 
-VIS4Earth::GraphRenderer::CoordRange getCoordRange(const VIS4Earth::Graph &graph) {
+VIS4Earth::GraphRenderer::CoordRange getCoordRange(const std::shared_ptr<VIS4Earth::Graph> graph) {
     VIS4Earth::GraphRenderer::CoordRange range = {
         std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest(),
         std::numeric_limits<float>::max(), std::numeric_limits<float>::lowest()};
 
-    for (const auto &node : graph.getNodes()) {
+    for (const auto &node : graph->getNodes()) {
         if (node.second.pos.x < range.minX)
             range.minX = node.second.pos.x;
         if (node.second.pos.x > range.maxX)
@@ -230,14 +226,14 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         auto edges = std::make_shared<std::vector<Edge>>();
         std::vector<osg::Vec3> colors;
         coordRange = getCoordRange(graph);
-        colors.resize(graph.getNodes().size());
+        colors.resize(graph->getNodes().size());
         for (auto &col : colors) {
             col.x() = 1.f * rand() / RAND_MAX;
             col.y() = 1.f * rand() / RAND_MAX;
             col.z() = 1.f * rand() / RAND_MAX;
         }
         size_t i = 0;
-        for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
+        for (auto itr = graph->getNodes().begin(); itr != graph->getNodes().end(); ++itr) {
             VIS4Earth::GraphRenderer::Node node;
             node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
             node.color = colors[i];
@@ -248,7 +244,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             ++i;
         }
 
-        for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
+        for (auto itr = graph->getEdges().begin(); itr != graph->getEdges().end(); ++itr) {
             edges->emplace_back();
 
             auto &edge = edges->back();
@@ -289,6 +285,9 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             // loadMarker();
         }
         myGraph = graph;
+        // myGraph = graph;
+        compatibilityFuture = std::async(std::launch::async,
+                                         [this]() { myGraph->buildCompatibilityListsIfNeeded(); });
         // myGraph.buildCompatibilityListsIfNeeded();
         //  初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
@@ -322,14 +321,14 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         auto edges = std::make_shared<std::vector<Edge>>();
         std::vector<osg::Vec3> colors;
         coordRange = getCoordRange(graph);
-        colors.resize(graph.getNodes().size());
+        colors.resize(graph->getNodes().size());
         for (auto &col : colors) {
             col.x() = 1.f * rand() / RAND_MAX;
             col.y() = 1.f * rand() / RAND_MAX;
             col.z() = 1.f * rand() / RAND_MAX;
         }
         size_t i = 0;
-        for (auto itr = graph.getNodes().begin(); itr != graph.getNodes().end(); ++itr) {
+        for (auto itr = graph->getNodes().begin(); itr != graph->getNodes().end(); ++itr) {
             VIS4Earth::GraphRenderer::Node node;
             // 初始化pos
             node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
@@ -340,7 +339,7 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
             nodes->emplace(std::make_pair(itr->first, node));
             ++i;
         }
-        for (auto itr = graph.getEdges().begin(); itr != graph.getEdges().end(); ++itr) {
+        for (auto itr = graph->getEdges().begin(); itr != graph->getEdges().end(); ++itr) {
             edges->emplace_back();
 
             auto &edge = edges->back();
@@ -368,7 +367,7 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->heightMap = heightMap;
         // graphParam->generateHierarchicalGraphs(nodes, edges);
-        graphParam->setLevelGraph(0);
+        // graphParam->setLevelGraph(0);
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
         graphParam->setHeightFromCenterRange(
@@ -577,7 +576,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
     myRestriction.upperBound = 00.0;
     myRestriction.bottomBound = 00.0;
     auto nodeLayouter = VIS4Earth::NodeLayouter();
-    myGraph.unableNodeRestriction(myRestriction);
+    myGraph->unableNodeRestriction(myRestriction);
     nodeLayouter.setGraph(myGraph);
     nodeLayouter.setParameter(myLayoutParam);
     nodeLayouter.layout(myLayoutParam.Iteration);
@@ -591,14 +590,14 @@ void VIS4Earth::GraphRenderer::showGraph() {
     auto nodes = std::make_shared<std::map<std::string, Node>>();
     auto edges = std::make_shared<std::vector<Edge>>();
     std::vector<osg::Vec3> colors;
-    colors.resize(myGraph.getNodes().size());
+    colors.resize(myGraph->getNodes().size());
     for (auto &col : colors) {
         col.x() = 1.f * rand() / RAND_MAX;
         col.y() = 1.f * rand() / RAND_MAX;
         col.z() = 1.f * rand() / RAND_MAX;
     }
     size_t i = 0;
-    for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
+    for (auto itr = myGraph->getNodes().begin(); itr != myGraph->getNodes().end(); ++itr) {
         VIS4Earth::GraphRenderer::Node node;
         node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
         node.color = colors[i];
@@ -607,7 +606,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
         ++i;
     }
 
-    for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
+    for (auto itr = myGraph->getEdges().begin(); itr != myGraph->getEdges().end(); ++itr) {
         edges->emplace_back();
 
         auto &edge = edges->back();
@@ -640,7 +639,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = true;
         // graphParam->generateHierarchicalGraphs(nodes, edges);
-        graphParam->setLevelGraph(0);
+        // graphParam->setLevelGraph(0);
         graphParam->update();
         // loadMarker();
     }
@@ -650,9 +649,12 @@ void VIS4Earth::GraphRenderer::showBundling() {
     auto edgeBundling = VIS4Earth::EdgeBundling();
     edgeBundling.SetGraph(myGraph);
     glm::vec3 gravitationCenter(-75.0, 30.0, 0.0);
-
+    // 确保兼容性计算已完成
+    if (compatibilityFuture.valid()) {
+        compatibilityFuture.wait(); // 阻塞直到任务完成
+    }
     // 在需要边绑定效果时才计算兼容性
-    myGraph.buildCompatibilityListsIfNeeded();
+    // myGraph.buildCompatibilityListsIfNeeded();
 
     edgeBundling.SetParameter(mybundlingParam);
     edgeBundling.EdgeBundle();
@@ -663,14 +665,14 @@ void VIS4Earth::GraphRenderer::showBundling() {
     auto nodes = std::make_shared<std::map<std::string, Node>>();
     auto edges = std::make_shared<std::vector<Edge>>();
     std::vector<osg::Vec3> colors;
-    colors.resize(myGraph.getNodes().size());
+    colors.resize(myGraph->getNodes().size());
     for (auto &col : colors) {
         col.x() = 1.f * rand() / RAND_MAX;
         col.y() = 1.f * rand() / RAND_MAX;
         col.z() = 1.f * rand() / RAND_MAX;
     }
     size_t i = 0;
-    for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
+    for (auto itr = myGraph->getNodes().begin(); itr != myGraph->getNodes().end(); ++itr) {
         VIS4Earth::GraphRenderer::Node node;
         node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
         node.color = colors[i];
@@ -679,7 +681,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
         ++i;
     }
 
-    for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
+    for (auto itr = myGraph->getEdges().begin(); itr != myGraph->getEdges().end(); ++itr) {
         edges->emplace_back();
 
         auto &edge = edges->back();
@@ -748,14 +750,14 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
     auto nodes = std::make_shared<std::map<std::string, Node>>();
     auto edges = std::make_shared<std::vector<Edge>>();
     std::vector<osg::Vec3> colors;
-    colors.resize(myGraph.getNodes().size());
+    colors.resize(myGraph->getNodes().size());
     for (auto &col : colors) {
         col.x() = 1.f * rand() / RAND_MAX;
         col.y() = 1.f * rand() / RAND_MAX;
         col.z() = 1.f * rand() / RAND_MAX;
     }
     size_t i = 0;
-    for (auto itr = myGraph.getNodes().begin(); itr != myGraph.getNodes().end(); ++itr) {
+    for (auto itr = myGraph->getNodes().begin(); itr != myGraph->getNodes().end(); ++itr) {
         VIS4Earth::GraphRenderer::Node node;
         node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
         node.color = colors[i];
@@ -764,7 +766,7 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
         ++i;
     }
 
-    for (auto itr = myGraph.getEdges().begin(); itr != myGraph.getEdges().end(); ++itr) {
+    for (auto itr = myGraph->getEdges().begin(); itr != myGraph->getEdges().end(); ++itr) {
         edges->emplace_back();
 
         auto &edge = edges->back();
@@ -953,7 +955,7 @@ void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
     ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
     auto graphParam = getGraph("LoadedGraph");
     graphParam->graphTypeIndex = graphTypeIndex;
-    graphParam->setLevelGraph(10 - value);
+    // graphParam->setLevelGraph(10 - value);
     graphParam->update();
 }
 // 检查两个矩形是否重叠，并返回重叠的距离
@@ -1224,6 +1226,59 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
     grp->addChild(transform);
 }
 
+osg::Image *VIS4Earth::GraphRenderer::PerGraphParam::createLineDataTexture() {
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+
+        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
+
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
+
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
+
+        return ret;
+    };
+    int texWidth = edges->size();
+    int texHeight = 4; // 使用4行存储不同参数
+
+    osg::Image *image = new osg::Image;
+    image->allocateImage(texWidth, texHeight, 1, GL_RGBA, GL_FLOAT);
+    image->setInternalTextureFormat(GL_RGBA32F_ARB);
+
+    // 初始填充0
+    memset(image->data(), 0, texWidth * texHeight * 4 * sizeof(float));
+
+    // 初始化静态数据(起点/终点)
+    float *data = reinterpret_cast<float *>(image->data());
+    int x = 0;
+    for (auto &edge : *edges) {
+        // 第1行: 起点 (y=1)
+        int startPos = (1 * texWidth + x) * 4;
+        auto realPos = vec3ToSphere(nodes->at(edge.from).pos);
+        data[startPos] = realPos.x();
+        data[startPos + 1] = realPos.y();
+        data[startPos + 2] = realPos.z();
+        data[startPos + 3] = 1.0f;
+
+        // 第2行: 终点 (y=2)
+        int endPos = (2 * texWidth + x) * 4;
+        auto realEndPos = vec3ToSphere(nodes->at(edge.to).pos);
+        data[endPos] = realEndPos.x();
+        data[endPos + 1] = realEndPos.y();
+        data[endPos + 2] = realEndPos.z();
+        data[endPos + 3] = 1.0f;
+        x++;
+    }
+
+    return image;
+}
+
 void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
     arrowFlowEnabled = !arrowFlowEnabled; // 切换箭头流动效果的启停状态
 
@@ -1254,113 +1309,203 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
     }
 }
 
-class HighlightFlowCallback : public osg::NodeCallback {
+class TextureBasedAnimationCallback : public osg::NodeCallback {
   public:
-    HighlightFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
-                          const std::vector<std::pair<int, int>> &edgeRanges)
-        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
-        // 保存原始颜色数组
-        _originalColors =
-            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
+    TextureBasedAnimationCallback(osg::Image *lineDataImage,
+                                  std::shared_ptr<std::vector<GraphRenderer::Edge>> &lines)
+        : _lineDataImage(lineDataImage), _lines(lines), _firstFrame(true) {
+        // 预分配足够大小的缓存
+        _paramCache.resize(lines->size() * 4); // 每个线条4个float(RGBA)
     }
 
-    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
-        float t = _timeController->getTime() * _speed;
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
+        static double lastTime = nv->getFrameStamp()->getSimulationTime();
 
-        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
-        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
-        if (colors && vertices) {
-            for (const auto &range : _edgeRanges) {
-                int startIdx = range.first;
-                int endIdx = range.second;
-                int sum = endIdx - startIdx;
-                int scale = 1;
-                if (sum > 1000)
-                    scale *= 5;
-                // 计算高光的位置
-                float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx) + startIdx;
+        double currentTime = nv->getFrameStamp()->getSimulationTime();
+        // 首次运行初始化时间
+        if (_firstFrame) {
+            lastTime = currentTime;
+            _firstFrame = false;
+            return; // 跳过第一帧更新
+        }
+        double deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
 
-                for (int i = startIdx; i < endIdx; ++i) {
-                    // 计算高光与当前顶点的距离
-                    float dist = fabs(static_cast<float>(i) - highlightPos);
-                    // 控制高光范围，使其更加集中
-                    float intensity =
-                        std::max(0.0f, 1.0f * scale - dist / 9.0f); // 调整 2.0f 以改变高光的范围
+        // 更新本地缓存
+        for (size_t i = 0; i < _lines->size(); ++i) {
+            // 独立更新每条线的高光位置
+            _lines->at(i).highlightPos =
+                fmod(_lines->at(i).highlightPos + _lines->at(i).speed * deltaTime, 1.1f);
 
-                    osg::Vec4 &color = (*colors)[i];
+            int baseIdx = i * 4;
+            _paramCache[baseIdx] = _lines->at(i).highlightPos;
+            _paramCache[baseIdx + 1] = _lines->at(i).speed;
+            _paramCache[baseIdx + 2] = 0.0f; // 保留
+            _paramCache[baseIdx + 3] = 0.0f; // 保留
+        }
 
-                    // 在高光最高点（dist == 0）时，确保透明度为 1
-                    float alpha =
-                        (dist == 0.0f)
-                            ? 1.0f
-                            : ((*_originalColors)[i].a() * (1.0f - intensity) + 1.0f * intensity);
-
-                    // 插值颜色分量（RGB 保持逻辑一致）
-                    osg::Vec3 interpolatedRGB =
-                        osg::Vec3(1.0f, 1.0f, 1.0f) * intensity +
-                        osg::Vec3((*_originalColors)[i].r(), (*_originalColors)[i].g(),
-                                  (*_originalColors)[i].b()) *
-                            (1.0f - intensity);
-
-                    // 组合最终的颜色和透明度
-                    color = osg::Vec4(interpolatedRGB, alpha);
+        // 更新纹理（仅参数行）
+        if (_lineDataImage.valid()) {
+            float *data = reinterpret_cast<float *>(_lineDataImage->data());
+            if (data) {
+                const int rowStride = _lineDataImage->s() * 4;
+                for (size_t i = 0; i < _lines->size(); ++i) {
+                    int dstPos = i * 4; // 第0行参数
+                    int srcPos = i * 4;
+                    data[dstPos] = _paramCache[srcPos];
+                    data[dstPos + 1] = _paramCache[srcPos + 1];
+                    data[dstPos + 2] = _paramCache[srcPos + 2];
+                    data[dstPos + 3] = _paramCache[srcPos + 3];
                 }
+                _lineDataImage->dirty();
             }
-
-            // 标记几何体更新
-            _geom->dirtyDisplayList();
-            _geom->dirtyBound();
         }
 
         traverse(node, nv);
     }
 
   private:
-    osg::ref_ptr<osg::Geometry> _geom;
-    osg::ref_ptr<osg::Vec4Array> _originalColors;
-    float _speed;
-    osg::ref_ptr<TimeController> _timeController;
-    std::vector<std::pair<int, int>> _edgeRanges;
+    osg::ref_ptr<osg::Image> _lineDataImage;
+    std::shared_ptr<std::vector<GraphRenderer::Edge>> _lines;
+    std::vector<float> _paramCache; // 本地参数缓存
+    bool _firstFrame = true;
 };
 
+osg::Program *createTextureBasedShaderProgram(int lineCount) {
+    std::string vertSource = R"(
+#version 120
+attribute vec3 vertexPosition;
+attribute float lineID;
+
+varying vec3 vPosition;
+varying float vLineID;
+varying vec3 vLineStart;
+varying vec3 vLineEnd;
+
+uniform sampler2D uLineDataTex;
+uniform float uTotalLines;
+varying vec4 vColor;
+
+void main() {
+    vPosition = vertexPosition;
+    vLineID = lineID;
+    
+    // 从纹理获取当前线段的起点终点
+    float texX = (lineID + 0.5) / uTotalLines;
+    vLineStart = texture2D(uLineDataTex, vec2(texX, 0.25)).rgb;
+    vLineEnd = texture2D(uLineDataTex, vec2(texX, 0.5)).rgb;
+    vColor = gl_Color;
+    gl_Position = gl_ModelViewProjectionMatrix * vec4(vertexPosition, 1.0);
+}
+)";
+
+    std::string fragSource = R"(
+#version 120
+uniform sampler2D uLineDataTex;
+uniform float uTotalLines;
+uniform float uHighlightWidth;
+uniform vec4 uHighlightColor;
+
+varying vec3 vPosition;
+varying float vLineID;
+varying vec3 vLineStart;
+varying vec3 vLineEnd;
+varying vec4 vColor;
+
+void main() {
+    
+    // 获取当前线段的高光位置
+    float texX = (vLineID + 0.5) / uTotalLines;
+    float highlightPos = texture2D(uLineDataTex, vec2(texX, 0.0)).r;
+    
+    // 计算线段方向和长度
+    vec3 lineVec = vLineEnd - vLineStart;
+    float lineLength = length(lineVec);
+    vec3 lineDir = lineVec / lineLength;
+    
+    // 计算当前点在直线上的投影
+    float t = dot(vPosition - vLineStart, lineDir) / lineLength;
+    t = clamp(t, 0.0, 1.0);
+    
+    // 计算到线段的真实距离（用于线宽控制）
+    vec3 projectedPos = vLineStart + t * lineVec;
+    float dist = length(vPosition - projectedPos);
+    float uHighlightl = lineLength/20;
+    
+    // 高光强度计算（仅在前向移动方向增强）
+    float highlightIntensity = 0.0;
+    if(t >= highlightPos - 0.10 && t <= highlightPos) {
+        float falloff = 1.0 - smoothstep(highlightPos - 0.05, highlightPos, t);
+        highlightIntensity = falloff * exp(-pow((highlightPos - t)/0.1, 2.0));
+    }
+    
+    // 基础颜色
+    vec4 baseColor = vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f);
+    // 最终颜色
+    gl_FragColor =mix(baseColor, uHighlightColor, highlightIntensity*1);
+}
+)";
+
+    osg::ref_ptr<osg::Program> program = new osg::Program;
+    // 必须显式绑定属性位置
+    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("lineID", 1);
+    program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
+    program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
+    return program.release();
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
     if (isAnimating) {
         // 停止动画
         if (lineGeode) {
-            lineGeode->setUpdateCallback(nullptr);
+            lineGeode->setUpdateCallback(nullptr); // 将颜色设置为初始颜色
+            // 2. 直接重置几何体颜色（强制GPU更新）
+            osg::Geometry *geom = dynamic_cast<osg::Geometry *>(lineGeode->getDrawable(0));
+            if (geom) {
+                osg::Vec4Array *colors = new osg::Vec4Array(1);
+                (*colors)[0] = osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f); // 初始蓝色
+                geom->setColorArray(colors, osg::Array::BIND_OVERALL);
+                geom->dirtyDisplayList(); // 比dirtyDisplayList()更彻底
+            }
+
+            // 3. 清除所有动画相关状态（关键！）
+            osg::StateSet *ss = lineGeode->getStateSet();
+            if (ss) {
+                ss->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
+                ss->removeUniform("uHighlightColor");
+                ss->removeAttribute(osg::StateAttribute::PROGRAM); // 移除着色器
+                ss->setMode(GL_LIGHTING, osg::StateAttribute::ON); // 恢复光照
+                for (auto &edge : *edges) {
+                    edge.highlightPos = 0.0f;
+                }
+            }
         }
         isAnimating = false;
-        update(); // 重新绘制图形
     } else {
         // 开始动画
         if (lineGeode && lineGeometry) {
+
+            osg::ref_ptr<osg::Image> lineDataImage = createLineDataTexture();
+            osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
+            lineDataTex->setImage(lineDataImage);
+            lineDataTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+            lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+            lineDataTex->setResizeNonPowerOfTwoHint(false);
+
             // 禁用光照
-            auto arrowStates = lineGeometry->getOrCreateStateSet();
-            arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
-            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-            // 获取顶点数组
-            osg::Vec3Array *vertices =
-                dynamic_cast<osg::Vec3Array *>(lineGeometry->getVertexArray());
-            if (!vertices) {
-                std::cout << "No vertices found!" << std::endl;
-                return;
-            }
+            auto arrowStates = lineGeode->getOrCreateStateSet();
+            arrowStates->setAttributeAndModes(createTextureBasedShaderProgram(edges->size()),
+                                              osg::StateAttribute::ON);
 
-            std::vector<std::pair<int, int>> edgeRanges;
-            int currentIndex = 0;
-
-            for (auto &edge : *edges) {
-                if (!edge.visible)
-                    continue;
-
-                int numVerts = ((edge.subDivs.size() - 1) * 81) * 2;
-                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts));
-                currentIndex += numVerts;
-            }
-
-            osg::ref_ptr<TimeController> newTimeController = new TimeController();
-            lineGeode->setUpdateCallback(
-                new HighlightFlowCallback(lineGeometry, 0.2f, newTimeController.get(), edgeRanges));
+            // 绑定纹理
+            arrowStates->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
+            arrowStates->addUniform(new osg::Uniform("uLineDataTex", 0));
+            arrowStates->addUniform(
+                new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
+            arrowStates->addUniform(new osg::Uniform("uHighlightWidth", 20.f));
+            arrowStates->addUniform(
+                new osg::Uniform("uHighlightColor", osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)));
+            lineGeode->setUpdateCallback(new TextureBasedAnimationCallback(lineDataImage, edges));
         }
         isAnimating = true;
     }
@@ -1729,7 +1874,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
     auto segVerts = new osg::Vec3Array;
     auto segCols = new osg::Vec4Array;
-
+    osg::ref_ptr<osg::FloatArray> lineIDs = new osg::FloatArray;
+    int lineID = 0;
     for (auto &edge : *edges) {
         if (!edge.visible)
             continue; // 只处理可见边
@@ -1838,6 +1984,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
             prevInterpolatedPos.z() =
                 getBuildingHeightAtLatLon(prevInterpolatedPos.x(), prevInterpolatedPos.y());
+
             for (int i = 1; i < 42; i++) {
                 float t = static_cast<float>(i) / (42);
                 float sinValue = std::sin(osg::PI * t); // 计算 sin(π * x)
@@ -1873,9 +2020,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
                     if (j >= 0) {
                         segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
-                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.55f));
+                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f));
                         segVerts->push_back(vec3ToSphere(interpolatedPos));
-                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.55f));
+                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f));
+                        lineIDs->push_back(static_cast<float>(lineID));
+                        lineIDs->push_back(static_cast<float>(lineID));
                         count++;
                     }
 
@@ -1888,10 +2037,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             }
             count++;
         }
+        lineID++;
     }
+
     if (!arrowFlowEnabled) {
         auto geom = new osg::Geometry;
         geom->setVertexArray(segVerts);
+        geom->setVertexAttribArray(0, segVerts, osg::Array::BIND_PER_VERTEX);
+        geom->setVertexAttribArray(1, lineIDs, osg::Array::BIND_PER_VERTEX);
         this->segVerts = segVerts;
         geom->setColorArray(segCols);
         geom->setColorBinding(osg::Geometry::BIND_PER_VERTEX);
@@ -1902,10 +2055,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc();
         blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         states->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
-        auto lw = new osg::LineWidth(1.f);
-        states->setAttribute(lw, osg::StateAttribute::ON);
-
         geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
+        auto lw = new osg::LineWidth(1.f);
+        states->setAttributeAndModes(lw, osg::StateAttribute::ON);
+
         // 启用混合（Blending）以支持透明度
         geom->getOrCreateStateSet()->setMode(GL_BLEND, osg::StateAttribute::ON);
 

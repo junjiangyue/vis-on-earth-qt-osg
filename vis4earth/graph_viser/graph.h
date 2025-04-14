@@ -3,8 +3,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <future>
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
+#include <mutex>
 #include <queue>
 #include <stack>
 #include <string>
@@ -290,6 +292,7 @@ struct Graph {
     std::unordered_set<std::pair<int, int>, pair_hash> nodePairs;
     std::unordered_set<int> nodesNotMove;
     bool compatibilityListsBuilt = false;
+    std::once_flag compatibilityFlag;
 
     double K;
     int I;
@@ -488,10 +491,9 @@ struct Graph {
     }
 
     void buildCompatibilityListsIfNeeded() {
-        if (!compatibilityListsBuilt) {
-            buildCompatibilityLists();
-            compatibilityListsBuilt = true;
-        }
+        std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
+            buildCompatibilityLists();               // (3) 实际初始化逻辑
+        });
     }
 
     static double distance(const glm::vec3 &v1, const glm::vec3 &v2) {

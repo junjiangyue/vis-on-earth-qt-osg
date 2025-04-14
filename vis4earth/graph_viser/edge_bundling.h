@@ -11,8 +11,8 @@ namespace VIS4Earth {
 class EdgeBundling {
     // 类似上面
   private:
-    VIS4Earth::Graph origGrph; // 原图，全程不修改
-    VIS4Earth::Graph layoutedGrph;
+    std::shared_ptr<VIS4Earth::Graph> origGrph; // 原图，全程不修改
+    std::shared_ptr<VIS4Earth::Graph> layoutedGrph;
 
   public:
     struct BundlingParam {
@@ -36,18 +36,18 @@ class EdgeBundling {
         double edgePercentageThreshold; // Percentage of edges being kept (for dense graphs).
     };
     // 边集束的代码转移到edge_Bundling
-    VIS4Earth::Graph GetLayoutedGraph() { return layoutedGrph; }
-    void SetGraph(VIS4Earth::Graph grph) {
+    std::shared_ptr<VIS4Earth::Graph> GetLayoutedGraph() { return layoutedGrph; }
+    void SetGraph(std::shared_ptr<VIS4Earth::Graph> grph) {
         origGrph = grph;
-        layoutedGrph = grph;
+        layoutedGrph = grph; // 深拷贝
     }
     void SetParameter(const BundlingParam &param) {
-        layoutedGrph.setAlgorithmParams(param.K, param.cycles, param.I,
-                                        param.compatibilityThreshold, param.smoothWidth);
-        layoutedGrph.setPhysicsParams(param.S, param.edgeDistance, param.gravitationCenter,
-                                      param.gravitationExponent);
-        layoutedGrph.setNetworkParams(param.edgeWeightThreshold, param.edgePercentageThreshold);
-        layoutedGrph.setCycles(5);
+        layoutedGrph->setAlgorithmParams(param.K, param.cycles, param.I,
+                                         param.compatibilityThreshold, param.smoothWidth);
+        layoutedGrph->setPhysicsParams(param.S, param.edgeDistance, param.gravitationCenter,
+                                       param.gravitationExponent);
+        layoutedGrph->setNetworkParams(param.edgeWeightThreshold, param.edgePercentageThreshold);
+        layoutedGrph->setCycles(5);
     }
     void EdgeBundle() {
 
@@ -55,19 +55,19 @@ class EdgeBundling {
         do {
             while (Iterate(layoutedGrph) > 0)
                 ;
-            auto edges = layoutedGrph.getEdges();
+            auto edges = layoutedGrph->getEdges();
             AddSubvisions(edges);
-            layoutedGrph.setEdges(edges);
+            layoutedGrph->setEdges(edges);
         } while (UpdateCycle(layoutedGrph) > 0);
-        auto edges = layoutedGrph.getEdges();
+        auto edges = layoutedGrph->getEdges();
         int edgesNum = (int)edges.size();
         for (int i = 0; i < edgesNum; i++)
-            edges[i].smooth(layoutedGrph.getSmoothWidth());
-        layoutedGrph.setEdges(edges);
+            edges[i].smooth(layoutedGrph->getSmoothWidth());
+        layoutedGrph->setEdges(edges);
         // Smooth(layoutedGrph, layoutedGrph.getSmoothWidth());
     }
-    int Iterate(VIS4Earth::Graph &grph) {
-        std::vector<VIS4Earth::Edge> edges = grph.getEdges();
+    int Iterate(std::shared_ptr<VIS4Earth::Graph> grph) {
+        std::vector<VIS4Earth::Edge> edges = grph->getEdges();
         int edgesNum = (int)edges.size();
         std::vector<std::vector<glm::vec3>> forces(
             edgesNum,
@@ -75,46 +75,46 @@ class EdgeBundling {
 
         // spring forces
         for (int i = 0; i < edgesNum; i++)
-            edges[i].addSpringForces(forces[i], grph.getK());
+            edges[i].addSpringForces(forces[i], grph->getK());
 
         // electrostatic forces
         for (int i = 0; i < edgesNum; i++) {
             int compatibleEdgesNum = (int)edges[i].compatibleEdges.size();
             for (int j = 0; j < compatibleEdgesNum; j++)
                 edges[i].addElectrostaticForces(forces[i], edges[edges[i].compatibleEdges[j]],
-                                                grph.getEdgeDistance());
+                                                grph->getEdgeDistance());
         }
 
         // gravitation
-        if (grph.getGravitationIsOn()) {
+        if (grph->getGravitationIsOn()) {
             for (int i = 0; i < edgesNum; i++)
-                edges[i].addGravitationalForces(forces[i], grph.getGravitationCenter(),
-                                                grph.getGravitationExponent());
+                edges[i].addGravitationalForces(forces[i], grph->getGravitationCenter(),
+                                                grph->getGravitationExponent());
         }
 
         // update edges
         for (int i = 0; i < edgesNum; i++)
-            edges[i].update(forces[i], grph.getS());
-        int iter = grph.getIter();
+            edges[i].update(forces[i], grph->getS());
+        int iter = grph->getIter();
         iter--;
-        grph.setIter(iter);
-        grph.setEdges(edges);
+        grph->setIter(iter);
+        grph->setEdges(edges);
         return iter;
     }
 
-    int UpdateCycle(VIS4Earth::Graph &grph) {
-        double S = grph.getS();
-        int I = grph.getI();
-        int iter = grph.getIter();
-        int cycles = grph.getCycles();
+    int UpdateCycle(std::shared_ptr<VIS4Earth::Graph> grph) {
+        double S = grph->getS();
+        int I = grph->getI();
+        int iter = grph->getIter();
+        int cycles = grph->getCycles();
         S *= 0.5;
         I = 2 * I / 3;
         iter = I;
         cycles--;
-        grph.setS(S);
-        grph.setI(I);
-        grph.setIter(iter);
-        grph.setCycles(cycles);
+        grph->setS(S);
+        grph->setI(I);
+        grph->setIter(iter);
+        grph->setCycles(cycles);
         return cycles;
     }
 
@@ -124,12 +124,12 @@ class EdgeBundling {
             edges[i].addSubdivisions();
     }
 
-    void Smooth(VIS4Earth::Graph &grph, double smoothWidth) {
-        auto edges = grph.getEdges();
+    void Smooth(std::shared_ptr<VIS4Earth::Graph> grph, double smoothWidth) {
+        auto edges = grph->getEdges();
         int edgesNum = (int)edges.size();
         for (int i = 0; i < edgesNum; i++)
             edges[i].smooth(smoothWidth);
-        grph.setEdges(edges);
+        grph->setEdges(edges);
     }
 };
 } // namespace VIS4Earth

@@ -198,8 +198,8 @@ class GraphLoader {
     };
 
     // read csv file to graph
-    static VIS4Earth::Graph LoadFromFile(const std::string &nodesFile,
-                                         const std::string &edgesFile) {
+    static std::shared_ptr<VIS4Earth::Graph> LoadFromFile(const std::string &nodesFile,
+                                                          const std::string &edgesFile) {
         VIS4Earth::GraphLoader f;
         int rows = 0;
         char line[1024] = {""};
@@ -245,13 +245,13 @@ class GraphLoader {
         }
         edgeF.Close();
 
-        VIS4Earth::Graph graph;
-        graph.set(read_nodes, allEdges);
+        auto graph = std::make_shared<VIS4Earth::Graph>(); // 实际分配内存
+        graph->set(read_nodes, allEdges);
         // graph.calculateGeoNodeLevel();
         return graph;
     }
-    static VIS4Earth::Graph LoadFromNoGeoFile(const std::string &nodesFile,
-                                              const std::string &edgesFile) {
+    static std::shared_ptr<VIS4Earth::Graph> LoadFromNoGeoFile(const std::string &nodesFile,
+                                                               const std::string &edgesFile) {
         std::srand(std::time(0));
         VIS4Earth::GraphLoader f;
         int rows = 0;
@@ -313,10 +313,10 @@ class GraphLoader {
         }
         edgeF.Close();
 
-        VIS4Earth::Graph graph;
-        graph.set(read_nodes, allEdges);
-        graph.calculateNoGeoNodeLevel();
-        graph.calculateNoGeoEdgeWeight();
+        auto graph = std::make_shared<VIS4Earth::Graph>();
+        graph->set(read_nodes, allEdges);
+        graph->calculateNoGeoNodeLevel();
+        graph->calculateNoGeoEdgeWeight();
         return graph;
     }
 };

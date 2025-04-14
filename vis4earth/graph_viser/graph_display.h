@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <future>
 #include <map>
 #include <memory>
 #include <numeric>
@@ -27,7 +28,10 @@
 #include <osg/MatrixTransform>
 #include <osg/NodeCallback>
 #include <osg/Point>
+#include <osg/Program>
+#include <osg/Shader>
 #include <osg/ShapeDrawable>
+#include <osg/Texture2D>
 #include <osgAnimation/AnimationManagerBase>
 #include <osgAnimation/BasicAnimationManager>
 #include <osgAnimation/StackedTransform>
@@ -54,7 +58,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
   public:
     double size = 1.0;
     int graphTypeIndex;
-    VIS4Earth::Graph myGraph;
+    std::shared_ptr<VIS4Earth::Graph> myGraph;
+    std::future<void> compatibilityFuture; // 保存异步任务状态
+    // VIS4Earth::Graph myGraph;
 
     VIS4Earth::EdgeBundling::BundlingParam mybundlingParam = {
         mybundlingParam.K = 0.1,
@@ -95,6 +101,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::string from;
         std::string to;
         float maxHeight;
+        float highlightPos = 0.0f; // 0.0到1.0之间的高光位置
+        float speed = 0.2f;
         std::vector<osg::Vec3> subDivs;
         float weight = 0;
         bool visible = true; // 默认可见
@@ -189,6 +197,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void update();
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
                                   const osg::Vec4 &color, const int startIndex, const int endIndex);
+        osg::Image *createLineDataTexture();
         void startArrowAnimation();
         void startHighlightAnimation();
         void startTextureAnimation();
