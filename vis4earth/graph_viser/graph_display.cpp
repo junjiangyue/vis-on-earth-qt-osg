@@ -51,8 +51,6 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->showGraphLayoutButton, &QPushButton::clicked, this, &GraphRenderer::showGraph);
     connect(ui->showEdgeBundlingButton, &QPushButton::clicked, this, &GraphRenderer::showBundling);
 
-    // Connect the slider's valueChanged signal to the slot function
-    connect(ui->sizeSlider, &QSlider::valueChanged, this, &GraphRenderer::onSizeSliderValueChanged);
     connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
             &GraphRenderer::onFontSizeSliderValueChanged);
     connect(ui->resolutionSlider, &QSlider::valueChanged, this,
@@ -81,35 +79,37 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setMaxY);
 
-    // 连接全局弹簧常数 (K)
-    connect(ui->spinBoxGlobalSpringConstant, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onGlobalSpringConstantChanged);
+    //// 连接全局弹簧常数 (K)
+    // connect(ui->spinBoxGlobalSpringConstant,
+    // QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onGlobalSpringConstantChanged);
 
-    // 连接兼容性阈值
-    connect(ui->spinBoxCompatibilityThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onCompatibilityThresholdChanged);
+    //// 连接兼容性阈值
+    // connect(ui->spinBoxCompatibilityThreshold,
+    // QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onCompatibilityThresholdChanged);
 
-    // 连接平滑宽度
-    connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::onSmoothWidthChanged);
+    //// 连接平滑宽度
+    // connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::onSmoothWidthChanged);
 
-    // 连接位移 (S)
-    connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::onDisplacementChanged);
+    //// 连接位移 (S)
+    // connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::onDisplacementChanged);
 
-    // 连接边距离
-    connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::onEdgeDistanceChanged);
+    //// 连接边距离
+    // connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::onEdgeDistanceChanged);
 
-    // 连接边权重阈值
-    connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-            this, &GraphRenderer::onEdgeWeightThresholdChanged);
+    //// 连接边权重阈值
+    // connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+    //         this, &GraphRenderer::onEdgeWeightThresholdChanged);
 
-    // 连接边百分比阈值
-    connect(ui->spinBoxEdgePercentageThreshold,
-            QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::onEdgePercentageThresholdChanged);
-    // 连接箭头流动
+    //// 连接边百分比阈值
+    // connect(ui->spinBoxEdgePercentageThreshold,
+    //         QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::onEdgePercentageThresholdChanged);
+    //  连接箭头流动
     /*connect(ui->arrowFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onArrowFlowButtonClicked);*/
     connect(ui->highlightFlowButton, &QPushButton::clicked, this,
@@ -292,7 +292,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         //  初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
         QString text =
-            QString("当前坐标范围: 最低纬度: %1, 最高纬度: %2, 最大经度: %3, 最小经度: %4")
+            QString("当前坐标范围:\n 最低纬度: %1, 最高纬度: %2, \n最大经度: %3, 最小经度: %4")
                 .arg(coordRange.minX)
                 .arg(coordRange.maxX)
                 .arg(coordRange.maxY)
@@ -906,37 +906,6 @@ void VIS4Earth::GraphRenderer::onEdgePercentageThresholdChanged(double value) {
     mybundlingParam.edgePercentageThreshold = value;
 }
 
-void VIS4Earth::GraphRenderer::onSizeSliderValueChanged(int value) {
-    // 处理边百分比阈值变化的逻辑
-    size = value * 0.01;
-    // Update the label text
-    ui->sizeLabel->setText(QString("分辨率: %1%").arg(value));
-    // 更新图渲染
-    auto graphParam = getGraph("LoadedGraph");
-    if (graphParam) {
-        graphParam->setLongitudeRange(
-            (lonRng[0] + lonRng[1]) / 2 - (lonRng[1] - lonRng[0]) * size / 2,
-            (lonRng[0] + lonRng[1]) / 2 + (lonRng[1] - lonRng[0]) * size / 2);
-        graphParam->setLatitudeRange(
-            (latRng[0] + latRng[1]) / 2 - (latRng[1] - latRng[0]) * size / 2,
-            (latRng[0] + latRng[1]) / 2 + (latRng[1] - latRng[0]) * size / 2);
-        graphParam->setHeightFromCenterRange(
-            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-        graphParam->setNodeGeometrySize(size * .02f *
-                                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-        graphParam->update();
-    }
-    // 初始化 UI
-    QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
-    QString text = QString("当前坐标范围: 左: %1, 右: %2, 上: %3, 下: %4")
-                       .arg(coordRange.minX)
-                       .arg(coordRange.maxX)
-                       .arg(coordRange.maxY)
-                       .arg(coordRange.minY);
-    coordRangeLabel->setText(text);
-}
-
 void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
     // Update the label text
     ui->fontSizeLabel->setText(QString("字体大小: %1").arg(value));
@@ -1454,6 +1423,162 @@ void main() {
     program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
     return program.release();
 }
+osg::Program *createTextureBasedShaderProgramColorFlow(int lineCount) {
+    std::string vertSource = R"(
+#version 120
+attribute vec3 vertexPosition;
+attribute float lineID;
+
+varying vec3 vPosition;
+varying float vLineID;
+varying vec3 vLineStart;
+varying vec3 vLineEnd;
+
+uniform sampler2D uLineDataTex;
+uniform float uTotalLines;
+varying vec4 vColor;
+
+void main() {
+    vPosition = vertexPosition;
+    vLineID = lineID;
+    
+    // 从纹理获取当前线段的起点终点
+    float texX = (lineID + 0.5) / uTotalLines;
+    vLineStart = texture2D(uLineDataTex, vec2(texX, 0.25)).rgb;
+    vLineEnd = texture2D(uLineDataTex, vec2(texX, 0.5)).rgb;
+    vColor = gl_Color;
+    gl_Position = gl_ModelViewProjectionMatrix * vec4(vertexPosition, 1.0);
+}
+)";
+
+    std::string fragSource = R"(
+#version 120
+uniform sampler2D uLineDataTex;
+uniform float uTotalLines;
+
+varying vec3 vPosition;
+varying float vLineID;
+varying vec3 vLineStart;
+varying vec3 vLineEnd;
+
+// 定义颜色（蓝色和黄色）
+const vec3 blue = vec3(0.0, 0.0, 0.0);
+const vec3 yellow = vec3(1.0, 1.0, 0.0);
+
+void main() {
+    // 获取当前线段的动画相位 [0, 1]
+    float texX = (vLineID + 0.5) / uTotalLines;
+    float phase = texture2D(uLineDataTex, vec2(texX, 0.0)).r;
+    
+    // 计算当前点在线段上的投影位置 t [0, 1]
+    vec3 lineVec = vLineEnd - vLineStart;
+    float lineLength = length(lineVec);
+    vec3 lineDir = lineVec / lineLength;
+    float t = dot(vPosition - vLineStart, lineDir) / lineLength;
+    t = clamp(t, 0.0, 1.0);
+
+    // 关键改进：计算颜色权重（使用 cos 实现平滑循环）
+    float colorWeight = 0.5 + 0.5 * cos(2.0 * 3.1415926 * (t + phase));
+    
+    // 混合颜色（蓝色 ↔ 黄色 ↔ 蓝色...）
+    vec3 color = mix(blue, yellow, colorWeight);
+    
+    // 输出颜色（固定透明度 1.0）
+    gl_FragColor = vec4(color, 1.0);
+}
+)";
+
+    osg::ref_ptr<osg::Program> program = new osg::Program;
+    // 必须显式绑定属性位置
+    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("lineID", 1);
+    program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
+    program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
+    return program.release();
+}
+osg::Program *createTextureBasedShaderProgramStarFlow(int lineCount) {
+    std::string vertSource = R"(
+#version 120
+attribute vec3 vertexPosition;
+attribute float lineID;
+
+varying vec3 vPosition;
+varying float vLineID;
+varying vec3 vLineStart;
+varying vec3 vLineEnd;
+
+uniform sampler2D uLineDataTex;
+uniform float uTotalLines;
+varying vec4 vColor;
+
+void main() {
+    vPosition = vertexPosition;
+    vLineID = lineID;
+    
+    // 从纹理获取当前线段的起点终点
+    float texX = (lineID + 0.5) / uTotalLines;
+    vLineStart = texture2D(uLineDataTex, vec2(texX, 0.25)).rgb;
+    vLineEnd = texture2D(uLineDataTex, vec2(texX, 0.5)).rgb;
+    vColor = gl_Color;
+    gl_Position = gl_ModelViewProjectionMatrix * vec4(vertexPosition, 1.0);
+}
+)";
+
+    std::string fragSource = R"(
+#version 120
+uniform sampler2D uLineDataTex;
+uniform float uTotalLines;
+uniform float uHighlightWidth;
+uniform vec4 uHighlightColor;
+
+varying vec3 vPosition;
+varying float vLineID;
+varying vec3 vLineStart;
+varying vec3 vLineEnd;
+varying vec4 vColor;
+
+void main() {
+    
+    // 获取当前线段的高光位置
+    float texX = (vLineID + 0.5) / uTotalLines;
+    float highlightPos = texture2D(uLineDataTex, vec2(texX, 0.0)).r;
+    
+    // 计算线段方向和长度
+    vec3 lineVec = vLineEnd - vLineStart;
+    float lineLength = length(lineVec);
+    vec3 lineDir = lineVec / lineLength;
+    
+    // 计算当前点在直线上的投影
+    float t = dot(vPosition - vLineStart, lineDir) / lineLength;
+    t = clamp(t, 0.0, 1.0);
+    
+    // 计算到线段的真实距离（用于线宽控制）
+    vec3 projectedPos = vLineStart + t * lineVec;
+    float dist = length(vPosition - projectedPos);
+    float uHighlightl = 0.05;
+    
+    // 高光强度计算（仅在前向移动方向增强）
+    float highlightIntensity = 0.0;
+    if(t >= highlightPos&& t <= highlightPos + 0.05) {
+        float posInHighlight = (t - highlightPos) / uHighlightl;  // 0=前端, 1=尾端
+        highlightIntensity = smoothstep(0.0, 1.0, posInHighlight);  // 线性增强（尾端最亮）
+    }
+    
+    // 基础颜色
+    vec4 baseColor = vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f);
+    // 最终颜色
+    gl_FragColor =mix(baseColor, uHighlightColor, highlightIntensity*1);
+}
+)";
+
+    osg::ref_ptr<osg::Program> program = new osg::Program;
+    // 必须显式绑定属性位置
+    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("lineID", 1);
+    program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
+    program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
+    return program.release();
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
     if (isAnimating) {
         // 停止动画
@@ -1511,207 +1636,125 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
     }
 }
 
-class ColorFlowCallback : public osg::NodeCallback {
-  public:
-    ColorFlowCallback(osg::Geometry *geom, float speed)
-        : _geom(geom), _speed(speed), _startTime(std::chrono::high_resolution_clock::now()) {}
-
-    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
-        if (nv->getVisitorType() == osg::NodeVisitor::UPDATE_VISITOR) {
-            // 计算动画时间
-            auto now = std::chrono::high_resolution_clock::now();
-            double elapsedTime = std::chrono::duration<double>(now - _startTime).count();
-            float t = static_cast<float>(elapsedTime * _speed);
-
-            // 计算渐变因子，确保在前几秒钟内逐渐改变颜色
-            float fadeFactor = std::min(t / 2, 1.0f); // 0 -> 1 over time
-
-            // 更新颜色
-            osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
-            if (colors) {
-                for (size_t i = 0; i < colors->size(); ++i) {
-                    osg::Vec4 &color = (*colors)[i];
-                    float offset = static_cast<float>(i) * 0.1f; // 基于顶点索引的偏移
-
-                    // 基于时间 t 和 offset 计算色相值（Hue）
-                    float hue =
-                        fmod((t + offset) * 60.0f, 360.0f); // 60度变化对应红-黄-绿-蓝-紫-红的循环
-                    osg::Vec4 targetColor = hslToRgb(hue, 0.5f, 0.5f); // 使用 HSL 转 RGB
-
-                    // 使用 fadeFactor 实现渐变效果
-                    color = color * (1.0f - fadeFactor) + targetColor * fadeFactor;
-                }
-                _geom->dirtyDisplayList(); // 确保更新渲染
-                _geom->dirtyBound();
-            }
-        }
-
-        traverse(node, nv); // 继续遍历
-    }
-
-  private:
-    // HSL 转 RGB 的辅助函数
-    osg::Vec4 hslToRgb(float h, float s, float l) {
-        float c = (1.0f - fabs(2.0f * l - 1.0f)) * s;
-        float x = c * (1.0f - fabs(fmod(h / 60.0f, 2) - 1.0f));
-        float m = l - c / 2.0f;
-
-        float r, g, b;
-        if (h >= 0 && h < 60) {
-            r = c;
-            g = x;
-            b = 0;
-        } else if (h >= 60 && h < 120) {
-            r = x;
-            g = c;
-            b = 0;
-        } else if (h >= 120 && h < 180) {
-            r = 0;
-            g = c;
-            b = x;
-        } else if (h >= 180 && h < 240) {
-            r = 0;
-            g = x;
-            b = c;
-        } else if (h >= 240 && h < 300) {
-            r = x;
-            g = 0;
-            b = c;
-        } else {
-            r = c;
-            g = 0;
-            b = x;
-        }
-
-        return osg::Vec4(r + m, g + m, b + m, 1.0f);
-    }
-
-    osg::ref_ptr<osg::Geometry> _geom;
-    float _speed;
-    std::chrono::high_resolution_clock::time_point _startTime;
-};
 void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
 
     if (lineGeode && lineGeometry) {
         if (isAnimating) {
             // 当前正在动画中，结束动画
-            lineGeode->setUpdateCallback(nullptr);
+            lineGeode->setUpdateCallback(nullptr); // 将颜色设置为初始颜色
+            // 2. 直接重置几何体颜色（强制GPU更新）
+            osg::Geometry *geom = dynamic_cast<osg::Geometry *>(lineGeode->getDrawable(0));
+            if (geom) {
+                osg::Vec4Array *colors = new osg::Vec4Array(1);
+                (*colors)[0] = osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f); // 初始蓝色
+                geom->setColorArray(colors, osg::Array::BIND_OVERALL);
+                geom->dirtyDisplayList(); // 比dirtyDisplayList()更彻底
+            }
+
+            // 3. 清除所有动画相关状态（关键！）
+            osg::StateSet *ss = lineGeode->getStateSet();
+            if (ss) {
+                ss->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
+                ss->removeUniform("uHighlightColor");
+                ss->removeAttribute(osg::StateAttribute::PROGRAM); // 移除着色器
+                ss->setMode(GL_LIGHTING, osg::StateAttribute::ON); // 恢复光照
+                for (auto &edge : *edges) {
+                    edge.highlightPos = 0.0f;
+                }
+            }
             isAnimating = false;
-            update(); // 重新绘制图形
+            // update(); // 重新绘制图形
         } else {
             // 当前没有动画，开始动画
-            lineGeode->setUpdateCallback(new ColorFlowCallback(lineGeometry, 1.f));
+            if (lineGeode && lineGeometry) {
+
+                osg::ref_ptr<osg::Image> lineDataImage = createLineDataTexture();
+                osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
+                lineDataTex->setImage(lineDataImage);
+                lineDataTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+                lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+                lineDataTex->setResizeNonPowerOfTwoHint(false);
+
+                // 禁用光照
+                auto arrowStates = lineGeode->getOrCreateStateSet();
+                arrowStates->setAttributeAndModes(
+                    createTextureBasedShaderProgramColorFlow(edges->size()),
+                    osg::StateAttribute::ON);
+
+                // 绑定纹理
+                arrowStates->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
+                arrowStates->addUniform(new osg::Uniform("uLineDataTex", 0));
+                arrowStates->addUniform(
+                    new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
+                arrowStates->addUniform(new osg::Uniform("uHighlightWidth", 20.f));
+                arrowStates->addUniform(
+                    new osg::Uniform("uHighlightColor", osg::Vec4(246.f, 66.f, 14.f, 1.0f)));
+                lineGeode->setUpdateCallback(
+                    new TextureBasedAnimationCallback(lineDataImage, edges));
+            }
             isAnimating = true;
         }
     }
 }
 
-class StarFlowCallback : public osg::NodeCallback {
-  public:
-    StarFlowCallback(osg::Geometry *geom, float speed, TimeController *timeController,
-                     const std::vector<std::pair<int, int>> &edgeRanges)
-        : _geom(geom), _speed(speed), _timeController(timeController), _edgeRanges(edgeRanges) {
-        // 保存原始颜色数组
-        _originalColors =
-            new osg::Vec4Array(*dynamic_cast<osg::Vec4Array *>(geom->getColorArray()));
-    }
-
-    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
-        float t = _timeController->getTime() * _speed;
-
-        osg::Vec4Array *colors = dynamic_cast<osg::Vec4Array *>(_geom->getColorArray());
-        osg::Vec3Array *vertices = dynamic_cast<osg::Vec3Array *>(_geom->getVertexArray());
-        if (colors && vertices) {
-            for (const auto &range : _edgeRanges) {
-
-                int startIdx = range.first;
-                int endIdx = (range.second);
-                int sum = endIdx - startIdx;
-                int scale = 1;
-                if (sum > 1000)
-                    scale *= 5;
-                // 计算高光的位置
-                float highlightPos = fmod(t, 1.0f) * (endIdx - startIdx + 10.f) + startIdx;
-                float tailLengthFactor = 10.0f * scale; // 拖尾长度控制
-                for (int i = startIdx; i <= endIdx; ++i) {
-                    // 计算高光与当前顶点的距离
-                    float dist = static_cast<float>(i) - highlightPos;
-                    // 控制高光范围和拖尾效果
-                    float intensity = std::max(0.0f, 2.0f - fabs(dist) / tailLengthFactor);
-
-                    osg::Vec4 &color = (*colors)[i];
-
-                    if (dist == 0) {
-                        // 前端高亮白色部分
-                        color = osg::Vec4(1.0f, 1.0f, 1.0f, 3.0f);
-                    } else if (dist < 0) {
-                        // 拖尾部分：从白色渐变到原始颜色
-                        color = osg::Vec4(
-                            1.0f * intensity + (*_originalColors)[i].r() * (1.0f - intensity),
-                            1.0f * intensity + (*_originalColors)[i].g() * (1.0f - intensity),
-                            1.0f * intensity + (*_originalColors)[i].b() * (1.0f - intensity),
-                            1.0f * intensity + (*_originalColors)[i].a() * (1.0f - intensity));
-                    } else {
-                        color = (*_originalColors)[i];
-                    }
-                }
-            }
-
-            // 标记几何体更新
-            _geom->dirtyDisplayList();
-            _geom->dirtyBound();
-        }
-
-        traverse(node, nv);
-    }
-
-  private:
-    osg::ref_ptr<osg::Geometry> _geom;
-    osg::ref_ptr<osg::Vec4Array> _originalColors;
-    float _speed;
-    osg::ref_ptr<TimeController> _timeController;
-    std::vector<std::pair<int, int>> _edgeRanges;
-};
 void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
 
-    if (isAnimating) {
-        // 停止动画
-        if (lineGeode) {
-            lineGeode->setUpdateCallback(nullptr);
-        }
-        isAnimating = false;
-        update(); // 重新绘制图形
-    } else {
-        // 开始动画
-        if (lineGeode && lineGeometry) {
-            auto arrowStates = lineGeometry->getOrCreateStateSet();
-            arrowStates->setMode(GL_BLEND, osg::StateAttribute::ON);
-            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-            // 获取顶点数组
-            osg::Vec3Array *vertices =
-                dynamic_cast<osg::Vec3Array *>(lineGeometry->getVertexArray());
-            if (!vertices) {
-                std::cout << "No vertices found!" << std::endl;
-                return;
+    if (lineGeode && lineGeometry) {
+        if (isAnimating) {
+            // 当前正在动画中，结束动画
+            lineGeode->setUpdateCallback(nullptr); // 将颜色设置为初始颜色
+            // 2. 直接重置几何体颜色（强制GPU更新）
+            osg::Geometry *geom = dynamic_cast<osg::Geometry *>(lineGeode->getDrawable(0));
+            if (geom) {
+                osg::Vec4Array *colors = new osg::Vec4Array(1);
+                (*colors)[0] = osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f); // 初始蓝色
+                geom->setColorArray(colors, osg::Array::BIND_OVERALL);
+                geom->dirtyDisplayList(); // 比dirtyDisplayList()更彻底
             }
 
-            std::vector<std::pair<int, int>> edgeRanges;
-            int currentIndex = 0;
-
-            for (auto &edge : *edges) {
-                if (!edge.visible)
-                    continue;
-
-                int numVerts = ((edge.subDivs.size() - 1) * 81) * 2;
-                edgeRanges.push_back(std::make_pair(currentIndex, currentIndex + numVerts - 1));
-                currentIndex += numVerts;
+            // 3. 清除所有动画相关状态（关键！）
+            osg::StateSet *ss = lineGeode->getStateSet();
+            if (ss) {
+                ss->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
+                ss->removeUniform("uHighlightColor");
+                ss->removeAttribute(osg::StateAttribute::PROGRAM); // 移除着色器
+                ss->setMode(GL_LIGHTING, osg::StateAttribute::ON); // 恢复光照
+                for (auto &edge : *edges) {
+                    edge.highlightPos = 0.0f;
+                }
             }
+            isAnimating = false;
+            // update(); // 重新绘制图形
+        } else {
+            // 当前没有动画，开始动画
+            if (lineGeode && lineGeometry) {
 
-            osg::ref_ptr<TimeController> newTimeController = new TimeController();
-            lineGeode->setUpdateCallback(
-                new StarFlowCallback(lineGeometry, 0.2f, newTimeController.get(), edgeRanges));
+                osg::ref_ptr<osg::Image> lineDataImage = createLineDataTexture();
+                osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
+                lineDataTex->setImage(lineDataImage);
+                lineDataTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+                lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+                lineDataTex->setResizeNonPowerOfTwoHint(false);
+
+                // 禁用光照
+                auto arrowStates = lineGeode->getOrCreateStateSet();
+                arrowStates->setAttributeAndModes(
+                    createTextureBasedShaderProgramStarFlow(edges->size()),
+                    osg::StateAttribute::ON);
+
+                // 绑定纹理
+                arrowStates->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
+                arrowStates->addUniform(new osg::Uniform("uLineDataTex", 0));
+                arrowStates->addUniform(
+                    new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
+                arrowStates->addUniform(new osg::Uniform("uHighlightWidth", 20.f));
+                arrowStates->addUniform(
+                    new osg::Uniform("uHighlightColor", osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)));
+                lineGeode->setUpdateCallback(
+                    new TextureBasedAnimationCallback(lineDataImage, edges));
+            }
+            isAnimating = true;
         }
-        isAnimating = true;
     }
 }
 osg::Vec4 generateColor(float index) {
@@ -1734,15 +1777,6 @@ osg::Vec4 generateColor(float index) {
     if (index >= predefinedColors.size())
         index = predefinedColors.size() - 1;
     return predefinedColors[index];
-}
-// 模拟根据经纬度返回高度值
-float getSimulatedElevation(float latitude, float longitude) {
-    // 简单的正弦函数模拟地形变化（可以根据需要修改）
-    float baseHeight = 10.0f;
-    float scale = 80000.0f; // 高度变化范围（单位：米）
-    baseHeight +=
-        scale * sinf(osg::DegreesToRadians(latitude)) * cosf(osg::DegreesToRadians(longitude));
-    return baseHeight;
 }
 // 找到满足条件的最小顶点高度 h'
 float findOptimalHeight(float p, float max, const std::vector<float> &heightArray,
@@ -1910,76 +1944,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
                 maxLocation = i;
             }
         }
-        int flag = 1;
-        if (flag == 2) {
-            // 方法1 *TODO:二次函数法获得平滑曲线
-            // 找到最优顶点高度 h'
-            osg::Vec3 prevInterpolatedPos = prevPos; // 初始插值位置
-            prevInterpolatedPos.z() =
-                getBuildingHeightAtLatLon(prevInterpolatedPos.x(), prevInterpolatedPos.y());
-            osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
-            float h_prime =
-                findOptimalHeight(maxLocation, heightArray.size(), heightArray, maxHeightInArray);
-
-            // 计算系数 a1 和 a2
-            float a1 = -h_prime / (maxLocation * maxLocation);
-            float a2 = -h_prime /
-                       ((heightArray.size() - maxLocation) * (heightArray.size() - maxLocation));
-
-            // 插值并生成路径
-            for (size_t i = 1; i < edge.subDivs.size(); ++i) {
-                osg::Vec3 currentPos = edge.subDivs[i];
-                osg::Vec4 currentColor = prevColor + dCol;
-
-                // 在 prevPos 和 currentPos 之间插入细分点
-                for (int j = 0; j <= 20; ++j) { // 包含起点和终点
-                    float t = static_cast<float>(j) / 20.0f;
-
-                    osg::Vec3 interpolatedPos;
-                    interpolatedPos.x() = prevPos.x() * (1.0f - t) + currentPos.x() * t;
-                    interpolatedPos.y() = prevPos.y() * (1.0f - t) + currentPos.y() * t;
-
-                    // 计算全局参数 t
-                    float globalT = ((i - 1) * 18 + (j + 1)) / static_cast<float>(totalPoints);
-
-                    // 判断当前点属于哪个区间
-                    if ((i - 1) * 81 + (j + 1) <= maxLocation) {
-                        // 0 ~ p 区间：使用 f1(x) = a1 * (x - p)^2 + h'
-                        float x = (i - 1) * 81 + (j + 1);
-                        interpolatedPos.z() = a1 * (x - maxLocation) * (x - maxLocation) + h_prime;
-                    } else {
-                        // p ~ max 区间：使用 f2(x) = a2 * (x - p)^2 + h'
-                        float x = (i - 1) * 81 + (j + 1);
-                        interpolatedPos.z() = a2 * (x - maxLocation) * (x - maxLocation) + h_prime;
-                    }
-
-                    // 确保高度大于 heightArray
-                    int index = static_cast<int>(interpolatedPos.x()); // 假设 x 是整数索引
-                    if (index >= 0 && index < heightArray.size()) {
-                        interpolatedPos.z() = std::max(interpolatedPos.z(), heightArray[index]);
-                    }
-
-                    interpolatedPos.z() = 0.f;
-
-                    // 插值颜色
-                    osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
-
-                    // 存储顶点和颜色
-                    if (j >= 0) {
-                        segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
-                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.65f));
-                        segVerts->push_back(vec3ToSphere(interpolatedPos));
-                        segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.65f));
-                    }
-
-                    prevInterpolatedPos = interpolatedPos;
-                    prevInterpolatedColor = interpolatedColor;
-                }
-
-                prevPos = currentPos;
-                prevColor = currentColor;
-            }
-        } else {
+        {
             osg::Vec3 prevInterpolatedPos = prevPos;     // 初始插值位置
             osg::Vec4 prevInterpolatedColor = prevColor; // 初始插值颜色
             prevInterpolatedPos.z() =

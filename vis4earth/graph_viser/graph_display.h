@@ -389,8 +389,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     void onEdgePercentageThresholdChanged(double value);
 
-    void onSizeSliderValueChanged(int value);
-
     void onFontSizeSliderValueChanged(int value);
 
     void onResolutionSliderValueChanged(int value);

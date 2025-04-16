@@ -65,7 +65,7 @@ class CityLoader {
             geode = createOBBBox(obb, latLonBounds, scale);
 
             // 将建筑物添加到场景的根节点中
-            root->addChild(geode);
+            // root->addChild(geode);
         }
         calculateHeightMap(coords, latLonBounds);
     }
