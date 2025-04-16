@@ -1277,7 +1277,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startArrowAnimation() {
         update(); // 重新绘制图形，移除箭头效果
     }
 }
-
 class TextureBasedAnimationCallback : public osg::NodeCallback {
   public:
     TextureBasedAnimationCallback(osg::Image *lineDataImage,
@@ -1305,6 +1304,67 @@ class TextureBasedAnimationCallback : public osg::NodeCallback {
             // 独立更新每条线的高光位置
             _lines->at(i).highlightPos =
                 fmod(_lines->at(i).highlightPos + _lines->at(i).speed * deltaTime, 1.1f);
+
+            int baseIdx = i * 4;
+            _paramCache[baseIdx] = _lines->at(i).highlightPos;
+            _paramCache[baseIdx + 1] = _lines->at(i).speed;
+            _paramCache[baseIdx + 2] = 0.0f; // 保留
+            _paramCache[baseIdx + 3] = 0.0f; // 保留
+        }
+
+        // 更新纹理（仅参数行）
+        if (_lineDataImage.valid()) {
+            float *data = reinterpret_cast<float *>(_lineDataImage->data());
+            if (data) {
+                const int rowStride = _lineDataImage->s() * 4;
+                for (size_t i = 0; i < _lines->size(); ++i) {
+                    int dstPos = i * 4; // 第0行参数
+                    int srcPos = i * 4;
+                    data[dstPos] = _paramCache[srcPos];
+                    data[dstPos + 1] = _paramCache[srcPos + 1];
+                    data[dstPos + 2] = _paramCache[srcPos + 2];
+                    data[dstPos + 3] = _paramCache[srcPos + 3];
+                }
+                _lineDataImage->dirty();
+            }
+        }
+
+        traverse(node, nv);
+    }
+
+  private:
+    osg::ref_ptr<osg::Image> _lineDataImage;
+    std::shared_ptr<std::vector<GraphRenderer::Edge>> _lines;
+    std::vector<float> _paramCache; // 本地参数缓存
+    bool _firstFrame = true;
+};
+class TextureBasedAnimationColorCallback : public osg::NodeCallback {
+  public:
+    TextureBasedAnimationColorCallback(osg::Image *lineDataImage,
+                                       std::shared_ptr<std::vector<GraphRenderer::Edge>> &lines)
+        : _lineDataImage(lineDataImage), _lines(lines), _firstFrame(true) {
+        // 预分配足够大小的缓存
+        _paramCache.resize(lines->size() * 4); // 每个线条4个float(RGBA)
+    }
+
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
+        static double lastTime = nv->getFrameStamp()->getSimulationTime();
+
+        double currentTime = nv->getFrameStamp()->getSimulationTime();
+        // 首次运行初始化时间
+        if (_firstFrame) {
+            lastTime = currentTime;
+            _firstFrame = false;
+            return; // 跳过第一帧更新
+        }
+        double deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+
+        // 更新本地缓存
+        for (size_t i = 0; i < _lines->size(); ++i) {
+            // 独立更新每条线的高光位置
+            _lines->at(i).highlightPos =
+                fmod(_lines->at(i).highlightPos + _lines->at(i).speed * deltaTime, 1.0f);
 
             int baseIdx = i * 4;
             _paramCache[baseIdx] = _lines->at(i).highlightPos;
@@ -1475,10 +1535,10 @@ void main() {
     float lineLength = length(lineVec);
     vec3 lineDir = lineVec / lineLength;
     float t = dot(vPosition - vLineStart, lineDir) / lineLength;
-    t = clamp(t, 0.0, 1.0);
+    t = clamp(t, 0.0, 1);
 
     // 关键改进：计算颜色权重（使用 cos 实现平滑循环）
-    float colorWeight = 0.5 + 0.5 * cos(2.0 * 3.1415926 * (t + phase));
+    float colorWeight = 0.5 + 0.5 * cos(2.0 * 3.1415926 * (t - phase));
     
     // 混合颜色（蓝色 ↔ 黄色 ↔ 蓝色...）
     vec3 color = mix(blue, yellow, colorWeight);
@@ -1690,7 +1750,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
                 arrowStates->addUniform(
                     new osg::Uniform("uHighlightColor", osg::Vec4(246.f, 66.f, 14.f, 1.0f)));
                 lineGeode->setUpdateCallback(
-                    new TextureBasedAnimationCallback(lineDataImage, edges));
+                    new TextureBasedAnimationColorCallback(lineDataImage, edges));
             }
             isAnimating = true;
         }
