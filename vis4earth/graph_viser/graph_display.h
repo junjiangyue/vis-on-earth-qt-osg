@@ -32,6 +32,7 @@
 #include <osg/Shader>
 #include <osg/ShapeDrawable>
 #include <osg/Texture2D>
+#include <osgText/Text>
 #include <osgAnimation/AnimationManagerBase>
 #include <osgAnimation/BasicAnimationManager>
 #include <osgAnimation/StackedTransform>
@@ -165,10 +166,12 @@ class GraphRenderer : public QtOSGReflectableWidget {
         int graphTypeIndex;
         VIS4Earth::Area restriction;
         bool restrictionOFF = true;
+        osg::ref_ptr<osg::Camera> _camera;
 
         PerGraphParam(std::shared_ptr<std::map<std::string, Node>> nodes,
                       std::shared_ptr<std::vector<Edge>> edges, PerRendererParam *renderer)
-            : nodes(std::move(nodes)), edges(std::move(edges)), grp(new osg::Group) {
+            : nodes(std::move(nodes)), edges(std::move(edges)), grp(new osg::Group),
+              _camera(nullptr) {
             const float MinHeight = static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) * 1.1f;
             const float MaxHeight = static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) * 1.3f;
 
@@ -193,7 +196,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::ref_ptr<osg::Geometry> lineGeometry;
         osg::ref_ptr<osg::Geode> triangleGeode; // 新增用于保存三角形的 Geode
         osg::Vec3Array *segVerts;
-
+        
+        void setCamera(osg::Camera *camera) { _camera = camera; }
         void update();
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
                                   const osg::Vec4 &color, const int startIndex, const int endIndex);
@@ -284,6 +288,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
         return osg::Vec3((screenPos.x() * 0.5 + 0.5) * viewport->width(),
                          (screenPos.y() * 0.5 + 0.5) * viewport->height(), screenPos.z());
     }
+
+    //void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize,
+    //                        osg::ref_ptr<osg::Camera> camera);
 
   public:
     constexpr static double WGS_84_RADIUS_POLAR = 6356752.3142;
