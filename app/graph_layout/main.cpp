@@ -15,14 +15,27 @@
 
 #include <osgViewer/ViewerEventHandlers>
 
-class UpdateMarkersCallback : public osg::Camera::DrawCallback {
+class MouseWheelEventHandler : public osgGA::GUIEventHandler {
   public:
-    UpdateMarkersCallback(EarthMarkerManager *manager) : _manager(manager) {}
+    MouseWheelEventHandler(VIS4Earth::GraphRenderer *graphLayout) : _graphLayout(graphLayout) {}
 
-    virtual void operator()(osg::RenderInfo &) const override { _manager->updateMarkers(); }
+    // 处理鼠标滚轮事件
+    virtual bool handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIActionAdapter &aa) {
+        // 检查事件类型是否是鼠标滚轮
+        if (ea.getEventType() == osgGA::GUIEventAdapter::SCROLL) {
+            // 如果滚轮事件发生，更新图形布局
+            if (ea.getScrollingMotion() == osgGA::GUIEventAdapter::SCROLL_UP ||
+                ea.getScrollingMotion() == osgGA::GUIEventAdapter::SCROLL_DOWN) {
+                // 调用 graphLayout 的更新方法 直接卡住！
+                //_graphLayout->update("LoadedGraph");
+                return true; // 表示事件已被处理
+            }
+        }
+        return false; // 事件未被处理
+    }
 
   private:
-    EarthMarkerManager *_manager;
+    VIS4Earth::GraphRenderer *_graphLayout;
 };
 
 int main(int argc, char **argv) {
@@ -43,11 +56,15 @@ int main(int argc, char **argv) {
     grp->addChild(graphLayout->getGroup());
     graphLayout->show();
 
-    //// 添加点击事件
-    // VIS4Earth::NodeClickHandler *nodeClickHandler =
-    //     new VIS4Earth::NodeClickHandler(graphLayout, viewer);
-    //// 将 NodeClickHandler 添加到 Viewer 的事件处理器中
-    // viewer->addEventHandler(nodeClickHandler);
+    // 添加点击事件
+    VIS4Earth::NodeClickHandler *nodeClickHandler =
+        new VIS4Earth::NodeClickHandler(graphLayout, viewer);
+    // 将 NodeClickHandler 添加到 Viewer 的事件处理器中
+    viewer->addEventHandler(nodeClickHandler);
+    // 添加鼠标滚轮事件处理器
+    // MouseWheelEventHandler *mouseWheelHandler = new MouseWheelEventHandler(graphLayout);
+    // viewer->addEventHandler(mouseWheelHandler);
+
     auto pStatsEventHandler = new osgViewer::StatsHandler; // 构造一视景器统计事件处理器
     viewer->addEventHandler(pStatsEventHandler); // 向视景器增加统计事件处理器
 

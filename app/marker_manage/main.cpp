@@ -7,6 +7,7 @@
 #include <osgGA/TrackballManipulator>
 #include <osgViewer/Viewer>
 
+#include <osgViewer/ViewerEventHandlers>
 #include <vis4earth/graph_viser/markManager.h>
 #include <vis4earth/graph_viser/nodeHoverHandler.h>
 #include <vis4earth/graph_viser/resizeWindowHandler.h>
@@ -47,6 +48,8 @@ int main(int argc, char **argv) {
     ResizeHandler *resizeHandler = new ResizeHandler(manager, viewer);
     viewer->addEventHandler(nodeHoverHandler);
     viewer->addEventHandler(resizeHandler);
+    auto pStatsEventHandler = new osgViewer::StatsHandler; // 构造一视景器统计事件处理器
+    viewer->addEventHandler(pStatsEventHandler); // 向视景器增加统计事件处理器
 
     viewer->setSceneData(grp);
     auto prevClk = clock();

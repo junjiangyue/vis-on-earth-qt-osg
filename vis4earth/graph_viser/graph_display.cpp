@@ -278,8 +278,8 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
                 static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
             graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
             graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-            // graphParam->generateHierarchicalGraphs(nodes, edges);
-            // graphParam->setLevelGraph(0);
+            graphParam->generateHierarchicalGraphs(nodes, edges);
+            graphParam->setLevelGraph(0);
             graphParam->setCamera(param._camera);
             graphParam->update();
             // loadMarker();
@@ -366,8 +366,8 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         auto graphParam = getGraph("LoadedGraph");
         graphParam->graphTypeIndex = graphTypeIndex;
         graphParam->heightMap = heightMap;
-        // graphParam->generateHierarchicalGraphs(nodes, edges);
-        // graphParam->setLevelGraph(0);
+        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->setLevelGraph(0);
         graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
         graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
         graphParam->setHeightFromCenterRange(
@@ -926,7 +926,7 @@ void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
     ui->resolutionLabel->setText(QString("分辨率: %1%").arg(percentage));
     auto graphParam = getGraph("LoadedGraph");
     graphParam->graphTypeIndex = graphTypeIndex;
-    // graphParam->setLevelGraph(10 - value);
+    graphParam->setLevelGraph(10 - value);
     graphParam->update();
 
 }
@@ -2479,11 +2479,12 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             currentLevel.nodes->emplace(representativeNodeId,
                                         previousLevel.nodes->at(representativeNodeId));
             currentLevel.nodes->at(representativeNodeId).isRepresent = true;
-            // 设置代表节点的大小，基于簇中节点的数量
-            float representativeSize =
-                (static_cast<float>(nodesInCluster.size()) * 0.05 +
-                 previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
-            currentLevel.nodes->at(representativeNodeId).size = representativeSize;
+            
+            //// 设置代表节点的大小，基于簇中节点的数量
+            //float representativeSize =
+            //    (static_cast<float>(nodesInCluster.size()) * 0.015 +
+            //     previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
+            //currentLevel.nodes->at(representativeNodeId).size = representativeSize;
 
             processedNodes.insert(representativeNodeId);
 
