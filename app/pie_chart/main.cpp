@@ -106,6 +106,7 @@
 #include <osg/Vec3>
 #include <osgDB/ReadFile>
 #include <osgViewer/Viewer>
+#include <osgViewer/ViewerEventHandlers>
 
 // 线条数据结构
 struct LineSegment {
@@ -378,6 +379,8 @@ int main(int argc, char **argv) {
 
     // 设置查看器
     osgViewer::Viewer viewer;
+    auto pStatsEventHandler = new osgViewer::StatsHandler; // 构造一视景器统计事件处理器
+    viewer.addEventHandler(pStatsEventHandler); // 向视景器增加统计事件处理器
     viewer.setSceneData(root);
     viewer.setUpViewInWindow(100, 100, 800, 600);
 

@@ -22,7 +22,6 @@
 #include <vector>
 #include <vis4earth/graph_viser/graph_display.h>
 
-
 struct Marker {
     int id;
     std::string label;
@@ -241,8 +240,8 @@ class EarthMarkerManager {
         return visibleMarkers;
     }
     // 创建标记几何体并创建标签
-    osg::ref_ptr<osg::Geode>
-    createNodeAndText(std::shared_ptr<std::map<std::string, VIS4Earth::GraphRenderer::Node>> &nodes) {
+    osg::ref_ptr<osg::Geode> createNodeAndText(
+        std::shared_ptr<std::map<std::string, VIS4Earth::GraphRenderer::Node>> &nodes) {
         ScreenGrid screenGrid(windowWeight, windowHeight, 20.0f,
                               20.0f); // 屏幕大小为 1000x1000，网格单元大小为 20x20
         osg::ref_ptr<osg::Geode> geode = new osg::Geode();
@@ -286,9 +285,9 @@ class EarthMarkerManager {
             // 将点的坐标的位置设置为已占用
 
             //// 为每个顶点创建 userData
-            //osg::ref_ptr<MarkerData> vertexUserData =
-            //    new MarkerData(marker.id, marker.label, position);
-            //vertexIDs->push_back(static_cast<float>(marker.id));
+            // osg::ref_ptr<MarkerData> vertexUserData =
+            //     new MarkerData(marker.id, marker.label, position);
+            // vertexIDs->push_back(static_cast<float>(marker.id));
 
             // 创建文本标签
             if (marker.visible) {
@@ -416,20 +415,20 @@ class EarthMarkerManager {
 
         geometry->getOrCreateStateSet()->setAttributeAndModes(pointSize, osg::StateAttribute::ON);
         geometry->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-        geometry->getOrCreateStateSet()->setMode(GL_POINT_SMOOTH, osg::StateAttribute::ON);
-        geometry->getOrCreateStateSet()->setMode(GL_VERTEX_PROGRAM_POINT_SIZE,
-                                                 osg::StateAttribute::ON);
-        // 启用混合（Blending）以支持透明度
-        geometry->getOrCreateStateSet()->setMode(GL_BLEND, osg::StateAttribute::ON);
+        // geometry->getOrCreateStateSet()->setMode(GL_POINT_SMOOTH, osg::StateAttribute::ON);
+        // geometry->getOrCreateStateSet()->setMode(GL_VERTEX_PROGRAM_POINT_SIZE,
+        //                                          osg::StateAttribute::ON);
+        //// 启用混合（Blending）以支持透明度
+        // geometry->getOrCreateStateSet()->setMode(GL_BLEND, osg::StateAttribute::ON);
 
-        // 设置混合函数
-        geometry->getOrCreateStateSet()->setAttributeAndModes(
-            new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg::StateAttribute::ON);
+        //// 设置混合函数
+        // geometry->getOrCreateStateSet()->setAttributeAndModes(
+        //     new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg::StateAttribute::ON);
 
-        // 设置渲染顺序以确保透明物体正确渲染
-        geometry->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-        geometry->getOrCreateStateSet()->setAttributeAndModes(
-            new osg::Depth(osg::Depth::LESS, 0.0, 1.0, false), osg::StateAttribute::ON);
+        //// 设置渲染顺序以确保透明物体正确渲染
+        // geometry->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        // geometry->getOrCreateStateSet()->setAttributeAndModes(
+        //     new osg::Depth(osg::Depth::LESS, 0.0, 1.0, false), osg::StateAttribute::ON);
         geode->setName("MarkerGeode");
 
         geode->addDrawable(geometry);
@@ -611,20 +610,20 @@ class EarthMarkerManager {
 
         geometry->getOrCreateStateSet()->setAttributeAndModes(pointSize, osg::StateAttribute::ON);
         geometry->getOrCreateStateSet()->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-        geometry->getOrCreateStateSet()->setMode(GL_POINT_SMOOTH, osg::StateAttribute::ON);
-        geometry->getOrCreateStateSet()->setMode(GL_VERTEX_PROGRAM_POINT_SIZE,
-                                                 osg::StateAttribute::ON);
-        // 启用混合（Blending）以支持透明度
-        geometry->getOrCreateStateSet()->setMode(GL_BLEND, osg::StateAttribute::ON);
+        // geometry->getOrCreateStateSet()->setMode(GL_POINT_SMOOTH, osg::StateAttribute::ON);
+        // geometry->getOrCreateStateSet()->setMode(GL_VERTEX_PROGRAM_POINT_SIZE,
+        //                                          osg::StateAttribute::ON);
+        //// 启用混合（Blending）以支持透明度
+        // geometry->getOrCreateStateSet()->setMode(GL_BLEND, osg::StateAttribute::ON);
 
-        // 设置混合函数
-        geometry->getOrCreateStateSet()->setAttributeAndModes(
-            new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg::StateAttribute::ON);
+        //// 设置混合函数
+        // geometry->getOrCreateStateSet()->setAttributeAndModes(
+        //     new osg::BlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA), osg::StateAttribute::ON);
 
-        // 设置渲染顺序以确保透明物体正确渲染
-        geometry->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-        geometry->getOrCreateStateSet()->setAttributeAndModes(
-            new osg::Depth(osg::Depth::LESS, 0.0, 1.0, false), osg::StateAttribute::ON);
+        //// 设置渲染顺序以确保透明物体正确渲染
+        // geometry->getOrCreateStateSet()->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        // geometry->getOrCreateStateSet()->setAttributeAndModes(
+        //     new osg::Depth(osg::Depth::LESS, 0.0, 1.0, false), osg::StateAttribute::ON);
         geode->setName("MarkerGeode");
 
         geode->addDrawable(geometry);

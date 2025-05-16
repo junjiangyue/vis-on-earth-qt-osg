@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
 
         app.processEvents();
 
-        if (duration >= CLOCKS_PER_SEC / 45) {
+        if (duration >= CLOCKS_PER_SEC / 120) {
             viewer->frame();
             prevClk = clock();
         }

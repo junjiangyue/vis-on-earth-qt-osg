@@ -75,11 +75,11 @@ int main(int argc, char **argv) {
         auto duration = currClk - prevClk;
 
         app.processEvents();
-
-        if (duration >= CLOCKS_PER_SEC / 60) {
-            viewer->frame();
-            prevClk = clock();
-        }
+        viewer->frame();
+        prevClk = clock();
+        // if (duration >= CLOCKS_PER_SEC / 200) {
+        //
+        // }
     }
 
     return 0;
