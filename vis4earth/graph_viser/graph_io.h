@@ -213,13 +213,14 @@ class GraphLoader {
         int labelCh;
         char name[100];
         double latitude, longitude;
+        int level;
         std::unordered_map<std::string, Node> read_nodes;
 
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
-            sscanf(line, "%d,%[^,],%lg,%lg", &labelCh, name, &latitude, &longitude);
+            sscanf(line, "%d,%[^,],%lg,%lg,%d", &labelCh, name, &latitude, &longitude, &level);
             read_nodes.insert(
-                std::pair<std::string, Node>(std::to_string(labelCh), Node(latitude, longitude)));
+                std::pair<std::string, Node>(std::to_string(labelCh), Node(latitude, longitude, level)));
         }
         f.Close();
 

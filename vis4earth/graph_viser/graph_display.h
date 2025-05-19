@@ -89,7 +89,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::string id;
         bool visible = true; // 默认可见
         bool isRepresent = false;
-        double level;
+        int level;
         float size = 1; // 节点大小
         int degree = 0;
         int cluster; // 簇ID
