@@ -32,10 +32,10 @@
 #include <osg/Shader>
 #include <osg/ShapeDrawable>
 #include <osg/Texture2D>
-#include <osgText/Text>
 #include <osgAnimation/AnimationManagerBase>
 #include <osgAnimation/BasicAnimationManager>
 #include <osgAnimation/StackedTransform>
+#include <osgText/Text>
 
 #include <qtcore/qtimer>
 
@@ -123,6 +123,14 @@ class GraphRenderer : public QtOSGReflectableWidget {
         float maxY;
     };
     CoordRange coordRange;
+    std::array<std::vector<std::string>, 4> levelIndex;
+    std::array<std::vector<Node>, 4> levelNodeIndex; // 不同层级的nodes
+    std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
+    std::unordered_set<std::string> visibleLabels; // 当前可见标签ID
+    std::vector<Node> visileNodes;
+    std::vector<Node> currentNodes;
+    std::unordered_set<std::string> sceneLabels; // 场景中已存在的标签ID
+
     std::vector<Graph> simplifiedGraphsList;
     std::vector<std::unordered_map<std::string, std::vector<std::string>>> nodeMappingList;
     std::vector<std::unordered_map<std::string, std::vector<Edge>>>
@@ -196,7 +204,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::ref_ptr<osg::Geometry> lineGeometry;
         osg::ref_ptr<osg::Geode> triangleGeode; // 新增用于保存三角形的 Geode
         osg::Vec3Array *segVerts;
-        
+
         void setCamera(osg::Camera *camera) { _camera = camera; }
         void update();
         void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
@@ -289,8 +297,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
                          (screenPos.y() * 0.5 + 0.5) * viewport->height(), screenPos.z());
     }
 
-    //void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize,
-    //                        osg::ref_ptr<osg::Camera> camera);
+    // void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize,
+    //                         osg::ref_ptr<osg::Camera> camera);
 
   public:
     constexpr static double WGS_84_RADIUS_POLAR = 6356752.3142;
@@ -320,6 +328,13 @@ class GraphRenderer : public QtOSGReflectableWidget {
         return nullptr;
     }
     void update(const std::string &graphName);
+    void updateLabelLists(const std::string &graphName);
+    void syncSceneGraph(const std::string &graphName);
+    void cameraUpdate(const std::string &graphName, double cameraHeight,
+                      const osg::Polytope &frustum);
+    void frustumCulling(const std::string &graphName, const osg::Polytope &frustum,
+                        int currentLevel);
+    int getCurrentLevel(double height);
     void setEdges(const std::string &graphName, std::shared_ptr<std::vector<Edge>> edges) {
         auto it = graphs.find(graphName);
         if (it != graphs.end()) {

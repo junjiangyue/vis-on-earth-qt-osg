@@ -33,44 +33,59 @@ class CameraMovementCallback : public osg::NodeCallback {
         traverse(node, nv);
     }
 
-    void checkCameraMovement(osg::Camera* camera) {
+    void checkCameraMovement(osg::Camera *camera) {
         // 静态变量记录上一帧状态
         static osg::Vec3d lastEye, lastCenter;
         static osg::Matrixd lastViewMatrix;
-    
-        // 获取当前状态
-        osg::Vec3d eye, center, up;
-        camera->getViewMatrixAsLookAt(eye, center, up);
-        osg::Matrixd currentViewMatrix = camera->getViewMatrix();
+
+        // 获取当前相机的世界坐标位置（直接从相机矩阵中提取）
+        osg::Matrixd viewMatrix = camera->getViewMatrix();
+        osg::Vec3d eyePosition =
+            osg::Vec3d(viewMatrix(3, 0), viewMatrix(3, 1), viewMatrix(3, 2)); // 提取相机位置
+        osg::Vec3d center = camera->getViewMatrix().getTrans();               // 获取目标位置
 
         // 计算位移变化（世界坐标系）
-        double positionDelta = (eye - lastEye).length();
-    
+        double positionDelta = (eyePosition - lastEye).length();
+
         // 计算旋转变化（矩阵差异）
-        osg::Matrixd deltaMatrix = currentViewMatrix * osg::Matrixd::inverse(lastViewMatrix);
+        osg::Matrixd deltaMatrix = viewMatrix * osg::Matrixd::inverse(lastViewMatrix);
         double angleChange = getRotationAngle(deltaMatrix);
 
         // 判断是否超过阈值
         const double POSITION_THRESHOLD = 100.0; // 单位：米
         const double ANGLE_THRESHOLD = 3.0;      // 单位：度
-    
+
+        // 计算相机高度
+        double R_earth = 6371.0;                // 地球半径，单位：公里
+        double distance = eyePosition.length(); // 相机到地球中心的距离
+        double height = distance - R_earth; // 相机到地球表面的高度（单位：公里）
+        // 获取当前视锥体
+        osg::Polytope frustum;
+        getViewFrustum(camera, frustum);
+
         if (positionDelta > POSITION_THRESHOLD || angleChange > ANGLE_THRESHOLD) {
             // 触发标签更新等后续操作
-            //onCameraMovedSignificantly();
+
             if (!camera || !_graphRenderer)
                 return;
+            _graphRenderer->cameraUpdate("LoadedGraph", height,
+                                         frustum); // 调用外部对象的更新方法
 
-            //_graphRenderer->updateLabels(); // 调用外部对象的更新方法
-           
             std::cout << "updatecheck" << std::endl;
         }
 
         // 更新记录
-        lastEye = eye;
+        lastEye = eyePosition;
         lastCenter = center;
-        lastViewMatrix = currentViewMatrix;
+        lastViewMatrix = viewMatrix;
     }
-
+    // 辅助函数：提取视锥体
+    void getViewFrustum(osg::Camera *cam, osg::Polytope &frustum) {
+        osg::Matrixd proj = cam->getProjectionMatrix();
+        osg::Matrixd mv = cam->getViewMatrix();
+        frustum.setToUnitFrustum();
+        frustum.transformProvidingInverse(proj * mv);
+    }
     // 辅助函数：从矩阵提取旋转角度
     double getRotationAngle(const osg::Matrixd &mat) {
         osg::Quat rot;

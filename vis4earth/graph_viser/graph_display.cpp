@@ -165,6 +165,73 @@ void GraphRenderer::update(const std::string &graphName) {
         itr->second.update();
     }
 }
+void GraphRenderer::updateLabelLists(const std::string &graphName) {
+    /*
+    输入：无
+
+    输出：无
+
+    利用visibleLabel（目前已更新）对比当前sceneList(当前屏幕上的label)，重置newAddList，removeList*/
+}
+void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
+    /*
+    * 输入：无
+
+    输出：无
+
+    功能：
+
+    ​	调用`updateLabelLists()` （维护新增/持续/移除列表）
+
+    ​	实现节点的添加和移除，在这一步创建文字标签，更新sceneList
+
+    ​	对当前节点进行resolveLabelCollisions()
+    */
+}
+void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double cameraHeight,
+                                            const osg::Polytope &frustum) {
+    /*
+    * 检测当前高度
+
+    getCurrentLevel()
+    frustumCulling();
+​	syncSceneGraph();
+    */
+    int currentLevel = getCurrentLevel(cameraHeight);
+    // 筛选所有level<=currentLevel的nodes,加入currentLevelLabels
+    for (int i = 0; i <= currentLevel; i++) {
+        std::copy(levelIndex.begin(), levelIndex.end(),
+                  std::inserter(currentLevelLabels, currentLevelLabels.end()));
+    }
+
+    frustumCulling(graphName, frustum, currentLevel);
+    syncSceneGraph(graphName);
+}
+void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName,
+                                              const osg::Polytope &frustum,
+                                              const int currentLevel) {
+    /*视锥剔除*/
+
+    for (int i = 0; i <= currentLevel; i++) {
+        // 获取level<=currentLevel的nodes
+        currentNodes.insert(currentNodes.end(), levelNodeIndex[i].begin(), levelNodeIndex[i].end());
+    }
+
+    // 筛选视角范围内的节点
+    // 判断相机视角覆盖的经纬度
+    // 剔除不在经纬度范围的节点
+}
+int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
+    std::cout << "height:" << height << std::endl;
+    if (height > 2.58305e+07)
+        return 0; // 全球级
+    else if (height > 1.69452e+07)
+        return 1; // 大陆级
+    else if (height > 1.00033e+07)
+        return 2; // 国家级
+    else
+        return 3;
+}
 void VIS4Earth::GraphRenderer::onComboBoxGraphTypeChanged(int index) { graphTypeIndex = index; }
 
 void GraphRenderer::loadPointsCSV() {
@@ -207,12 +274,15 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     // 绘制建筑物
     cityLoader.drawBuildings(param.grp, latLonBounds, scale);
     heightMap = cityLoader.getHeightMap();
+
     QString pointsFileName = ui->pointsFilePath->text();
     QString edgesFileName = ui->edgesFilePath->text();
 
-    if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
-        QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
-        return;
+    if (pointsFileName.isEmpty()) {
+        pointsFileName = "C:/Users/shan/Desktop/graph_data/usflight/usairports_with_levels.csv";
+    }
+    if (edgesFileName.isEmpty()) {
+        edgesFileName = "C:/Users/shan/Desktop/graph_data/usflight/usroutes.csv";
     }
 
     // 读取CSV文件中的图数据
@@ -238,7 +308,8 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             node.color = colors[i];
             node.id = itr->first;
             node.level = itr->second.level;
-
+            levelIndex[node.level].push_back(node.id);
+            levelNodeIndex[node.level].push_back(node);
             nodes->emplace(std::make_pair(itr->first, node));
             ++i;
         }
@@ -2152,31 +2223,31 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         sphere->setColor(color);
         grp->addChild(sphere);
 
-        osg::ref_ptr<osgText::Text> text = new osgText::Text;
-        text->setText(itr->first);
-        text->setFont("Fonts/simhei.ttf"); // 设置字体
-        text->setAxisAlignment(osgText::Text::SCREEN);
-        if (textSize) {
-            text->setCharacterSize(textSize * 0.25); // 设置字体大小
-        } else {
-            text->setCharacterSize(nodeGeomSize * 0.25);
-        }
-        // text->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
-        text->setPosition(p +
-                          osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
-                                    itr->second.size * (-0.25f) * nodeGeomSize,
-                                    itr->second.size * 0.30f *
-                                        nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-                                                        // 设置文字内容为点的ID
-        text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
-        text->setAxisAlignment(osgText::Text::SCREEN);     // 屏幕对齐，始终面向相机
+        // osg::ref_ptr<osgText::Text> text = new osgText::Text;
+        // text->setText(itr->first);
+        // text->setFont("Fonts/simhei.ttf"); // 设置字体
+        // text->setAxisAlignment(osgText::Text::SCREEN);
+        // if (textSize) {
+        //     text->setCharacterSize(textSize * 0.25); // 设置字体大小
+        // } else {
+        //     text->setCharacterSize(nodeGeomSize * 0.25);
+        // }
+        //// text->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
+        // text->setPosition(p +
+        //                   osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
+        //                             itr->second.size * (-0.25f) * nodeGeomSize,
+        //                             itr->second.size * 0.30f *
+        //                                 nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
+        //                                                 // 设置文字内容为点的ID
+        // text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
+        // text->setAxisAlignment(osgText::Text::SCREEN);     // 屏幕对齐，始终面向相机
 
-        osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
-        textGeode->addDrawable(text.get());
-        textNodes.push_back(text);
-        grp->addChild(textGeode.get());
+        // osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
+        // textGeode->addDrawable(text.get());
+        // textNodes.push_back(text);
+        // grp->addChild(textGeode.get());
 
-        osgNodes.emplace(std::make_pair(itr->first, sphere));
+        // osgNodes.emplace(std::make_pair(itr->first, sphere));
     }
 
     auto states = grp->getOrCreateStateSet();
@@ -2186,7 +2257,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     states->setMode(GL_LIGHTING, osg::StateAttribute::ON);
     states->setMode(GL_BLEND, osg::StateAttribute::ON); // 开启混合模式
 
-    adjustTextPosition(textNodes, nodeGeomSize, _camera);
+    // adjustTextPosition(textNodes, nodeGeomSize, _camera);
 
     auto segVerts = new osg::Vec3Array;
     auto segCols = new osg::Vec4Array;
