@@ -96,7 +96,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
         bool isHover = false;
         std::string label;
     };
-
     struct Edge {
         std::string id;
         std::string from;
@@ -130,7 +129,67 @@ class GraphRenderer : public QtOSGReflectableWidget {
     std::vector<Node> visileNodes;
     std::vector<Node> currentNodes;
     std::unordered_set<std::string> sceneLabels; // 场景中已存在的标签ID
+    // 经纬度网格的分区信息
+    struct Grid {
+        std::vector<std::string> node_ids; // 存储在该网格内的节点ID
+    };
+    
+    // 地球网格分区管理（结构体）
+    struct EarthGridPartition {
+        int latitude_cells;                  // 纬度分区数
+        int longitude_cells;                 // 经度分区数
+        std::vector<std::vector<Grid>> grid; // 存储所有网格的二维数组
+        // 初始化网格分区
+        EarthGridPartition(int lat_cells, int lon_cells)
+            : latitude_cells(lat_cells), longitude_cells(lon_cells) {
+            grid.resize(latitude_cells);
+            for (auto &g : grid) {
+                g.resize(longitude_cells);
+            }
+        }
 
+        // 将节点按经纬度坐标插入到网格中
+        void insertNodeIntoGrid(const Node &node) {
+            // 根据节点的经纬度计算对应的网格索引
+            int lat_idx = static_cast<int>((node.pos.y() + 90.0f) * latitude_cells / 180.0f);
+            int lon_idx = static_cast<int>((node.pos.x() + 180.0f) * longitude_cells / 360.0f);
+
+            // 防止越界
+            lat_idx = std::min(std::max(lat_idx, 0), latitude_cells - 1);
+            lon_idx = std::min(std::max(lon_idx, 0), longitude_cells - 1);
+
+            // 将节点ID插入到对应网格
+            grid[lat_idx][lon_idx].node_ids.push_back(node.id);
+        }
+
+        // 获取指定经纬度范围内的所有节点ID
+        std::vector<std::string> getNodesInFrustum(float lat_min, float lat_max, float lon_min,
+                                                   float lon_max) {
+            std::vector<std::string> visibleNodes;
+
+            int lat_start = static_cast<int>((lat_min + 90.0f) * latitude_cells / 180.0f);
+            int lat_end = static_cast<int>((lat_max + 90.0f) * latitude_cells / 180.0f);
+            int lon_start = static_cast<int>((lon_min + 180.0f) * longitude_cells / 360.0f);
+            int lon_end = static_cast<int>((lon_max + 180.0f) * longitude_cells / 360.0f);
+
+            // 防止越界
+            lat_start = std::max(lat_start, 0);
+            lat_end = std::min(lat_end, latitude_cells - 1);
+            lon_start = std::max(lon_start, 0);
+            lon_end = std::min(lon_end, longitude_cells - 1);
+
+            // 遍历网格，收集在范围内的节点ID
+            for (int i = lat_start; i <= lat_end; ++i) {
+                for (int j = lon_start; j <= lon_end; ++j) {
+                    const auto &node_ids = grid[i][j].node_ids;
+                    visibleNodes.insert(visibleNodes.end(), node_ids.begin(), node_ids.end());
+                }
+            }
+
+            return visibleNodes;
+        }
+    };
+    EarthGridPartition earthGrid{180, 360};
     std::vector<Graph> simplifiedGraphsList;
     std::vector<std::unordered_map<std::string, std::vector<std::string>>> nodeMappingList;
     std::vector<std::unordered_map<std::string, std::vector<Edge>>>
@@ -279,7 +338,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
             return {gridX, gridY};
         }
     };
-
     // 添加投影函数
     osg::Vec3 projectToScreen(const osg::Vec3 &worldPos, osg::Camera *camera) {
         osg::Matrixd viewMatrix = camera->getViewMatrix();

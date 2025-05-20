@@ -199,9 +199,11 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
     */
     int currentLevel = getCurrentLevel(cameraHeight);
     // 筛选所有level<=currentLevel的nodes,加入currentLevelLabels
-    for (int i = 0; i <= currentLevel; i++) {
-        std::copy(levelIndex.begin(), levelIndex.end(),
-                  std::inserter(currentLevelLabels, currentLevelLabels.end()));
+    for (int i = 0; i <= currentLevel; ++i) {
+        // 遍历 levelIndex 中的每个 vector
+        for (const auto &str : levelIndex[i]) {
+            currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
+        }
     }
 
     frustumCulling(graphName, frustum, currentLevel);
@@ -311,6 +313,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             levelIndex[node.level].push_back(node.id);
             levelNodeIndex[node.level].push_back(node);
             nodes->emplace(std::make_pair(itr->first, node));
+            earthGrid.insertNodeIntoGrid(node);
             ++i;
         }
 
