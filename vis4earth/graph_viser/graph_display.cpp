@@ -41,8 +41,8 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             SLOT(onComboBoxGraphTypeChanged(int)));
 
     // 打开文件夹
-    connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
-    connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
+    // connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
+    // connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
     // 加载图并绘制
     connect(ui->loadAndDrawGraphButton, &QPushButton::clicked, this,
             &GraphRenderer::loadAndDrawGraph);
@@ -52,31 +52,31 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
             &GraphRenderer::onFontSizeSliderValueChanged);
-    connect(ui->resolutionSlider, &QSlider::valueChanged, this,
-            &GraphRenderer::onResolutionSliderValueChanged);
+    // connect(ui->resolutionSlider, &QSlider::valueChanged, this,
+    //         &GraphRenderer::onResolutionSliderValueChanged);
 
     // 连接参数设置的信号到槽函数
-    connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setAttraction);
-    connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setEdgeLength);
-    connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setRepulsion);
-    connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setSpringK);
-    connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
-            &GraphRenderer::setIteration);
+    // connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //        &GraphRenderer::setAttraction);
+    // connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //        &GraphRenderer::setEdgeLength);
+    // connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //        &GraphRenderer::setRepulsion);
+    // connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //        &GraphRenderer::setSpringK);
+    // connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    //        &GraphRenderer::setIteration);
 
     connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
             &GraphRenderer::setRegionRestriction);
-    connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setMinX);
-    connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setMaxX);
-    connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setMinY);
-    connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-            &GraphRenderer::setMaxY);
+    // connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::setMinX);
+    // connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::setMaxX);
+    // connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::setMinY);
+    // connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    //         &GraphRenderer::setMaxY);
 
     //// 连接全局弹簧常数 (K)
     // connect(ui->spinBoxGlobalSpringConstant,
@@ -165,28 +165,295 @@ void GraphRenderer::update(const std::string &graphName) {
         itr->second.update();
     }
 }
+// 调整文字位置以避免重叠
+void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize,
+                        osg::ref_ptr<osg::Camera> camera) {
+    // 定义网格大小和网格数量
+    const int GRID_SIZE = 10;
+    const int GRID_COLS = 100;
+    const int GRID_ROWS = 100;
+
+    // 创建空间网格
+    std::vector<std::vector<std::vector<int>>> spatialGrid(
+        GRID_ROWS, std::vector<std::vector<int>>(GRID_COLS));
+
+    // 检查相机
+    if (!camera || !camera->getViewport())
+        return;
+
+    // 获取必要的矩阵
+    osg::Matrix viewMatrix = camera->getViewMatrix();
+    osg::Matrix projectionMatrix = camera->getProjectionMatrix();
+    osg::Viewport *viewport = camera->getViewport();
+
+    // 辅助函数：将世界坐标转换为屏幕坐标
+    auto worldToScreen = [&](const osg::Vec3 &worldPos) -> osg::Vec3 {
+        // 视图变换
+        osg::Vec4 viewPos = osg::Vec4(worldPos, 1.0f) * viewMatrix;
+
+        // 投影变换
+        osg::Vec4 clipPos = viewPos * projectionMatrix;
+
+        // 透视除法
+        if (clipPos.w() != 0.0) {
+            clipPos.x() /= clipPos.w();
+            clipPos.y() /= clipPos.w();
+            clipPos.z() /= clipPos.w();
+        }
+
+        // 视口变换
+        return osg::Vec3((clipPos.x() * 0.5f + 0.5f) * viewport->width() + viewport->x(),
+                         (clipPos.y() * 0.5f + 0.5f) * viewport->height() + viewport->y(),
+                         clipPos.z());
+    };
+    auto getTextScreenBoundingBox = [&](osgText::Text *text,
+                                        osg::Camera *camera) -> osg::BoundingBox {
+        if (!text || !camera || !camera->getViewport())
+            return osg::BoundingBox();
+        // 获取世界位置和字符高度
+        osg::Vec3 worldPos = text->getPosition();
+        float charHeight = text->getCharacterHeight();
+
+        // 估算屏幕高度（从当前位置向上一个字符高度）
+        osg::Vec3 worldTop = worldPos + osg::Vec3(0.0f, 0.0f, charHeight);
+        float pixelHeight = fabs(worldToScreen(worldTop).y() - worldToScreen(worldPos).y());
+
+        // 获取文字长度
+        std::string content = text->getText().createUTF8EncodedString();
+        size_t charCount = content.length();
+
+        // 估算宽高比（英文字符为0.5~0.6，中文字符更接近1.0）
+        float aspectRatio = 0.6f;
+        float pixelWidth = pixelHeight * aspectRatio * charCount;
+
+        // 左下角屏幕坐标
+        osg::Vec3 screenOrigin = worldToScreen(worldPos);
+
+        // 构造屏幕空间包围盒
+        osg::BoundingBox screenBB;
+        screenBB.set(screenOrigin.x(), screenOrigin.y(), 0.0f, screenOrigin.x() + pixelWidth,
+                     screenOrigin.y() + pixelHeight, 0.0f);
+        // 增加边界的偏移量，单位为像素
+        float extraPadding = 10.0f; // 根据需要调整这个值
+        // 创建一个新的包围盒，在原包围盒的基础上加上额外的边界
+        screenBB._min -= osg::Vec3(extraPadding, extraPadding, 0.0f); // 左下角扩展
+        screenBB._max += osg::Vec3(extraPadding, extraPadding, 0.0f); // 右上角扩展
+        return screenBB;
+    };
+
+    struct TextInfo {
+        osg::BoundingBox screenBB;
+        osg::Vec3 originalPos;
+        osg::Vec3 screenPos;
+        int gridRow;
+        int gridCol;
+        bool isVisible;
+    };
+    std::vector<TextInfo> textInfos(texts.size());
+
+    // 第一步：转换所有文字到屏幕坐标并计算网格位置
+    for (size_t i = 0; i < texts.size(); ++i) {
+        auto &text = texts[i];
+        auto &info = textInfos[i];
+        info.originalPos = text->getPosition();
+        info.screenPos = worldToScreen(info.originalPos);
+        info.screenBB = getTextScreenBoundingBox(text.get(), camera.get());
+
+        // 计算网格位置
+        info.gridRow = static_cast<int>(info.screenPos.y() / GRID_SIZE);
+        info.gridCol = static_cast<int>(info.screenPos.x() / GRID_SIZE);
+
+        // 确保网格索引在有效范围内
+        info.gridRow = osg::clampBetween(info.gridRow, 0, GRID_ROWS - 1);
+        info.gridCol = osg::clampBetween(info.gridCol, 0, GRID_COLS - 1);
+
+        // 将文字索引添加到对应的网格中
+        spatialGrid[info.gridRow][info.gridCol].push_back(i);
+
+        info.isVisible = true;
+    }
+    // 反投影
+    osg::Matrix VPInv =
+        osg::Matrix::inverse(camera->getViewMatrix() * camera->getProjectionMatrix());
+    auto screenToWorld = [&](const osg::Vec3 &screen) -> osg::Vec3 {
+        float x = (screen.x() - viewport->x()) / viewport->width() * 2.0f - 1.0f;
+        float y = (screen.y() - viewport->y()) / viewport->height() * 2.0f - 1.0f;
+        float z = screen.z();
+
+        osg::Vec4 ndc(x, y, z, 1.0f);
+        osg::Vec4 world = ndc * VPInv;
+        if (world.w() != 0.0f)
+            world /= world.w();
+        return osg::Vec3(world.x(), world.y(), world.z());
+    };
+
+    // 第二步：处理碰撞
+    for (size_t i = 0; i < texts.size(); ++i) {
+        auto &info = textInfos[i];
+        if (!info.isVisible)
+            continue;
+        // 获取文字的屏幕空间包围盒
+        float pixelWidth = info.screenBB._max.x() - info.screenBB._min.x(); // 计算文字宽度（像素）
+
+        const float MAX_OFFSET = pixelWidth / 4.0f - 10.f; // 最大偏移距离
+        const float STEP = MAX_OFFSET / 2.0f;              // 每次尝试偏移的步长
+        // 检查相邻网格中的文字
+        bool foundValidPosition = false;
+        float currentOffset = 0.0f;
+        osg::Vec3 bestScreenPos = info.screenPos; // 保存找到的最佳屏幕位置
+
+        // 首先检查原始位置是否有碰撞
+        bool hasInitialCollision = false;
+        for (int dr = -1; dr <= 1 && !hasInitialCollision; ++dr) {
+            for (int dc = -1; dc <= 1 && !hasInitialCollision; ++dc) {
+                int checkRow = info.gridRow + dr;
+                int checkCol = info.gridCol + dc;
+
+                if (checkRow < 0 || checkRow >= GRID_ROWS || checkCol < 0 || checkCol >= GRID_COLS)
+                    continue;
+
+                for (int idx : spatialGrid[checkRow][checkCol]) {
+                    if (idx == i)
+                        continue;
+
+                    if (info.screenBB.intersects(textInfos[idx].screenBB)) {
+                        hasInitialCollision = true;
+                        std::cout << "Checking text " << i << " with screenBB: " << idx
+                                  << std::endl;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // 如果原始位置没有碰撞，直接使用
+        if (!hasInitialCollision) {
+            foundValidPosition = true;
+        } else {
+            // 尝试不同的偏移位置
+            while (currentOffset <= MAX_OFFSET && !foundValidPosition) {
+                // 尝试8个方向的偏移
+                for (int angle = 0; angle < 8; ++angle) {
+                    float theta = angle * osg::PI_4;
+                    osg::Vec3 screenOffset(cos(theta) * currentOffset, sin(theta) * currentOffset,
+                                           0.0f);
+
+                    osg::Vec3 testPos = info.screenPos + screenOffset;
+                    osg::BoundingBox testBB = info.screenBB;
+                    testBB._min += screenOffset;
+                    testBB._max += screenOffset;
+
+                    bool hasCollision = false;
+
+                    // 检查周围网格
+                    int testGridRow = static_cast<int>(testPos.y() / GRID_SIZE);
+                    int testGridCol = static_cast<int>(testPos.x() / GRID_SIZE);
+
+                    for (int dr = -1; dr <= 1 && !hasCollision; ++dr) {
+                        for (int dc = -1; dc <= 1 && !hasCollision; ++dc) {
+                            int checkRow = testGridRow + dr;
+                            int checkCol = testGridCol + dc;
+
+                            if (checkRow < 0 || checkRow >= GRID_ROWS || checkCol < 0 ||
+                                checkCol >= GRID_COLS)
+                                continue;
+
+                            for (int idx : spatialGrid[checkRow][checkCol]) {
+                                if (idx == i)
+                                    continue;
+
+                                if (testBB.intersects(textInfos[idx].screenBB)) {
+                                    hasCollision = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    if (!hasCollision) {
+                        bestScreenPos = testPos;
+                        foundValidPosition = true;
+                        break;
+                    }
+                }
+
+                currentOffset += STEP;
+            }
+        }
+
+        if (foundValidPosition) {
+            // 计算屏幕空间的偏移量
+            // osg::Vec3 totalScreenOffset = bestScreenPos - info.screenPos;
+            //// 根据屏幕偏移量计算世界空间的偏移
+            // float scale = info.originalPos.length() * 0.001f;
+            // osg::Vec3 worldOffset(totalScreenOffset.x() * scale, totalScreenOffset.y() * scale,
+            //                       0.0f);
+
+            //// 设置新位置
+            // texts[i]->setPosition(info.originalPos + worldOffset);
+
+            osg::Vec3 screenFrom = info.screenPos;
+            osg::Vec3 screenTo = bestScreenPos;
+
+            osg::Vec3 worldFrom = screenToWorld(screenFrom);
+            osg::Vec3 worldTo = screenToWorld(screenTo);
+
+            osg::Vec3 worldOffset = worldTo - worldFrom;
+            texts[i]->setPosition(info.originalPos + worldOffset);
+
+            // 更新网格
+            spatialGrid[info.gridRow][info.gridCol].erase(
+                std::remove(spatialGrid[info.gridRow][info.gridCol].begin(),
+                            spatialGrid[info.gridRow][info.gridCol].end(), i),
+                spatialGrid[info.gridRow][info.gridCol].end());
+            // 重新计算网格位置
+            info.screenPos = worldToScreen(info.originalPos + worldOffset); // 更新新的屏幕坐标
+            info.screenBB =
+                getTextScreenBoundingBox(texts[i].get(), camera.get()); // 重新计算包围盒
+
+            info.gridRow = static_cast<int>(info.screenPos.y() / GRID_SIZE);
+            info.gridCol = static_cast<int>(info.screenPos.x() / GRID_SIZE);
+
+            // 确保网格索引在有效范围内
+            info.gridRow = osg::clampBetween(info.gridRow, 0, GRID_ROWS - 1);
+            info.gridCol = osg::clampBetween(info.gridCol, 0, GRID_COLS - 1);
+
+            // 更新网格
+            spatialGrid[info.gridRow][info.gridCol].push_back(i);
+        } else {
+            // 如果没找到合适的位置，隐藏文字
+            texts[i]->setColor(osg::Vec4(0.0f, 0.0f, 0.0f, 0.0f));
+            info.isVisible = false;
+            // 从原来的网格中删除它
+            spatialGrid[info.gridRow][info.gridCol].erase(
+                std::remove(spatialGrid[info.gridRow][info.gridCol].begin(),
+                            spatialGrid[info.gridRow][info.gridCol].end(), i),
+                spatialGrid[info.gridRow][info.gridCol].end());
+        }
+    }
+}
 void GraphRenderer::updateLabelLists(const std::string &graphName) {
     // 清空新增和移除列表
     newAddList.clear();
     removeList.clear();
-    
+
     // 如果场景中没有标签，将所有当前节点添加到新增列表
     if (sceneLabels.empty()) {
-        for (const auto& node : currentNodes) {
+        for (const auto &node : currentNodes) {
             newAddList.push_back(node.id);
         }
         return;
     }
-    
+
     // 找出需要移除的标签（在场景中但不在当前层级中的标签）
-    for (const auto& sceneLabel : sceneLabels) {
+    for (const auto &sceneLabel : sceneLabels) {
         if (currentLevelLabels.find(sceneLabel) == currentLevelLabels.end()) {
             removeList.push_back(sceneLabel);
         }
     }
-    
+
     // 找出需要新增的标签（在当前层级中但不在场景中的标签）
-    for (const auto& node : currentNodes) {
+    for (const auto &node : currentNodes) {
         if (sceneLabels.find(node.id) == sceneLabels.end()) {
             newAddList.push_back(node.id);
         }
@@ -194,17 +461,34 @@ void GraphRenderer::updateLabelLists(const std::string &graphName) {
 }
 void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
     auto graphParam = getGraph(graphName);
-    if (!graphParam) return;
-    
+    if (!graphParam)
+        return;
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
+
+        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
+
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
+
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
+
+        return ret;
+    };
     // 移除不需要的标签
-    for (const auto& labelId : removeList) {
+    for (const auto &labelId : removeList) {
         // 找到并移除对应的标签节点
         for (int i = 0; i < graphParam->grp->getNumChildren(); ++i) {
-            osg::Node* node = graphParam->grp->getChild(i);
-            osg::Geode* geode = dynamic_cast<osg::Geode*>(node);
+            osg::Node *node = graphParam->grp->getChild(i);
+            osg::Geode *geode = dynamic_cast<osg::Geode *>(node);
             if (geode) {
                 for (unsigned int j = 0; j < geode->getNumDrawables(); ++j) {
-                    osgText::Text* text = dynamic_cast<osgText::Text*>(geode->getDrawable(j));
+                    osgText::Text *text = dynamic_cast<osgText::Text *>(geode->getDrawable(j));
                     if (text && text->getText().createUTF8EncodedString() == labelId) {
                         graphParam->grp->removeChild(node);
                         sceneLabels.erase(labelId);
@@ -214,65 +498,55 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
             }
         }
     }
-    
+    std::vector<osg::ref_ptr<osgText::Text>> textNodes;
+
+    // 遍历并添加当前场景图中所有的文字标签
+    for (int i = 0; i < graphParam->grp->getNumChildren(); ++i) {
+        osg::Node *node = graphParam->grp->getChild(i);
+        osg::Geode *geode = dynamic_cast<osg::Geode *>(node);
+        if (geode) {
+            for (unsigned int j = 0; j < geode->getNumDrawables(); ++j) {
+                osgText::Text *text = dynamic_cast<osgText::Text *>(geode->getDrawable(j));
+                if (text) {
+                    textNodes.push_back(text);
+                }
+            }
+        }
+    }
     // 添加新的标签
-    for (const auto& labelId : newAddList) {
+    for (const auto &labelId : newAddList) {
         // 找到对应的节点信息
         auto nodeIt = std::find_if(currentNodes.begin(), currentNodes.end(),
-            [&labelId](const Node& node) { return node.id == labelId; });
-            
-        if (nodeIt != currentNodes.end()) {
-            // osg::ref_ptr<osgText::Text> text = new osgText::Text;
-            // text->setText(itr->first);
-            // text->setFont("Fonts/simhei.ttf"); // 设置字体
-            // text->setAxisAlignment(osgText::Text::SCREEN);
-            // if (textSize) {
-            //     text->setCharacterSize(textSize * 0.25); // 设置字体大小
-            // } else {
-            //     text->setCharacterSize(nodeGeomSize * 0.25);
-            // }
-            //// text->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
-            // text->setPosition(p +
-            //                   osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
-            //                             itr->second.size * (-0.25f) * nodeGeomSize,
-            //                             itr->second.size * 0.30f *
-            //                                 nodeGeomSize)); //
-            //                                 设置文字位置为点的位置稍微向上移动一些
-            //                                                 // 设置文字内容为点的ID
-            // text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
-            // text->setAxisAlignment(osgText::Text::SCREEN);     // 屏幕对齐，始终面向相机
+                                   [&labelId](const Node &node) { return node.id == labelId; });
 
-            // osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
-            // textGeode->addDrawable(text.get());
-            // textNodes.push_back(text);
-            // grp->addChild(textGeode.get());
+        if (nodeIt != currentNodes.end()) {
             // 创建新的文字标签
             osg::ref_ptr<osgText::Text> text = new osgText::Text;
             text->setText(nodeIt->id);
             text->setFont("Fonts/simhei.ttf");
             text->setAxisAlignment(osgText::Text::SCREEN);
-            text->setCharacterSize(graphParam->textSize ? 
-                graphParam->textSize * 0.25 : graphParam->nodeGeomSize * 0.25);
-            
+            text->setCharacterSize(graphParam->textSize ? graphParam->textSize * 0.25
+                                                        : graphParam->nodeGeomSize * 0.25);
+
             // 设置标签位置
-            osg::Vec3 pos = nodeIt->pos;
+            osg::Vec3 pos = vec3ToSphere(nodeIt->pos);
             pos.z() += nodeIt->size * 0.30f * graphParam->nodeGeomSize;
             text->setPosition(pos);
-            
+
             // 设置标签颜色
-            text->setColor(nodeIt->isHover ? 
-                osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) : 
-                osg::Vec4(0.8f, 0.8f, 0.8f, 1.0f));
+            text->setColor(nodeIt->isHover ? osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)
+                                           : osg::Vec4(0.8f, 0.8f, 0.8f, 1.0f));
 
             // 添加到场景图
             osg::ref_ptr<osg::Geode> geode = new osg::Geode;
             geode->addDrawable(text.get());
             graphParam->grp->addChild(geode.get());
-            
+            textNodes.push_back(text);
             // 更新场景标签集合
             sceneLabels.insert(labelId);
         }
     }
+    adjustTextPosition(textNodes, graphParam->nodeGeomSize, graphParam->_camera);
 }
 void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double cameraHeight,
                                             const osg::Polytope &frustum, double minLon,
@@ -286,31 +560,30 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
     */
     int currentLevel = getCurrentLevel(cameraHeight);
     // 筛选所有level<=currentLevel的nodes,加入currentLevelLabels
+    currentLevelLabels.clear();
     for (int i = 0; i <= currentLevel; ++i) {
         // 遍历 levelIndex 中的每个 vector
         for (const auto &str : levelIndex[i]) {
             currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
         }
     }
+    currentNodes.clear();
     for (int i = 0; i <= currentLevel; i++) {
         // 获取level<=currentLevel的nodes
         currentNodes.insert(currentNodes.end(), levelNodeIndex[i].begin(), levelNodeIndex[i].end());
     }
-    //frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
+    // frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
     updateLabelLists(graphName);
     syncSceneGraph(graphName);
 }
 void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, double minLon,
-                                              double maxLon, double minLat,
-                                              double maxLat,
+                                              double maxLon, double minLat, double maxLat,
                                               const int currentLevel) {
     /*视锥剔除*/
 
-    
-
     // 筛选视角范围内的节点//(double lat_min, double lat_max, double lon_min,double lon_max)
-    //std::vector<std::string> visibleIDs = earthGrid.getNodesInFrustum(minLat, maxLat, minLon, maxLon);
-    //std::cout << "11" << std::endl;
+    // std::vector<std::string> visibleIDs = earthGrid.getNodesInFrustum(minLat, maxLat, minLon,
+    // maxLon); std::cout << "11" << std::endl;
 }
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
@@ -332,7 +605,7 @@ void GraphRenderer::loadPointsCSV() {
         return;
 
     // 设置文件路径到对应的文本框
-    ui->pointsFilePath->setText(pointsFileName);
+    // ui->pointsFilePath->setText(pointsFileName);
 }
 
 void VIS4Earth::GraphRenderer::loadEdgesCSV() {
@@ -343,7 +616,7 @@ void VIS4Earth::GraphRenderer::loadEdgesCSV() {
         return;
 
     // 设置文件路径到对应的文本框
-    ui->edgesFilePath->setText(edgesFileName);
+    // ui->edgesFilePath->setText(edgesFileName);
 }
 
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
@@ -366,9 +639,9 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     cityLoader.drawBuildings(param.grp, latLonBounds, scale);
     heightMap = cityLoader.getHeightMap();
 
-    QString pointsFileName = ui->pointsFilePath->text();
-    QString edgesFileName = ui->edgesFilePath->text();
-
+    // QString pointsFileName = ui->pointsFilePath->text();
+    // QString edgesFileName = ui->edgesFilePath->text();
+    QString pointsFileName, edgesFileName;
     if (pointsFileName.isEmpty()) {
         pointsFileName = "C:/Users/shan/Desktop/graph_data/usflight/usairports_with_levels.csv";
     }
@@ -467,8 +740,13 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
 }
 
 void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
-    QString pointsFileName = ui->pointsFilePath->text();
-    QString edgesFileName = ui->edgesFilePath->text();
+    QString pointsFileName, edgesFileName;
+    if (pointsFileName.isEmpty()) {
+        pointsFileName = "C:/Users/shan/Desktop/graph_data/grid/node.csv";
+    }
+    if (edgesFileName.isEmpty()) {
+        edgesFileName = "C:/Users/shan/Desktop/graph_data/grid/edges.csv";
+    }
 
     if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
         QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
@@ -1105,269 +1383,6 @@ bool checkOverlap(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
              bb1.yMin() > bb2.yMax());
 }
 
-// 调整文字位置以避免重叠
-void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float nodeGeomSize,
-                        osg::ref_ptr<osg::Camera> camera) {
-    // 定义网格大小和网格数量
-    const int GRID_SIZE = 10;
-    const int GRID_COLS = 100;
-    const int GRID_ROWS = 100;
-
-    // 创建空间网格
-    std::vector<std::vector<std::vector<int>>> spatialGrid(
-        GRID_ROWS, std::vector<std::vector<int>>(GRID_COLS));
-
-    // 检查相机
-    if (!camera || !camera->getViewport())
-        return;
-
-    // 获取必要的矩阵
-    osg::Matrix viewMatrix = camera->getViewMatrix();
-    osg::Matrix projectionMatrix = camera->getProjectionMatrix();
-    osg::Viewport *viewport = camera->getViewport();
-
-    // 辅助函数：将世界坐标转换为屏幕坐标
-    auto worldToScreen = [&](const osg::Vec3 &worldPos) -> osg::Vec3 {
-        // 视图变换
-        osg::Vec4 viewPos = osg::Vec4(worldPos, 1.0f) * viewMatrix;
-
-        // 投影变换
-        osg::Vec4 clipPos = viewPos * projectionMatrix;
-
-        // 透视除法
-        if (clipPos.w() != 0.0) {
-            clipPos.x() /= clipPos.w();
-            clipPos.y() /= clipPos.w();
-            clipPos.z() /= clipPos.w();
-        }
-
-        // 视口变换
-        return osg::Vec3((clipPos.x() * 0.5f + 0.5f) * viewport->width() + viewport->x(),
-                         (clipPos.y() * 0.5f + 0.5f) * viewport->height() + viewport->y(),
-                         clipPos.z());
-    };
-    auto getTextScreenBoundingBox = [&](osgText::Text *text,
-                                        osg::Camera *camera) -> osg::BoundingBox {
-        if (!text || !camera || !camera->getViewport())
-            return osg::BoundingBox();
-        // 获取世界位置和字符高度
-        osg::Vec3 worldPos = text->getPosition();
-        float charHeight = text->getCharacterHeight();
-
-        // 估算屏幕高度（从当前位置向上一个字符高度）
-        osg::Vec3 worldTop = worldPos + osg::Vec3(0.0f, 0.0f, charHeight);
-        float pixelHeight = fabs(worldToScreen(worldTop).y() - worldToScreen(worldPos).y());
-
-        // 获取文字长度
-        std::string content = text->getText().createUTF8EncodedString();
-        size_t charCount = content.length();
-
-        // 估算宽高比（英文字符为0.5~0.6，中文字符更接近1.0）
-        float aspectRatio = 0.6f;
-        float pixelWidth = pixelHeight * aspectRatio * charCount;
-
-        // 左下角屏幕坐标
-        osg::Vec3 screenOrigin = worldToScreen(worldPos);
-
-        // 构造屏幕空间包围盒
-        osg::BoundingBox screenBB;
-        screenBB.set(screenOrigin.x(), screenOrigin.y(), 0.0f, screenOrigin.x() + pixelWidth,
-                     screenOrigin.y() + pixelHeight, 0.0f);
-
-        return screenBB;
-    };
-
-    struct TextInfo {
-        osg::BoundingBox screenBB;
-        osg::Vec3 originalPos;
-        osg::Vec3 screenPos;
-        int gridRow;
-        int gridCol;
-        bool isVisible;
-    };
-    std::vector<TextInfo> textInfos(texts.size());
-
-    // 第一步：转换所有文字到屏幕坐标并计算网格位置
-    for (size_t i = 0; i < texts.size(); ++i) {
-        auto &text = texts[i];
-        auto &info = textInfos[i];
-        info.originalPos = text->getPosition();
-        info.screenPos = worldToScreen(info.originalPos);
-        info.screenBB = getTextScreenBoundingBox(text.get(), camera.get());
-
-        // 计算网格位置
-        info.gridRow = static_cast<int>(info.screenPos.y() / GRID_SIZE);
-        info.gridCol = static_cast<int>(info.screenPos.x() / GRID_SIZE);
-
-        // 确保网格索引在有效范围内
-        info.gridRow = osg::clampBetween(info.gridRow, 0, GRID_ROWS - 1);
-        info.gridCol = osg::clampBetween(info.gridCol, 0, GRID_COLS - 1);
-
-        // 将文字索引添加到对应的网格中
-        spatialGrid[info.gridRow][info.gridCol].push_back(i);
-
-        info.isVisible = true;
-    }
-    // 反投影
-    osg::Matrix VPInv =
-        osg::Matrix::inverse(camera->getViewMatrix() * camera->getProjectionMatrix());
-    auto screenToWorld = [&](const osg::Vec3 &screen) -> osg::Vec3 {
-        float x = (screen.x() - viewport->x()) / viewport->width() * 2.0f - 1.0f;
-        float y = (screen.y() - viewport->y()) / viewport->height() * 2.0f - 1.0f;
-        float z = screen.z();
-
-        osg::Vec4 ndc(x, y, z, 1.0f);
-        osg::Vec4 world = ndc * VPInv;
-        if (world.w() != 0.0f)
-            world /= world.w();
-        return osg::Vec3(world.x(), world.y(), world.z());
-    };
-
-    // 第二步：处理碰撞
-    for (size_t i = 0; i < texts.size(); ++i) {
-        auto &info = textInfos[i];
-        if (!info.isVisible)
-            continue;
-        // 获取文字的屏幕空间包围盒
-        float pixelWidth = info.screenBB._max.x() - info.screenBB._min.x(); // 计算文字宽度（像素）
-
-        const float MAX_OFFSET = pixelWidth;  // 最大偏移距离
-        const float STEP = pixelWidth / 2.0f; // 每次尝试偏移的步长
-        // 检查相邻网格中的文字
-        bool foundValidPosition = false;
-        float currentOffset = 0.0f;
-        osg::Vec3 bestScreenPos = info.screenPos; // 保存找到的最佳屏幕位置
-
-        // 首先检查原始位置是否有碰撞
-        bool hasInitialCollision = false;
-        for (int dr = -1; dr <= 1 && !hasInitialCollision; ++dr) {
-            for (int dc = -1; dc <= 1 && !hasInitialCollision; ++dc) {
-                int checkRow = info.gridRow + dr;
-                int checkCol = info.gridCol + dc;
-
-                if (checkRow < 0 || checkRow >= GRID_ROWS || checkCol < 0 || checkCol >= GRID_COLS)
-                    continue;
-
-                for (int idx : spatialGrid[checkRow][checkCol]) {
-                    if (idx == i)
-                        continue;
-
-                    if (info.screenBB.intersects(textInfos[idx].screenBB)) {
-                        hasInitialCollision = true;
-                        std::cout << "Checking text " << i << " with screenBB: " << idx
-                                  << std::endl;
-                        break;
-                    }
-                }
-            }
-        }
-
-        // 如果原始位置没有碰撞，直接使用
-        if (!hasInitialCollision) {
-            foundValidPosition = true;
-        } else {
-            // 尝试不同的偏移位置
-            while (currentOffset <= MAX_OFFSET && !foundValidPosition) {
-                // 尝试8个方向的偏移
-                for (int angle = 0; angle < 8; ++angle) {
-                    float theta = angle * osg::PI_4;
-                    osg::Vec3 screenOffset(cos(theta) * currentOffset, sin(theta) * currentOffset,
-                                           0.0f);
-
-                    osg::Vec3 testPos = info.screenPos + screenOffset;
-                    osg::BoundingBox testBB = info.screenBB;
-                    testBB._min += screenOffset;
-                    testBB._max += screenOffset;
-
-                    bool hasCollision = false;
-
-                    // 检查周围网格
-                    int testGridRow = static_cast<int>(testPos.y() / GRID_SIZE);
-                    int testGridCol = static_cast<int>(testPos.x() / GRID_SIZE);
-
-                    for (int dr = -1; dr <= 1 && !hasCollision; ++dr) {
-                        for (int dc = -1; dc <= 1 && !hasCollision; ++dc) {
-                            int checkRow = testGridRow + dr;
-                            int checkCol = testGridCol + dc;
-
-                            if (checkRow < 0 || checkRow >= GRID_ROWS || checkCol < 0 ||
-                                checkCol >= GRID_COLS)
-                                continue;
-
-                            for (int idx : spatialGrid[checkRow][checkCol]) {
-                                if (idx == i)
-                                    continue;
-
-                                if (testBB.intersects(textInfos[idx].screenBB)) {
-                                    hasCollision = true;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!hasCollision) {
-                        bestScreenPos = testPos;
-                        foundValidPosition = true;
-                        break;
-                    }
-                }
-
-                currentOffset += STEP;
-            }
-        }
-
-        if (foundValidPosition) {
-            // 计算屏幕空间的偏移量
-            // osg::Vec3 totalScreenOffset = bestScreenPos - info.screenPos;
-            //// 根据屏幕偏移量计算世界空间的偏移
-            // float scale = info.originalPos.length() * 0.001f;
-            // osg::Vec3 worldOffset(totalScreenOffset.x() * scale, totalScreenOffset.y() * scale,
-            //                       0.0f);
-
-            //// 设置新位置
-            // texts[i]->setPosition(info.originalPos + worldOffset);
-
-            osg::Vec3 screenFrom = info.screenPos;
-            osg::Vec3 screenTo = bestScreenPos;
-
-            osg::Vec3 worldFrom = screenToWorld(screenFrom);
-            osg::Vec3 worldTo = screenToWorld(screenTo);
-
-            osg::Vec3 worldOffset = worldTo - worldFrom;
-            texts[i]->setPosition(info.originalPos + worldOffset);
-
-            // 更新网格
-            spatialGrid[info.gridRow][info.gridCol].erase(
-                std::remove(spatialGrid[info.gridRow][info.gridCol].begin(),
-                            spatialGrid[info.gridRow][info.gridCol].end(), i),
-                spatialGrid[info.gridRow][info.gridCol].end());
-            // 重新计算网格位置
-            info.screenPos = worldToScreen(info.originalPos + worldOffset); // 更新新的屏幕坐标
-            info.screenBB =
-                getTextScreenBoundingBox(texts[i].get(), camera.get()); // 重新计算包围盒
-
-            info.gridRow = static_cast<int>(info.screenPos.y() / GRID_SIZE);
-            info.gridCol = static_cast<int>(info.screenPos.x() / GRID_SIZE);
-
-            // 确保网格索引在有效范围内
-            info.gridRow = osg::clampBetween(info.gridRow, 0, GRID_ROWS - 1);
-            info.gridCol = osg::clampBetween(info.gridCol, 0, GRID_COLS - 1);
-
-            // 更新网格
-            spatialGrid[info.gridRow][info.gridCol].push_back(i);
-        } else {
-            // 如果没找到合适的位置，隐藏文字
-            texts[i]->setColor(osg::Vec4(0.0f, 0.0f, 0.0f, 0.0f));
-            info.isVisible = false;
-            // 从原来的网格中删除它
-            spatialGrid[info.gridRow][info.gridCol].erase(
-                std::remove(spatialGrid[info.gridRow][info.gridCol].begin(),
-                            spatialGrid[info.gridRow][info.gridCol].end(), i),
-                spatialGrid[info.gridRow][info.gridCol].end());
-        }
-    }
-}
 class TimeController : public osg::Referenced {
   public:
     TimeController() : startTime(osg::Timer::instance()->tick()) {}

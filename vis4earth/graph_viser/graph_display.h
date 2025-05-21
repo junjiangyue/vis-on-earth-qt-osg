@@ -131,14 +131,14 @@ class GraphRenderer : public QtOSGReflectableWidget {
     std::unordered_set<std::string> sceneLabels; // 场景中已存在的标签ID
     // 需要新增的标签ID列表
     std::vector<std::string> newAddList;
-    
+
     // 需要移除的标签ID列表
     std::vector<std::string> removeList;
     // 经纬度网格的分区信息
     struct Grid {
         std::vector<std::string> node_ids; // 存储在该网格内的节点ID
     };
-    
+
     // 地球网格分区管理（结构体）
     struct EarthGridPartition {
         int latitude_cells;                  // 纬度分区数

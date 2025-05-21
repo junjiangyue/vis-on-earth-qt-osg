@@ -95,11 +95,6 @@ class CameraMovementCallback : public osg::NodeCallback {
                     minLat = std::min(minLat, lat);
                     maxLat = std::max(maxLat, lat);
                     hasValidPoints = true;
-
-                    //// 调试输出
-                    //std::cout << "Intersection point: " << intersectPoint.x() << ", "
-                    //          << intersectPoint.y() << ", " << intersectPoint.z() << std::endl;
-                    //std::cout << "Lon, Lat: " << lon << ", " << lat << std::endl;
                 }
             }
         }
@@ -127,7 +122,6 @@ class CameraMovementCallback : public osg::NodeCallback {
             minLon = -180.0;
             maxLon = 180.0;
         }
-        
     }
 
     void checkCameraMovement(osg::Camera *camera) {
@@ -142,19 +136,18 @@ class CameraMovementCallback : public osg::NodeCallback {
         double R_earth = 6371.0;                // 地球半径，单位：公里
         double distance = eyePosition.length(); // 相机到地球中心的距离
         double height = distance - R_earth; // 相机到地球表面的高度（单位：公里）
-        
-        if (abs(height - lastHeight)>1000.0) {
+
+        if (abs(height - lastHeight) > 1000.0) {
             // 触发标签更新等后续操作
             // 获取当前视锥体
             osg::Polytope frustum;
-            //getViewFrustum(camera, frustum);
+            // getViewFrustum(camera, frustum);
             if (!camera || !_graphRenderer)
                 return;
             // 计算经纬度范围
             double minLon, maxLon, minLat, maxLat;
             _graphRenderer->cameraUpdate("LoadedGraph", height, frustum, 0, 0, 0,
                                          0); // 调用外部对象的更新方法
-
             std::cout << "updatecheck" << std::endl;
         }
 
@@ -186,7 +179,7 @@ int main(int argc, char **argv) {
 
     osg::ref_ptr<CameraMovementCallback> cb = new CameraMovementCallback(graphLayout);
     viewer->getCamera()->addUpdateCallback(cb);
-    // 添加点击事件
+    //  添加点击事件
     VIS4Earth::NodeClickHandler *nodeClickHandler =
         new VIS4Earth::NodeClickHandler(graphLayout, viewer);
     // 将 NodeClickHandler 添加到 Viewer 的事件处理器中

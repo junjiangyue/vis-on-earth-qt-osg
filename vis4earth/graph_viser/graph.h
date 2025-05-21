@@ -328,7 +328,7 @@ struct Graph {
 
     const std::unordered_map<std::string, Node> &getNodes() const { return nodes; }
 
-    const std::vector<Edge> &getEdges() const { return edges; }
+    std::vector<Edge> &getEdges() { return edges; }
 
     bool getNodesRestriction() const { return nodeRestrictionIsOn; }
 
