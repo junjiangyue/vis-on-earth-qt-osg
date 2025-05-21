@@ -326,7 +326,7 @@ struct Graph {
 
     int getLayoutIteration() const { return n_iterations; }
 
-    const std::unordered_map<std::string, Node> &getNodes() const { return nodes; }
+    std::unordered_map<std::string, Node> &getNodes() { return nodes; }
 
     std::vector<Edge> &getEdges() { return edges; }
 

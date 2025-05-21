@@ -1089,6 +1089,77 @@ void VIS4Earth::GraphRenderer::showGraph() {
 }
 
 void VIS4Earth::GraphRenderer::showBundling() {
+    // 首先尝试加载已有的边绑定结果
+    QString bundledEdgesFile = "C:/Users/shan/Desktop/graph_data/usflight/bundled_edges_result.csv";
+    if (QFile::exists(bundledEdgesFile)) {
+        // 如果存在缓存文件，直接读取
+        try {
+            QFile file(bundledEdgesFile);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                QTextStream in(&file);
+
+                auto nodes = std::make_shared<std::map<std::string, Node>>();
+                auto edges = std::make_shared<std::vector<Edge>>();
+
+                // 复制节点信息
+                for (const auto &node : myGraph->getNodes()) {
+                    Node newNode;
+                    newNode.pos = osg::Vec3(node.second.pos.x, node.second.pos.y, 0.f);
+                    newNode.id = node.first;
+                    nodes->emplace(node.first, newNode);
+                }
+
+                // 读取边的信息
+                while (!in.atEnd()) {
+                    QString line = in.readLine();
+                    QStringList fields = line.split(",");
+                    if (fields.size() >= 6) { // from,to,hasSubdiv,numPoints,x1,y1,...
+                        Edge edge;
+                        edge.from = fields[0].toStdString();
+                        edge.to = fields[1].toStdString();
+
+                        bool hasSubdiv = fields[2].toInt() == 1;
+                        int numPoints = fields[3].toInt();
+
+                        if (!hasSubdiv) {
+                            // 只有起点和终点
+                            float startX = fields[4].toFloat();
+                            float startY = fields[5].toFloat();
+                            float endX = fields[6].toFloat();
+                            float endY = fields[7].toFloat();
+                            edge.subDivs.emplace_back(osg::Vec3(startX, startY, 0.f));
+                            edge.subDivs.emplace_back(osg::Vec3(endX, endY, 0.f));
+                        } else {
+                            // 有细分点
+                            for (int i = 4; i < fields.size(); i += 2) {
+                                float x = fields[i].toFloat();
+                                float y = fields[i + 1].toFloat();
+                                edge.subDivs.emplace_back(osg::Vec3(x, y, 0.f));
+                            }
+                        }
+                        edges->push_back(edge);
+                    }
+                }
+                file.close();
+
+                // 使用读取的结果更新图形
+                auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+                lonRng[0] += lonOffs;
+                lonRng[1] += lonOffs;
+
+                addGraph("LoadedGraph", nodes, edges);
+                auto graphParam = getGraph("LoadedGraph");
+                if (graphParam) {
+                    updateGraphParameters(graphParam);
+                }
+                return;
+            }
+        } catch (const std::exception &e) {
+            qDebug() << "Error loading bundled edges:" << e.what();
+        }
+    }
+
+    // 如果没有缓存文件或读取失败，执行边绑定计算
     auto edgeBundling = VIS4Earth::EdgeBundling();
     edgeBundling.SetGraph(myGraph);
     glm::vec3 gravitationCenter(-75.0, 30.0, 0.0);
@@ -1102,11 +1173,77 @@ void VIS4Earth::GraphRenderer::showBundling() {
     edgeBundling.SetParameter(mybundlingParam);
     edgeBundling.EdgeBundle();
     myGraph = edgeBundling.GetLayoutedGraph();
+
+    // 保存边绑定结果
+    try {
+        QFile file(bundledEdgesFile);
+        if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&file);
+
+            // 保存所有边的信息
+            for (const auto &edge : myGraph->getEdges()) {
+                out << QString::fromStdString(edge.sourceLabel) << ","
+                    << QString::fromStdString(edge.targetLabel);
+
+                // 保存细分点
+                if (edge.subdivs.empty()) {
+                    // 标记为0表示无细分点，后面是2个点（起点终点）
+                    out << ",0,2";
+                    out << "," << edge.start.x << "," << edge.start.y << "," << edge.end.x << ","
+                        << edge.end.y;
+                } else {
+                    // 标记为1表示有细分点，后面是点的总数
+                    out << ",1," << edge.subdivs.size();
+                    out << "," << edge.start.x << "," << edge.start.y;
+                    for (const auto &subdiv : edge.subdivs) {
+                        out << "," << subdiv.x << "," << subdiv.y;
+                    }
+                    out << "," << edge.end.x << "," << edge.end.y;
+                }
+                out << "\n";
+            }
+            file.close();
+        }
+    } catch (const std::exception &e) {
+        qDebug() << "Error saving bundled edges:" << e.what();
+    }
+
+    // 更新显示
     auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
     lonRng[0] += lonOffs;
     lonRng[1] += lonOffs;
     auto nodes = std::make_shared<std::map<std::string, Node>>();
     auto edges = std::make_shared<std::vector<Edge>>();
+
+    // 复制节点和边的信息
+    copyGraphData(nodes, edges);
+
+    // 添加图到渲染器中
+    addGraph("LoadedGraph", nodes, edges);
+    // 更新图渲染
+    auto graphParam = getGraph("LoadedGraph");
+    if (graphParam) {
+        updateGraphParameters(graphParam);
+    }
+}
+
+// 辅助函数：更新图形参数
+void VIS4Earth::GraphRenderer::updateGraphParameters(PerGraphParam *graphParam) {
+    graphParam->graphTypeIndex = graphTypeIndex;
+    graphParam->heightMap = heightMap;
+    graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
+    graphParam->setLatitudeRange(latRng[0], latRng[1]);
+    graphParam->setHeightFromCenterRange(
+        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+    graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+    graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+    graphParam->update();
+}
+
+// 辅助函数：复制图数据
+void VIS4Earth::GraphRenderer::copyGraphData(std::shared_ptr<std::map<std::string, Node>> &nodes,
+                                             std::shared_ptr<std::vector<Edge>> &edges) {
     std::vector<osg::Vec3> colors;
     colors.resize(myGraph->getNodes().size());
     for (auto &col : colors) {
@@ -1114,50 +1251,32 @@ void VIS4Earth::GraphRenderer::showBundling() {
         col.y() = 1.f * rand() / RAND_MAX;
         col.z() = 1.f * rand() / RAND_MAX;
     }
-    size_t i = 0;
-    for (auto itr = myGraph->getNodes().begin(); itr != myGraph->getNodes().end(); ++itr) {
-        VIS4Earth::GraphRenderer::Node node;
-        node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-        node.color = colors[i];
 
-        nodes->emplace(std::make_pair(itr->first, node));
+    size_t i = 0;
+    for (const auto &itr : myGraph->getNodes()) {
+        Node node;
+        node.pos = osg::Vec3(itr.second.pos.x, itr.second.pos.y, 0.f);
+        node.color = colors[i];
+        node.id = itr.first;
+        nodes->emplace(itr.first, node);
         ++i;
     }
 
-    for (auto itr = myGraph->getEdges().begin(); itr != myGraph->getEdges().end(); ++itr) {
-        edges->emplace_back();
-
-        auto &edge = edges->back();
-        edge.from = itr->sourceLabel;
-        edge.to = itr->targetLabel;
-        if (itr->subdivs.empty()) {
-            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+    for (const auto &itr : myGraph->getEdges()) {
+        Edge edge;
+        edge.from = itr.sourceLabel;
+        edge.to = itr.targetLabel;
+        if (itr.subdivs.empty()) {
+            edge.subDivs.emplace_back(osg::Vec3(itr.start.x, itr.start.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr.end.x, itr.end.y, 0.f));
         } else {
-            edge.subDivs.emplace_back(osg::Vec3(itr->start.x, itr->start.y, 0.f));
-            for (auto &subdiv : itr->subdivs)
+            edge.subDivs.emplace_back(osg::Vec3(itr.start.x, itr.start.y, 0.f));
+            for (const auto &subdiv : itr.subdivs) {
                 edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
-            edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
+            }
+            edge.subDivs.emplace_back(osg::Vec3(itr.end.x, itr.end.y, 0.f));
         }
-    }
-
-    // 添加图到渲染器中
-    addGraph("LoadedGraph", nodes, edges);
-    // 更新图渲染
-    auto graphParam = getGraph("LoadedGraph");
-    if (graphParam) {
-        graphParam->graphTypeIndex = graphTypeIndex;
-        graphParam->heightMap = heightMap;
-        graphParam->setLongitudeRange(lonRng[0], lonRng[1]);
-        graphParam->setLatitudeRange(latRng[0], latRng[1]);
-        graphParam->setHeightFromCenterRange(
-            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-            static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-        graphParam->setNodeGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-        graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-        graphParam->setRestriction(myRestriction);
-        graphParam->restrictionOFF = !restrictionOn;
-        graphParam->update();
+        edges->push_back(edge);
     }
 }
 
@@ -2370,7 +2489,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     auto segCols = new osg::Vec4Array;
     osg::ref_ptr<osg::FloatArray> lineIDs = new osg::FloatArray;
     int lineID = 0;
-    int totalNum = 40;
+    int totalNum = 20;
     for (auto &edge : *edges) {
         if (!edge.visible)
             continue; // 只处理可见边
@@ -2385,7 +2504,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         endPos = vec3ToSphere(endPos);
 
         // 总点数，包括起点、所有细分点和终点
-        size_t totalPoints = (edge.subDivs.size() - 1) * (totalNum + 1); // 起点 + 细分点 + 终点
+        // 每段有 totalNum 个插值点，总段数是 subDivs.size() - 1
+        // 再加上原始点的数量 subDivs.size()
+        size_t totalPoints = (edge.subDivs.size() - 1) * (totalNum) + edge.subDivs.size();
+
         // 首先得到采样点的高度,进而计算这条边上的最大高度
         // 计算每个路径上的maxHeight 用Asin(pi*x)绘制
         float maxRequiredAmplitude = 0.0f;

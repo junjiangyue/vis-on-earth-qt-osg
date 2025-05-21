@@ -478,6 +478,10 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void onFontSizeSliderValueChanged(int value);
 
     void onResolutionSliderValueChanged(int value);
+
+    void updateGraphParameters(PerGraphParam* graphParam);
+    void copyGraphData(std::shared_ptr<std::map<std::string, Node>>& nodes,
+                      std::shared_ptr<std::vector<Edge>>& edges);
 };
 
 } // namespace VIS4Earth
