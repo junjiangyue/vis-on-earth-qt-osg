@@ -219,8 +219,8 @@ class GraphLoader {
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
             sscanf(line, "%d,%[^,],%lg,%lg,%d", &labelCh, name, &latitude, &longitude, &level);
-            read_nodes.insert(
-                std::pair<std::string, Node>(std::to_string(labelCh), Node(latitude, longitude, level)));
+            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh),
+                                                           Node(latitude, longitude, level)));
         }
         f.Close();
 
@@ -287,8 +287,8 @@ class GraphLoader {
 
             float x = std::rand() % 100;
             float y = std::rand() % 100;
-            read_nodes.insert(
-                std::pair<std::string, Node>(std::to_string(labelCh), Node(randomLon, randomLat)));
+            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh),
+                                                           Node(randomLon, randomLat, 0)));
         }
         f.Close();
 
