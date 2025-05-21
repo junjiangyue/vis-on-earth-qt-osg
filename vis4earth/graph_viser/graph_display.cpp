@@ -36,13 +36,13 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     // 连接 comboBox 的信号来记录当前选择的索引
     graphTypeIndex = 0; // 默认选择第一个（有经纬度的图）
-
+    ui->groupBox->hide();
     connect(ui->comboBoxGraphType, SIGNAL(currentIndexChanged(int)), this,
             SLOT(onComboBoxGraphTypeChanged(int)));
 
     // 打开文件夹
-    // connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
-    // connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
+     connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
+     connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
     // 加载图并绘制
     connect(ui->loadAndDrawGraphButton, &QPushButton::clicked, this,
             &GraphRenderer::loadAndDrawGraph);
@@ -52,8 +52,8 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
             &GraphRenderer::onFontSizeSliderValueChanged);
-    // connect(ui->resolutionSlider, &QSlider::valueChanged, this,
-    //         &GraphRenderer::onResolutionSliderValueChanged);
+     connect(ui->resolutionSlider, &QSlider::valueChanged, this,
+             &GraphRenderer::onResolutionSliderValueChanged);
 
     // 连接参数设置的信号到槽函数
     // connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -605,7 +605,7 @@ void GraphRenderer::loadPointsCSV() {
         return;
 
     // 设置文件路径到对应的文本框
-    // ui->pointsFilePath->setText(pointsFileName);
+    ui->pointsFilePath->setText(pointsFileName);
 }
 
 void VIS4Earth::GraphRenderer::loadEdgesCSV() {
@@ -616,7 +616,7 @@ void VIS4Earth::GraphRenderer::loadEdgesCSV() {
         return;
 
     // 设置文件路径到对应的文本框
-    // ui->edgesFilePath->setText(edgesFileName);
+    ui->edgesFilePath->setText(edgesFileName);
 }
 
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
@@ -639,14 +639,14 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     cityLoader.drawBuildings(param.grp, latLonBounds, scale);
     heightMap = cityLoader.getHeightMap();
 
-    // QString pointsFileName = ui->pointsFilePath->text();
-    // QString edgesFileName = ui->edgesFilePath->text();
-    QString pointsFileName, edgesFileName;
+     QString pointsFileName = ui->pointsFilePath->text();
+     QString edgesFileName = ui->edgesFilePath->text();
+    //QString pointsFileName, edgesFileName;
     if (pointsFileName.isEmpty()) {
-        pointsFileName = "C:/Users/shan/Desktop/graph_data/usflight/usairports_with_levels.csv";
+        pointsFileName = "C:/Users/DELL/Desktop/data/graph_data/usflight/usairports_with_levels.csv";
     }
     if (edgesFileName.isEmpty()) {
-        edgesFileName = "C:/Users/shan/Desktop/graph_data/usflight/usroutes.csv";
+        edgesFileName = "C:/Users/DELL/Desktop/data/graph_data/usflight/usroutes.csv";
     }
 
     // 读取CSV文件中的图数据
@@ -740,12 +740,13 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
 }
 
 void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
-    QString pointsFileName, edgesFileName;
+    QString pointsFileName = ui->pointsFilePath->text();
+    QString edgesFileName = ui->edgesFilePath->text();
     if (pointsFileName.isEmpty()) {
-        pointsFileName = "C:/Users/shan/Desktop/graph_data/grid/node.csv";
+        pointsFileName = "C:/Users/DELL/Desktop/data/graph_data/grid/nodes.csv";
     }
     if (edgesFileName.isEmpty()) {
-        edgesFileName = "C:/Users/shan/Desktop/graph_data/grid/edges.csv";
+        edgesFileName = "C:/Users/DELL/Desktop/data/graph_data/grid/edges.csv";
     }
 
     if (pointsFileName.isEmpty() || edgesFileName.isEmpty()) {
@@ -2490,6 +2491,12 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     osg::ref_ptr<osg::FloatArray> lineIDs = new osg::FloatArray;
     int lineID = 0;
     int totalNum = 20;
+    // 设置基准参数
+    const float BASE_LENGTH = 5000.0f; // 基准长度(km)，可以根据实际情况调整
+    const int BASE_SEGMENTS = 20;      // 基准长度对应的细分段数
+    const int MIN_SEGMENTS = 10;       // 最小细分段数
+    const int MAX_SEGMENTS = 40;       // 最大细分段数
+    
     for (auto &edge : *edges) {
         if (!edge.visible)
             continue; // 只处理可见边
@@ -2506,6 +2513,26 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         // 总点数，包括起点、所有细分点和终点
         // 每段有 totalNum 个插值点，总段数是 subDivs.size() - 1
         // 再加上原始点的数量 subDivs.size()
+        // 获取起点和终点的经纬度
+        float lat1 = osg::DegreesToRadians(edge.subDivs.front().x()); // 起点纬度
+        float lon1 = osg::DegreesToRadians(edge.subDivs.front().y()); // 起点经度
+        float lat2 = osg::DegreesToRadians(edge.subDivs.back().x());  // 终点纬度
+        float lon2 = osg::DegreesToRadians(edge.subDivs.back().y());  // 终点经度
+
+        // 使用Haversine公式计算大圆距离
+        float dlat = lat2 - lat1;
+        float dlon = lon2 - lon1;
+        float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                  std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+        float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+        float edgeLength = 6371.0f * c; // 6371km是地球平均半径，得到的距离单位是km
+
+        // 根据实际地理距离与基准长度的比例计算细分段数
+        int totalNum = static_cast<int>(BASE_SEGMENTS * (edgeLength / BASE_LENGTH));
+
+        // 限制在合理范围内
+        totalNum = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalNum));
+
         size_t totalPoints = (edge.subDivs.size() - 1) * (totalNum) + edge.subDivs.size();
 
         // 首先得到采样点的高度,进而计算这条边上的最大高度
@@ -2722,8 +2749,41 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         std::vector<int> clusterLabels;
 
         if (graphTypeIndex == 1) {
+            // 第一次聚类
             clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
-            // clusterLabels = Louvain(dbscanedges, weights); // 全都是一个社区的 数据再改变一下
+            
+            // 找出噪声点
+            std::vector<size_t> noisePoints;
+            for (size_t i = 0; i < clusterLabels.size(); ++i) {
+                if (clusterLabels[i] == -1) {
+                    noisePoints.push_back(i);
+                }
+            }
+            
+            // 对噪声点进行特殊处理
+            if (!noisePoints.empty()) {
+                // 方案1：将噪声点分配给最近的非噪声簇
+                for (size_t idx : noisePoints) {
+                    double minDist = std::numeric_limits<double>::max();
+                    int nearestCluster = -1;
+                    
+                    // 找到最近的非噪声簇
+                    for (size_t j = 0; j < positions.size(); ++j) {
+                        if (clusterLabels[j] != -1) {
+                            double dist = (positions[idx] - positions[j]).length();
+                            if (dist < minDist) {
+                                minDist = dist;
+                                nearestCluster = clusterLabels[j];
+                            }
+                        }
+                    }
+                    
+                    // 将噪声点分配给最近的簇
+                    if (nearestCluster != -1) {
+                        clusterLabels[idx] = nearestCluster;
+                    }
+                }
+            }
         } else {
             clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
         }
