@@ -129,6 +129,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
     std::vector<Node> visileNodes;
     std::vector<Node> currentNodes;
     std::unordered_set<std::string> sceneLabels; // 场景中已存在的标签ID
+    // 需要新增的标签ID列表
+    std::vector<std::string> newAddList;
+    
+    // 需要移除的标签ID列表
+    std::vector<std::string> removeList;
     // 经纬度网格的分区信息
     struct Grid {
         std::vector<std::string> node_ids; // 存储在该网格内的节点ID
@@ -163,8 +168,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         }
 
         // 获取指定经纬度范围内的所有节点ID
-        std::vector<std::string> getNodesInFrustum(float lat_min, float lat_max, float lon_min,
-                                                   float lon_max) {
+        std::vector<std::string> getNodesInFrustum(double lat_min, double lat_max, double lon_min,
+                                                   double lon_max) {
             std::vector<std::string> visibleNodes;
 
             int lat_start = static_cast<int>((lat_min + 90.0f) * latitude_cells / 180.0f);
@@ -389,9 +394,10 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void updateLabelLists(const std::string &graphName);
     void syncSceneGraph(const std::string &graphName);
     void cameraUpdate(const std::string &graphName, double cameraHeight,
-                      const osg::Polytope &frustum);
-    void frustumCulling(const std::string &graphName, const osg::Polytope &frustum,
-                        int currentLevel);
+                      const osg::Polytope &frustum, double minLon, double maxLon, double minLat,
+                      double maxLat);
+    void frustumCulling(const std::string &graphName, double minLon, double maxLon, double minLat,
+                        double maxLat, int currentLevel);
     int getCurrentLevel(double height);
     void setEdges(const std::string &graphName, std::shared_ptr<std::vector<Edge>> edges) {
         auto it = graphs.find(graphName);

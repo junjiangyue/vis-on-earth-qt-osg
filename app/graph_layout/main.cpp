@@ -32,70 +32,134 @@ class CameraMovementCallback : public osg::NodeCallback {
         // 继续场景遍历
         traverse(node, nv);
     }
+    // 优化后的经纬度范围计算函数
+    void calculateEarthIntersection(osg::Camera *camera, const osg::Vec3d &eyePos, double &minLon,
+                                    double &maxLon, double &minLat, double &maxLat) {
+        // 获取视锥体的8个顶点
+        osg::Matrixd viewMatrix = camera->getViewMatrix();
+        osg::Matrixd projMatrix = camera->getProjectionMatrix();
+        osg::Matrixd invViewProj = osg::Matrixd::inverse(viewMatrix * projMatrix);
+
+        std::vector<osg::Vec3d> projPoints;
+        projPoints.reserve(9); // 8个顶点+相机位置
+
+        // 添加相机位置的投影
+        double eyeDistance = eyePos.length();
+        if (eyeDistance > osg::WGS_84_RADIUS_POLAR) {
+            osg::Vec3d projEye = eyePos;
+            projEye.normalize();
+            projEye *= osg::WGS_84_RADIUS_POLAR;
+            projPoints.push_back(projEye);
+        }
+
+        // 计算视锥体的8个角点
+        const osg::Vec3d corners[8] = {osg::Vec3d(-1.0, -1.0, -1.0), osg::Vec3d(1.0, -1.0, -1.0),
+                                       osg::Vec3d(1.0, 1.0, -1.0),   osg::Vec3d(-1.0, 1.0, -1.0),
+                                       osg::Vec3d(-1.0, -1.0, 1.0),  osg::Vec3d(1.0, -1.0, 1.0),
+                                       osg::Vec3d(1.0, 1.0, 1.0),    osg::Vec3d(-1.0, 1.0, 1.0)};
+
+        // 初始化范围
+        minLon = 180.0;
+        maxLon = -180.0;
+        minLat = 90.0;
+        maxLat = -90.0;
+        bool hasValidPoints = false;
+
+        // 处理每个视锥体顶点
+        for (const auto &corner : corners) {
+            osg::Vec3d worldPoint = corner * invViewProj;
+
+            // 计算射线与球体交点
+            osg::Vec3d dir = worldPoint - eyePos;
+            dir.normalize();
+
+            // 射线-球体相交检测
+            double a = dir * dir;
+            double b = 2.0 * (eyePos * dir);
+            double c = (eyePos * eyePos) - (osg::WGS_84_RADIUS_POLAR * osg::WGS_84_RADIUS_POLAR);
+            double discriminant = b * b - 4.0 * a * c;
+
+            if (discriminant >= 0.0) {
+                double t = (-b - sqrt(discriminant)) / (2.0 * a);
+                if (t > 0.0) {
+                    osg::Vec3d intersectPoint = eyePos + dir * t;
+
+                    // 计算经纬度
+                    double lon = atan2(intersectPoint.y(), intersectPoint.x()) * 180.0 / osg::PI;
+                    double lat =
+                        asin(intersectPoint.z() / osg::WGS_84_RADIUS_POLAR) * 180.0 / osg::PI;
+
+                    // 更新范围
+                    minLon = std::min(minLon, lon);
+                    maxLon = std::max(maxLon, lon);
+                    minLat = std::min(minLat, lat);
+                    maxLat = std::max(maxLat, lat);
+                    hasValidPoints = true;
+
+                    //// 调试输出
+                    //std::cout << "Intersection point: " << intersectPoint.x() << ", "
+                    //          << intersectPoint.y() << ", " << intersectPoint.z() << std::endl;
+                    //std::cout << "Lon, Lat: " << lon << ", " << lat << std::endl;
+                }
+            }
+        }
+
+        if (!hasValidPoints) {
+            // 如果没有有效的交点，返回默认范围
+            minLon = -180.0;
+            maxLon = 180.0;
+            minLat = -90.0;
+            maxLat = 90.0;
+            return;
+        }
+
+        // 添加余量
+        double lonMargin = (maxLon - minLon) * 0.1;
+        double latMargin = (maxLat - minLat) * 0.1;
+
+        minLon = std::max(-180.0, minLon - lonMargin);
+        maxLon = std::min(180.0, maxLon + lonMargin);
+        minLat = std::max(-90.0, minLat - latMargin);
+        maxLat = std::min(90.0, maxLat + latMargin);
+
+        // 处理经度跨越180度的情况
+        if (maxLon - minLon > 350.0) {
+            minLon = -180.0;
+            maxLon = 180.0;
+        }
+        
+    }
 
     void checkCameraMovement(osg::Camera *camera) {
-        // 静态变量记录上一帧状态
-        static osg::Vec3d lastEye, lastCenter;
-        static osg::Matrixd lastViewMatrix;
 
+        static double lastHeight;
         // 获取当前相机的世界坐标位置（直接从相机矩阵中提取）
         osg::Matrixd viewMatrix = camera->getViewMatrix();
-        osg::Vec3d eyePosition =
-            osg::Vec3d(viewMatrix(3, 0), viewMatrix(3, 1), viewMatrix(3, 2)); // 提取相机位置
-        osg::Vec3d center = camera->getViewMatrix().getTrans();               // 获取目标位置
-
-        // 计算位移变化（世界坐标系）
-        double positionDelta = (eyePosition - lastEye).length();
-
-        // 计算旋转变化（矩阵差异）
-        osg::Matrixd deltaMatrix = viewMatrix * osg::Matrixd::inverse(lastViewMatrix);
-        double angleChange = getRotationAngle(deltaMatrix);
-
-        // 判断是否超过阈值
-        const double POSITION_THRESHOLD = 100.0; // 单位：米
-        const double ANGLE_THRESHOLD = 3.0;      // 单位：度
+        osg::Vec3d eyePosition, center, up;
+        camera->getViewMatrixAsLookAt(eyePosition, center, up);
 
         // 计算相机高度
         double R_earth = 6371.0;                // 地球半径，单位：公里
         double distance = eyePosition.length(); // 相机到地球中心的距离
         double height = distance - R_earth; // 相机到地球表面的高度（单位：公里）
-        // 获取当前视锥体
-        osg::Polytope frustum;
-        getViewFrustum(camera, frustum);
-
-        if (positionDelta > POSITION_THRESHOLD || angleChange > ANGLE_THRESHOLD) {
+        
+        if (abs(height - lastHeight)>1000.0) {
             // 触发标签更新等后续操作
-
+            // 获取当前视锥体
+            osg::Polytope frustum;
+            //getViewFrustum(camera, frustum);
             if (!camera || !_graphRenderer)
                 return;
-            _graphRenderer->cameraUpdate("LoadedGraph", height,
-                                         frustum); // 调用外部对象的更新方法
+            // 计算经纬度范围
+            double minLon, maxLon, minLat, maxLat;
+            _graphRenderer->cameraUpdate("LoadedGraph", height, frustum, 0, 0, 0,
+                                         0); // 调用外部对象的更新方法
 
             std::cout << "updatecheck" << std::endl;
         }
 
         // 更新记录
-        lastEye = eyePosition;
-        lastCenter = center;
-        lastViewMatrix = viewMatrix;
-    }
-    // 辅助函数：提取视锥体
-    void getViewFrustum(osg::Camera *cam, osg::Polytope &frustum) {
-        osg::Matrixd proj = cam->getProjectionMatrix();
-        osg::Matrixd mv = cam->getViewMatrix();
-        frustum.setToUnitFrustum();
-        frustum.transformProvidingInverse(proj * mv);
-    }
-    // 辅助函数：从矩阵提取旋转角度
-    double getRotationAngle(const osg::Matrixd &mat) {
-        osg::Quat rot;
-        mat.get(rot);
-
-        // 正确获取四元数夹角（返回弧度值）
-        double angle = 2.0 * acos(rot.w());
-
-        // 弧度转角度（使用osg定义的PI_常量）
-        return angle * 180.0 / osg::PI;
+        lastHeight = height;
     }
 
   private:

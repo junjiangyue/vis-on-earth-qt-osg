@@ -166,30 +166,117 @@ void GraphRenderer::update(const std::string &graphName) {
     }
 }
 void GraphRenderer::updateLabelLists(const std::string &graphName) {
-    /*
-    输入：无
-
-    输出：无
-
-    利用visibleLabel（目前已更新）对比当前sceneList(当前屏幕上的label)，重置newAddList，removeList*/
+    // 清空新增和移除列表
+    newAddList.clear();
+    removeList.clear();
+    
+    // 如果场景中没有标签，将所有当前节点添加到新增列表
+    if (sceneLabels.empty()) {
+        for (const auto& node : currentNodes) {
+            newAddList.push_back(node.id);
+        }
+        return;
+    }
+    
+    // 找出需要移除的标签（在场景中但不在当前层级中的标签）
+    for (const auto& sceneLabel : sceneLabels) {
+        if (currentLevelLabels.find(sceneLabel) == currentLevelLabels.end()) {
+            removeList.push_back(sceneLabel);
+        }
+    }
+    
+    // 找出需要新增的标签（在当前层级中但不在场景中的标签）
+    for (const auto& node : currentNodes) {
+        if (sceneLabels.find(node.id) == sceneLabels.end()) {
+            newAddList.push_back(node.id);
+        }
+    }
 }
 void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
-    /*
-    * 输入：无
+    auto graphParam = getGraph(graphName);
+    if (!graphParam) return;
+    
+    // 移除不需要的标签
+    for (const auto& labelId : removeList) {
+        // 找到并移除对应的标签节点
+        for (int i = 0; i < graphParam->grp->getNumChildren(); ++i) {
+            osg::Node* node = graphParam->grp->getChild(i);
+            osg::Geode* geode = dynamic_cast<osg::Geode*>(node);
+            if (geode) {
+                for (unsigned int j = 0; j < geode->getNumDrawables(); ++j) {
+                    osgText::Text* text = dynamic_cast<osgText::Text*>(geode->getDrawable(j));
+                    if (text && text->getText().createUTF8EncodedString() == labelId) {
+                        graphParam->grp->removeChild(node);
+                        sceneLabels.erase(labelId);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // 添加新的标签
+    for (const auto& labelId : newAddList) {
+        // 找到对应的节点信息
+        auto nodeIt = std::find_if(currentNodes.begin(), currentNodes.end(),
+            [&labelId](const Node& node) { return node.id == labelId; });
+            
+        if (nodeIt != currentNodes.end()) {
+            // osg::ref_ptr<osgText::Text> text = new osgText::Text;
+            // text->setText(itr->first);
+            // text->setFont("Fonts/simhei.ttf"); // 设置字体
+            // text->setAxisAlignment(osgText::Text::SCREEN);
+            // if (textSize) {
+            //     text->setCharacterSize(textSize * 0.25); // 设置字体大小
+            // } else {
+            //     text->setCharacterSize(nodeGeomSize * 0.25);
+            // }
+            //// text->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
+            // text->setPosition(p +
+            //                   osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
+            //                             itr->second.size * (-0.25f) * nodeGeomSize,
+            //                             itr->second.size * 0.30f *
+            //                                 nodeGeomSize)); //
+            //                                 设置文字位置为点的位置稍微向上移动一些
+            //                                                 // 设置文字内容为点的ID
+            // text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
+            // text->setAxisAlignment(osgText::Text::SCREEN);     // 屏幕对齐，始终面向相机
 
-    输出：无
+            // osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
+            // textGeode->addDrawable(text.get());
+            // textNodes.push_back(text);
+            // grp->addChild(textGeode.get());
+            // 创建新的文字标签
+            osg::ref_ptr<osgText::Text> text = new osgText::Text;
+            text->setText(nodeIt->id);
+            text->setFont("Fonts/simhei.ttf");
+            text->setAxisAlignment(osgText::Text::SCREEN);
+            text->setCharacterSize(graphParam->textSize ? 
+                graphParam->textSize * 0.25 : graphParam->nodeGeomSize * 0.25);
+            
+            // 设置标签位置
+            osg::Vec3 pos = nodeIt->pos;
+            pos.z() += nodeIt->size * 0.30f * graphParam->nodeGeomSize;
+            text->setPosition(pos);
+            
+            // 设置标签颜色
+            text->setColor(nodeIt->isHover ? 
+                osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f) : 
+                osg::Vec4(0.8f, 0.8f, 0.8f, 1.0f));
 
-    功能：
-
-    ​	调用`updateLabelLists()` （维护新增/持续/移除列表）
-
-    ​	实现节点的添加和移除，在这一步创建文字标签，更新sceneList
-
-    ​	对当前节点进行resolveLabelCollisions()
-    */
+            // 添加到场景图
+            osg::ref_ptr<osg::Geode> geode = new osg::Geode;
+            geode->addDrawable(text.get());
+            graphParam->grp->addChild(geode.get());
+            
+            // 更新场景标签集合
+            sceneLabels.insert(labelId);
+        }
+    }
 }
 void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double cameraHeight,
-                                            const osg::Polytope &frustum) {
+                                            const osg::Polytope &frustum, double minLon,
+                                            double maxLon, double minLat, double maxLat) {
     /*
     * 检测当前高度
 
@@ -205,23 +292,25 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
             currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
         }
     }
-
-    frustumCulling(graphName, frustum, currentLevel);
-    syncSceneGraph(graphName);
-}
-void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName,
-                                              const osg::Polytope &frustum,
-                                              const int currentLevel) {
-    /*视锥剔除*/
-
     for (int i = 0; i <= currentLevel; i++) {
         // 获取level<=currentLevel的nodes
         currentNodes.insert(currentNodes.end(), levelNodeIndex[i].begin(), levelNodeIndex[i].end());
     }
+    //frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
+    updateLabelLists(graphName);
+    syncSceneGraph(graphName);
+}
+void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, double minLon,
+                                              double maxLon, double minLat,
+                                              double maxLat,
+                                              const int currentLevel) {
+    /*视锥剔除*/
 
-    // 筛选视角范围内的节点
-    // 判断相机视角覆盖的经纬度
-    // 剔除不在经纬度范围的节点
+    
+
+    // 筛选视角范围内的节点//(double lat_min, double lat_max, double lon_min,double lon_max)
+    //std::vector<std::string> visibleIDs = earthGrid.getNodesInFrustum(minLat, maxLat, minLon, maxLon);
+    //std::cout << "11" << std::endl;
 }
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
