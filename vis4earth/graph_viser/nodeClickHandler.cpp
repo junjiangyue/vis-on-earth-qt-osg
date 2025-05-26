@@ -33,7 +33,7 @@ bool NodeClickHandler::handle(const osgGA::GUIEventAdapter &ea, osgGA::GUIAction
                         }
 
                         // 打印点击的节点 ID
-                       // std::cout << "Clicked Node ID: " << nodeId << std::endl;
+                        std::cout << "Clicked Node ID: " << nodeId << std::endl;
 
                         if (collapsedNodes.find(nodeId) != collapsedNodes.end()) {
                             expandNode(nodeId);
@@ -69,50 +69,52 @@ void NodeClickHandler::collapseNode(const std::string &nodeId) {
             }
         }
         // 添加与外部连接的边
-        for (auto &edge : *edges) {
-            if (std::find(clusterNodes.begin(), clusterNodes.end(), edge.from) !=
-                clusterNodes.end()) {
-                // 如果边的起点属于该簇并且终点不在该簇，则重定向到代表节点
-                if (std::find(clusterNodes.begin(), clusterNodes.end(), edge.to) ==
-                    clusterNodes.end()) {
-                    GraphRenderer::Edge newEdge;
-                    newEdge.from = nodeId;
-                    newEdge.to = edge.to;
-                    newEdge.isAdd = true;
-                    // 设置细分点
-                    auto it = nodes->find(nodeId);
-                    newEdge.subDivs.emplace_back(it->second.pos);
-                    it = nodes->find(edge.to);
-                    newEdge.subDivs.emplace_back(it->second.pos);
-                    graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
-                } else if (std::find(clusterNodes.begin(), clusterNodes.end(), edge.to) !=
-                           clusterNodes.end()) {
-                    // 如果边的终点属于该簇并且起点不在该簇，则重定向到代表节点
-                    GraphRenderer::Edge newEdge;
-                    newEdge.from = edge.from;
-                    newEdge.to = nodeId;
-                    newEdge.isAdd = true;
-                    // 设置细分点
-                    auto it = nodes->find(nodeId);
-                    newEdge.subDivs.emplace_back(it->second.pos);
-                    it = nodes->find(nodeId);
-                    newEdge.subDivs.emplace_back(it->second.pos);
-                    graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
-                }
-            }
-        }
+        //for (auto &edge : *edges) {
+        //    if (std::find(clusterNodes.begin(), clusterNodes.end(), edge.from) !=
+        //        clusterNodes.end()) {
+        //        // 如果边的起点属于该簇并且终点不在该簇，则重定向到代表节点
+        //        if (std::find(clusterNodes.begin(), clusterNodes.end(), edge.to) ==
+        //            clusterNodes.end()) {
+        //            GraphRenderer::Edge newEdge;
+        //            newEdge.from = nodeId;
+        //            newEdge.to = edge.to;
+        //            newEdge.isAdd = true;
+        //            // 设置细分点
+        //            auto it = nodes->find(nodeId);
+        //            newEdge.subDivs.emplace_back(it->second.pos);
+        //            it = nodes->find(edge.to);
+        //            newEdge.subDivs.emplace_back(it->second.pos);
+        //            graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
+        //        } else if (std::find(clusterNodes.begin(), clusterNodes.end(), edge.to) !=
+        //                   clusterNodes.end()) {
+        //            // 如果边的终点属于该簇并且起点不在该簇，则重定向到代表节点
+        //            GraphRenderer::Edge newEdge;
+        //            newEdge.from = edge.from;
+        //            newEdge.to = nodeId;
+        //            newEdge.isAdd = true;
+        //            // 设置细分点
+        //            auto it = nodes->find(nodeId);
+        //            newEdge.subDivs.emplace_back(it->second.pos);
+        //            it = nodes->find(nodeId);
+        //            newEdge.subDivs.emplace_back(it->second.pos);
+        //            graphRenderer->getEdges("LoadedGraph")->push_back(newEdge);
+        //        }
+        //    }
+        //}
 
     } else {
         // 连接邻居的邻居并隐藏邻居
         for (const auto &neighbor : neighbors) {
             // 仅当邻居节点的等级高于当前节点时才进行收缩
-            if (nodes->at(neighbor).level > currentNodeLevel && nodes->at(neighbor).degree == 1) {
+            if (nodes->at(neighbor).degree == 1) {
                 setNodeVisible(neighbor, false);
             }
         }
     }
 
     graphRenderer->update("LoadedGraph");
+    graphRenderer->sceneLabels.clear();
+    graphRenderer->cameraUpdate("LoadedGraph", graphRenderer->cameraHeightPresent);
 }
 
 void NodeClickHandler::expandNode(const std::string &nodeId) {
@@ -124,10 +126,10 @@ void NodeClickHandler::expandNode(const std::string &nodeId) {
     setNodeVisible(nodeId, true);
     if (nodes->at(nodeId).isRepresent) {
         auto &clusterNodes = nodeMapping->at(nodeId);
-        // 隐藏簇中的所有非代表节点
+        // 展开簇中的所有非代表节点
         for (const std::string &cnodeId : clusterNodes) {
             if (cnodeId != nodeId) {
-                // 将该节点标记为隐藏
+                // 将该节点标记为可见
                 setNodeVisible(cnodeId, true);
                 // 恢复与该邻居节点相连的边的可见性
                 for (auto &edge : *edges) {
@@ -158,10 +160,28 @@ void NodeClickHandler::expandNode(const std::string &nodeId) {
                 }
             }
         }
+    } else {
+        // 恢复邻居节点及其边的可见性
+        for (const auto &neighbor : neighbors) {
+            // 仅当邻居节点之前被隐藏时才恢复
+            if (!nodes->at(neighbor).visible) {
+                setNodeVisible(neighbor, true);
+
+                // 恢复与该邻居节点相连的边的可见性
+                for (auto &edge : *edges) {
+                    if ((edge.from == nodeId && edge.to == neighbor) ||
+                        (edge.from == neighbor && edge.to == nodeId)) {
+                        edge.visible = true;
+                    }
+                }
+            }
+        }
     }
 
     // 更新图形
     graphRenderer->update("LoadedGraph");
+    graphRenderer->sceneLabels.clear();
+    graphRenderer->cameraUpdate("LoadedGraph", graphRenderer->cameraHeightPresent);
 }
 
 std::vector<std::string> NodeClickHandler::getNeighbors(const std::string &nodeId) {

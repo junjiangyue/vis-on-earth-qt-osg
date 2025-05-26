@@ -36,7 +36,9 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     // 连接 comboBox 的信号来记录当前选择的索引
     graphTypeIndex = 0; // 默认选择第一个（有经纬度的图）
-    ui->groupBox->hide();
+    //ui->groupBox->hide();
+    ui->fontSizeSlider->hide();
+    ui->fontSizeLabel->hide();
     connect(ui->comboBoxGraphType, SIGNAL(currentIndexChanged(int)), this,
             SLOT(onComboBoxGraphTypeChanged(int)));
 
@@ -49,7 +51,7 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->showGraphLayoutButton, &QPushButton::clicked, this, &GraphRenderer::showGraph);
     connect(ui->showEdgeBundlingButton, &QPushButton::clicked, this, &GraphRenderer::showBundling);
-
+    
     connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
             &GraphRenderer::onFontSizeSliderValueChanged);
      connect(ui->resolutionSlider, &QSlider::valueChanged, this,
@@ -69,14 +71,14 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
             &GraphRenderer::setRegionRestriction);
-    // connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::setMinX);
-    // connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::setMaxX);
-    // connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::setMinY);
-    // connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::setMaxY);
+     connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::setMinX);
+     connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::setMaxX);
+     connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::setMinY);
+     connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::setMaxY);
 
     //// 连接全局弹簧常数 (K)
     // connect(ui->spinBoxGlobalSpringConstant,
@@ -126,11 +128,14 @@ void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
     auto itr = graphs.find(name);
     if (itr != graphs.end()) {
         param.grp->removeChild(itr->second.grp);
+        sceneLabels.clear();
         graphs.erase(itr);
     }
     auto opt = graphs.emplace(std::piecewise_construct, std::forward_as_tuple(name),
                               std::forward_as_tuple(nodes, edges, &param));
+    opt.first->second.edgeNodegrp = new osg::Group;
     param.grp->addChild(opt.first->second.grp);
+    
 }
 
 std::shared_ptr<std::map<std::string, GraphRenderer::Node>>
@@ -234,7 +239,7 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
         screenBB.set(screenOrigin.x(), screenOrigin.y(), 0.0f, screenOrigin.x() + pixelWidth,
                      screenOrigin.y() + pixelHeight, 0.0f);
         // 增加边界的偏移量，单位为像素
-        float extraPadding = 10.0f; // 根据需要调整这个值
+        float extraPadding = 0.0f; // 根据需要调整这个值
         // 创建一个新的包围盒，在原包围盒的基础上加上额外的边界
         screenBB._min -= osg::Vec3(extraPadding, extraPadding, 0.0f); // 左下角扩展
         screenBB._max += osg::Vec3(extraPadding, extraPadding, 0.0f); // 右上角扩展
@@ -295,7 +300,7 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
         // 获取文字的屏幕空间包围盒
         float pixelWidth = info.screenBB._max.x() - info.screenBB._min.x(); // 计算文字宽度（像素）
 
-        const float MAX_OFFSET = pixelWidth / 4.0f - 10.f; // 最大偏移距离
+        const float MAX_OFFSET = (pixelWidth)/1000.0f; // 最大偏移距离
         const float STEP = MAX_OFFSET / 2.0f;              // 每次尝试偏移的步长
         // 检查相邻网格中的文字
         bool foundValidPosition = false;
@@ -440,7 +445,7 @@ void GraphRenderer::updateLabelLists(const std::string &graphName) {
     // 如果场景中没有标签，将所有当前节点添加到新增列表
     if (sceneLabels.empty()) {
         for (const auto &node : currentNodes) {
-            newAddList.push_back(node.id);
+            if (node.visible)newAddList.push_back(node.id);
         }
         return;
     }
@@ -513,13 +518,16 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
             }
         }
     }
+    std::shared_ptr<std::map<std::string, Node>> nodesWithLevel = graphParam->nodes;
     // 添加新的标签
     for (const auto &labelId : newAddList) {
         // 找到对应的节点信息
         auto nodeIt = std::find_if(currentNodes.begin(), currentNodes.end(),
                                    [&labelId](const Node &node) { return node.id == labelId; });
-
-        if (nodeIt != currentNodes.end()) {
+        auto it = std::find_if(nodesWithLevel->begin(), nodesWithLevel->end(),
+                               [&labelId](const auto &pair) { return pair.second.id == labelId && pair.second.visible; });
+        bool existsInNodesWithLevel = (it != nodesWithLevel->end());
+        if (nodeIt != currentNodes.end() && existsInNodesWithLevel) {
             // 创建新的文字标签
             osg::ref_ptr<osgText::Text> text = new osgText::Text;
             text->setText(nodeIt->id);
@@ -529,7 +537,7 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
                                                         : graphParam->nodeGeomSize * 0.25);
 
             // 设置标签位置
-            osg::Vec3 pos = vec3ToSphere(nodeIt->pos);
+            osg::Vec3 pos = vec3ToSphere(it->second.pos);
             pos.z() += nodeIt->size * 0.30f * graphParam->nodeGeomSize;
             text->setPosition(pos);
 
@@ -548,9 +556,7 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
     }
     adjustTextPosition(textNodes, graphParam->nodeGeomSize, graphParam->_camera);
 }
-void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double cameraHeight,
-                                            const osg::Polytope &frustum, double minLon,
-                                            double maxLon, double minLat, double maxLat) {
+void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double cameraHeight) {
     /*
     * 检测当前高度
 
@@ -558,6 +564,7 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
     frustumCulling();
 ​	syncSceneGraph();
     */
+    cameraHeightPresent = cameraHeight;
     int currentLevel = getCurrentLevel(cameraHeight);
     // 筛选所有level<=currentLevel的nodes,加入currentLevelLabels
     currentLevelLabels.clear();
@@ -567,10 +574,15 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
             currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
         }
     }
+    
     currentNodes.clear();
     for (int i = 0; i <= currentLevel; i++) {
         // 获取level<=currentLevel的nodes
-        currentNodes.insert(currentNodes.end(), levelNodeIndex[i].begin(), levelNodeIndex[i].end());
+        for (int j = 0; j < levelNodeIndex[i].size(); j++) {
+            auto node = levelNodeIndex[i][j];
+            currentNodes.push_back(node);
+        }
+        
     }
     // frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
     updateLabelLists(graphName);
@@ -587,11 +599,11 @@ void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, doub
 }
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
-    if (height > 2.58305e+07)
+    if (height > 1.23384e+07)
         return 0; // 全球级
-    else if (height > 1.69452e+07)
+    else if (height > 9.66849e+06)
         return 1; // 大陆级
-    else if (height > 1.00033e+07)
+    else if (height > 8.08623e+06)
         return 2; // 国家级
     else
         return 3;
@@ -718,6 +730,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             graphParam->setLevelGraph(0);
             graphParam->setCamera(param._camera);
             graphParam->update();
+            cameraUpdate("LoadedGraph",cameraHeightPresent);
             // loadMarker();
         }
         myGraph = graph;
@@ -777,6 +790,8 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
             node.color = colors[i];
             node.id = itr->first;
             node.level = itr->second.level;
+            levelIndex[node.level].push_back(node.id);
+            levelNodeIndex[node.level].push_back(node);
 
             nodes->emplace(std::make_pair(itr->first, node));
             ++i;
@@ -797,6 +812,10 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
                     edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
                 edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
             }
+        }
+        for (const auto &edge : *edges) {
+            (*nodes)[edge.from].degree++; // 增加起始节点的度数
+            (*nodes)[edge.to].degree++;   // 增加结束节点的度数（如果是无向图）
         }
         myGraph = graph;
         myRestriction.bottomBound = 0.0;
@@ -820,6 +839,8 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
         graphParam->update();
+        cameraUpdate("LoadedGraph", cameraHeightPresent);
+
         // showGraph();
         //  初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
@@ -1043,7 +1064,7 @@ void VIS4Earth::GraphRenderer::showGraph() {
         VIS4Earth::GraphRenderer::Node node;
         node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
         node.color = colors[i];
-
+        node.id = itr->first;
         nodes->emplace(std::make_pair(itr->first, node));
         ++i;
     }
@@ -1080,10 +1101,11 @@ void VIS4Earth::GraphRenderer::showGraph() {
         graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = true;
-        // graphParam->generateHierarchicalGraphs(nodes, edges);
-        // graphParam->setLevelGraph(0);
+        graphParam->generateHierarchicalGraphs(nodes, edges);
+        graphParam->setLevelGraph(0);
         graphParam->setCamera(param._camera);
         graphParam->update();
+        cameraUpdate("LoadedGraph", cameraHeightPresent);
 
         // loadMarker();
     }
@@ -1225,6 +1247,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         updateGraphParameters(graphParam);
+        cameraUpdate("LoadedGraph", cameraHeightPresent);
     }
 }
 
@@ -1362,6 +1385,7 @@ void VIS4Earth::GraphRenderer::setRegionRestriction(bool enabled) {
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
         graphParam->update();
+        cameraUpdate("LoadedGraph", cameraHeightPresent);
     }
 }
 
@@ -1477,6 +1501,7 @@ void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
         graphParam->setTextGeometrySize(value / 12.0 * .02f *
                                         static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->update();
+        cameraUpdate("LoadedGraph", cameraHeightPresent);
     }
 }
 void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
@@ -1489,6 +1514,8 @@ void VIS4Earth::GraphRenderer::onResolutionSliderValueChanged(int value) {
     graphParam->graphTypeIndex = graphTypeIndex;
     graphParam->setLevelGraph(10 - value);
     graphParam->update();
+    sceneLabels.clear();
+    cameraUpdate("LoadedGraph", cameraHeightPresent);
 }
 // 检查两个矩形是否重叠，并返回重叠的距离
 osg::Vec3 calculateOverlapDistance(const osg::BoundingBox &bb1, const osg::BoundingBox &bb2) {
@@ -2401,8 +2428,8 @@ float findOptimalHeight(float p, float max, const std::vector<float> &heightArra
     return h_max;
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
+    if (edgeNodegrp!=nullptr)edgeNodegrp->removeChildren(0, edgeNodegrp->getNumChildren());
     grp->removeChildren(0, grp->getNumChildren());
-
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
         // v3.x() 是纬度，v3.y() 是经度
         float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
@@ -2448,36 +2475,12 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         centerData->push_back(itr->second.pos);
         sphere->setUserData(centerData);
         sphere->setColor(color);
-        grp->addChild(sphere);
+        edgeNodegrp->addChild(sphere);
 
-        // osg::ref_ptr<osgText::Text> text = new osgText::Text;
-        // text->setText(itr->first);
-        // text->setFont("Fonts/simhei.ttf"); // 设置字体
-        // text->setAxisAlignment(osgText::Text::SCREEN);
-        // if (textSize) {
-        //     text->setCharacterSize(textSize * 0.25); // 设置字体大小
-        // } else {
-        //     text->setCharacterSize(nodeGeomSize * 0.25);
-        // }
-        //// text->setCharacterSizeMode(osgText::Text::SCREEN_COORDS);
-        // text->setPosition(p +
-        //                   osg::Vec3(itr->second.size * (-0.25f) * nodeGeomSize,
-        //                             itr->second.size * (-0.25f) * nodeGeomSize,
-        //                             itr->second.size * 0.30f *
-        //                                 nodeGeomSize)); // 设置文字位置为点的位置稍微向上移动一些
-        //                                                 // 设置文字内容为点的ID
-        // text->setColor(osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)); // 设置文字颜色为白色
-        // text->setAxisAlignment(osgText::Text::SCREEN);     // 屏幕对齐，始终面向相机
 
-        // osg::ref_ptr<osg::Geode> textGeode = new osg::Geode;
-        // textGeode->addDrawable(text.get());
-        // textNodes.push_back(text);
-        // grp->addChild(textGeode.get());
-
-        // osgNodes.emplace(std::make_pair(itr->first, sphere));
     }
 
-    auto states = grp->getOrCreateStateSet();
+    auto states = edgeNodegrp->getOrCreateStateSet();
     auto matr = new osg::Material;
     matr->setColorMode(osg::Material::DIFFUSE);
     states->setAttributeAndModes(matr, osg::StateAttribute::ON);
@@ -2490,12 +2493,12 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     auto segCols = new osg::Vec4Array;
     osg::ref_ptr<osg::FloatArray> lineIDs = new osg::FloatArray;
     int lineID = 0;
-    int totalNum = 20;
+    int totalNum = 5;
     // 设置基准参数
     const float BASE_LENGTH = 5000.0f; // 基准长度(km)，可以根据实际情况调整
-    const int BASE_SEGMENTS = 20;      // 基准长度对应的细分段数
-    const int MIN_SEGMENTS = 10;       // 最小细分段数
-    const int MAX_SEGMENTS = 40;       // 最大细分段数
+    const int BASE_SEGMENTS = 5;      // 基准长度对应的细分段数
+    const int MIN_SEGMENTS = 5;       // 最小细分段数
+    const int MAX_SEGMENTS = 20;       // 最大细分段数
     
     for (auto &edge : *edges) {
         if (!edge.visible)
@@ -2631,7 +2634,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, segVerts->size()));
         auto lw = new osg::LineWidth(1.f);
         states->setAttributeAndModes(lw, osg::StateAttribute::ON);
-
+        geom->setUseVertexBufferObjects(true);
         /*osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc();
         blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
         states->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);*/
@@ -2655,7 +2658,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         lineGeode = geode;
         lineGeometry = geom;
 
-        grp->addChild(geode);
+        edgeNodegrp->addChild(geode);
+        grp->addChild(edgeNodegrp);
     }
 }
 
@@ -2841,10 +2845,11 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             currentLevel.nodes->at(representativeNodeId).isRepresent = true;
 
             //// 设置代表节点的大小，基于簇中节点的数量
-            // float representativeSize =
-            //     (static_cast<float>(nodesInCluster.size()) * 0.015 +
-            //      previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
-            // currentLevel.nodes->at(representativeNodeId).size = representativeSize;
+             float representativeSize =
+                 (static_cast<float>(nodesInCluster.size()) * 0.15 +
+                  previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
+            currentLevel.nodes->at(representativeNodeId).size =
+                std::min(representativeSize, currentLevel.nodes->at(representativeNodeId).size*2);
 
             processedNodes.insert(representativeNodeId);
 
@@ -2944,65 +2949,65 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         }
     }
 
-    // 2. 为未直接连接但联通的代表节点添加新边
-    for (const auto &repNodePair1 : *currentLevel.nodes) {
-        if (!repNodePair1.second.isRepresent)
-            continue; // 只对代表节点进行处理
+    //// 2. 为未直接连接但联通的代表节点添加新边
+    //for (const auto &repNodePair1 : *currentLevel.nodes) {
+    //    if (!repNodePair1.second.isRepresent)
+    //        continue; // 只对代表节点进行处理
 
-        for (const auto &repNodePair2 : *currentLevel.nodes) {
-            if (repNodePair1.first == repNodePair2.first || !repNodePair2.second.isRepresent)
-                continue; // 跳过自己或非代表节点
+    //    for (const auto &repNodePair2 : *currentLevel.nodes) {
+    //        if (repNodePair1.first == repNodePair2.first || !repNodePair2.second.isRepresent)
+    //            continue; // 跳过自己或非代表节点
 
-            std::string from = std::min(repNodePair1.first, repNodePair2.first);
-            std::string to = std::max(repNodePair1.first, repNodePair2.first);
+    //        std::string from = std::min(repNodePair1.first, repNodePair2.first);
+    //        std::string to = std::max(repNodePair1.first, repNodePair2.first);
 
-            // 如果这条边已经处理过，则跳过
-            if (processedEdges.count({from, to}) > 0)
-                continue;
+    //        // 如果这条边已经处理过，则跳过
+    //        if (processedEdges.count({from, to}) > 0)
+    //            continue;
 
-            // 检查这两个代表节点在上一层是否通过某种方式连接
-            bool isConnected = false;
-            for (const std::string &originalNode1 : nodeMapping.at(repNodePair1.first)) {
-                for (const std::string &originalNode2 : nodeMapping.at(repNodePair2.first)) {
-                    // 检查是否有直接连接的边
-                    for (const Edge &edge : *previousLevel.edges) {
-                        if ((edge.from == originalNode1 && edge.to == originalNode2) ||
-                            (edge.from == originalNode2 && edge.to == originalNode1)) {
-                            isConnected = true;
-                            break;
-                        }
-                    }
-                    if (isConnected)
-                        break;
-                }
-                if (isConnected)
-                    break;
-            }
+    //        // 检查这两个代表节点在上一层是否通过某种方式连接
+    //        bool isConnected = false;
+    //        for (const std::string &originalNode1 : nodeMapping.at(repNodePair1.first)) {
+    //            for (const std::string &originalNode2 : nodeMapping.at(repNodePair2.first)) {
+    //                // 检查是否有直接连接的边
+    //                for (const Edge &edge : *previousLevel.edges) {
+    //                    if ((edge.from == originalNode1 && edge.to == originalNode2) ||
+    //                        (edge.from == originalNode2 && edge.to == originalNode1)) {
+    //                        isConnected = true;
+    //                        break;
+    //                    }
+    //                }
+    //                if (isConnected)
+    //                    break;
+    //            }
+    //            if (isConnected)
+    //                break;
+    //        }
 
-            // 如果两个代表节点在上一级中连接，则在当前层中添加一条直接的边
-            if (isConnected) {
-                Edge newEdge;
-                newEdge.from = from;
-                newEdge.to = to;
+    //        // 如果两个代表节点在上一级中连接，则在当前层中添加一条直接的边
+    //        if (isConnected) {
+    //            Edge newEdge;
+    //            newEdge.from = from;
+    //            newEdge.to = to;
 
-                // 设置细分点
-                auto itFrom = currentLevel.nodes->find(from);
-                auto itTo = currentLevel.nodes->find(to);
-                if (itFrom != currentLevel.nodes->end() && itTo != currentLevel.nodes->end()) {
-                    newEdge.subDivs.emplace_back(itFrom->second.pos);
-                    newEdge.subDivs.emplace_back(itTo->second.pos);
-                }
+    //            // 设置细分点
+    //            auto itFrom = currentLevel.nodes->find(from);
+    //            auto itTo = currentLevel.nodes->find(to);
+    //            if (itFrom != currentLevel.nodes->end() && itTo != currentLevel.nodes->end()) {
+    //                newEdge.subDivs.emplace_back(itFrom->second.pos);
+    //                newEdge.subDivs.emplace_back(itTo->second.pos);
+    //            }
 
-                currentLevel.edges->push_back(newEdge);
+    //            currentLevel.edges->push_back(newEdge);
 
-                // 记录边映射
-                edgeMapping[newEdge] = {};
+    //            // 记录边映射
+    //            edgeMapping[newEdge] = {};
 
-                // 标记已处理的边
-                processedEdges.insert({from, to});
-            }
-        }
-    }
+    //            // 标记已处理的边
+    //            processedEdges.insert({from, to});
+    //        }
+    //    }
+    //}
 
     // 保存节点映射和边映射到当前层次
     currentLevel.nodeMapping =

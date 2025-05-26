@@ -59,6 +59,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
   public:
     double size = 1.0;
     int graphTypeIndex;
+    double cameraHeightPresent;
     std::shared_ptr<VIS4Earth::Graph> myGraph;
     std::future<void> compatibilityFuture; // 保存异步任务状态
     // VIS4Earth::Graph myGraph;
@@ -233,6 +234,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::vector<std::vector<float>> heightMap;
         std::vector<GraphLevel> levels; // 存放多层次的图
         osg::ref_ptr<osg::Group> grp;
+        osg::ref_ptr<osg::Group> edgeNodegrp;
 
       public:
         int graphTypeIndex;
@@ -393,9 +395,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void update(const std::string &graphName);
     void updateLabelLists(const std::string &graphName);
     void syncSceneGraph(const std::string &graphName);
-    void cameraUpdate(const std::string &graphName, double cameraHeight,
-                      const osg::Polytope &frustum, double minLon, double maxLon, double minLat,
-                      double maxLat);
+    void cameraUpdate(const std::string &graphName, double cameraHeight);
     void frustumCulling(const std::string &graphName, double minLon, double maxLon, double minLat,
                         double maxLat, int currentLevel);
     int getCurrentLevel(double height);
