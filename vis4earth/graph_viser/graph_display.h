@@ -209,6 +209,13 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void setCamera(osg::Camera *camera) { _camera = camera; }
     };
     PerRendererParam param; // 移到public部分
+
+    // LOD相关数据存储 (类似levelIndex的管理方式)
+    std::array<std::shared_ptr<std::map<std::string, Node>>, 4> lodNodesData; // 4个LOD层级的节点数据
+    std::array<std::shared_ptr<std::vector<Edge>>, 4> lodEdgesData; // 4个LOD层级的边数据
+    int currentActiveLODLevel = -1; // 当前活动的LOD级别，-1表示未初始化
+    
+    //std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
   private:
     struct GraphLevel {
         std::shared_ptr<std::map<std::string, Node>> nodes; // 当前层次的节点
@@ -233,8 +240,34 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping;
         std::vector<std::vector<float>> heightMap;
         std::vector<GraphLevel> levels; // 存放多层次的图
+        
         osg::ref_ptr<osg::Group> grp;
         osg::ref_ptr<osg::Group> edgeNodegrp;
+
+        // 用于边绘制的顶点数据结构
+        struct LineVertex {
+            osg::Vec3 position;    // 顶点位置
+            osg::Vec4 colorFrom;   // 起点颜色
+            osg::Vec4 colorTo;     // 终点颜色
+            float weight;          // 边权重
+        };
+
+        // VBO相关成员
+        osg::ref_ptr<osg::Geometry> mEdgeGeometry;
+        osg::ref_ptr<osg::Geode> mEdgeGeode;
+        osg::ref_ptr<osg::Vec3Array> mVertexArray;
+        osg::ref_ptr<osg::Vec4Array> mColorFromArray;
+        osg::ref_ptr<osg::Vec4Array> mColorToArray;
+        osg::ref_ptr<osg::FloatArray> mWeightArray;
+
+        // Shader相关成员
+        osg::ref_ptr<osg::Program> mEdgeProgram;
+        bool mUseNewRenderer = true;  // 控制是否使用新的渲染方式
+        
+        // 初始化Shader程序
+        void initEdgeShaders();
+        // 更新边的VBO数据
+        void updateEdgeVBO();
 
       public:
         int graphTypeIndex;
@@ -299,6 +332,12 @@ class GraphRenderer : public QtOSGReflectableWidget {
                                       int p);
         bool isPointInPolygon(float px, float py, const std::vector<osg::Vec3> &polygon);
         float getBuildingHeightAtLatLon(float lat, float lon);
+
+        void setUseNewRenderer(bool use) { mUseNewRenderer = use; }
+        bool getUseNewRenderer() const { return mUseNewRenderer; }
+        
+        // LOD相关方法 - 只保留setActiveLODDataSource，用于接收外部设置的数据
+        void setActiveLODDataSource(int targetMaxLevel);
 
       private:
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
@@ -409,6 +448,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void loadNoGeoTypeGraph();
 
     void loadMarker();
+
+    // LOD相关方法
+    void updateActiveLOD(double cameraHeight);
+    void initializeLODData(std::shared_ptr<std::map<std::string, Node>> allNodes, 
+                          std::shared_ptr<std::vector<Edge>> allEdges);
 
   protected:
     Ui::GraphRenderer *ui;

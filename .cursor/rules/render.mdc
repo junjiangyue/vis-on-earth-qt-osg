@@ -1,0 +1,8 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+- 使用不高于c++11的规则编写代码
+
+- osg版本是3.4.0，不要使用高于3.4.0的特性

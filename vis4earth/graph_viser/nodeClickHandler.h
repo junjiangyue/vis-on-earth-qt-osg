@@ -141,6 +141,7 @@ class CameraMovementCallback : public osg::NodeCallback {
             // 计算经纬度范围
             double minLon, maxLon, minLat, maxLat;
             _graphRenderer->cameraUpdate("LoadedGraph", height); // 调用外部对象的更新方法
+            _graphRenderer->updateActiveLOD(height);
             std::cout << "updatecheck" << std::endl;
         }
 
