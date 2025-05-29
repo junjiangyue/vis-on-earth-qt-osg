@@ -36,26 +36,26 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     // 连接 comboBox 的信号来记录当前选择的索引
     graphTypeIndex = 0; // 默认选择第一个（有经纬度的图）
-    //ui->groupBox->hide();
+    // ui->groupBox->hide();
     ui->fontSizeSlider->hide();
     ui->fontSizeLabel->hide();
     connect(ui->comboBoxGraphType, SIGNAL(currentIndexChanged(int)), this,
             SLOT(onComboBoxGraphTypeChanged(int)));
 
     // 打开文件夹
-     connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
-     connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
+    connect(ui->loadPointsButton, &QPushButton::clicked, this, &GraphRenderer::loadPointsCSV);
+    connect(ui->loadEdgesButton, &QPushButton::clicked, this, &GraphRenderer::loadEdgesCSV);
     // 加载图并绘制
     connect(ui->loadAndDrawGraphButton, &QPushButton::clicked, this,
             &GraphRenderer::loadAndDrawGraph);
 
     connect(ui->showGraphLayoutButton, &QPushButton::clicked, this, &GraphRenderer::showGraph);
     connect(ui->showEdgeBundlingButton, &QPushButton::clicked, this, &GraphRenderer::showBundling);
-    
+
     connect(ui->fontSizeSlider, &QSlider::valueChanged, this,
             &GraphRenderer::onFontSizeSliderValueChanged);
-     connect(ui->resolutionSlider, &QSlider::valueChanged, this,
-             &GraphRenderer::onResolutionSliderValueChanged);
+    connect(ui->resolutionSlider, &QSlider::valueChanged, this,
+            &GraphRenderer::onResolutionSliderValueChanged);
 
     // 连接参数设置的信号到槽函数
     // connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
@@ -71,14 +71,14 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
             &GraphRenderer::setRegionRestriction);
-     connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::setMinX);
-     connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::setMaxX);
-     connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::setMinY);
-     connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::setMaxY);
+    connect(ui->spinBoxMinX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMinX);
+    connect(ui->spinBoxMaxX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMaxX);
+    connect(ui->spinBoxMinY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMinY);
+    connect(ui->spinBoxMaxY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setMaxY);
 
     //// 连接全局弹簧常数 (K)
     // connect(ui->spinBoxGlobalSpringConstant,
@@ -120,7 +120,7 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
 
     connect(ui->starFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onStarFlowButtonClicked);
-    
+
     // 初始化LOD数据容器
     for (int i = 0; i < 4; ++i) {
         lodNodesData[i].reset();
@@ -135,21 +135,20 @@ void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
     if (itr != graphs.end()) {
         param.grp->removeChild(itr->second.grp);
         sceneLabels.clear();
-        
+
         // 清空LOD数据
         for (int i = 0; i < 4; ++i) {
             lodNodesData[i].reset();
             lodEdgesData[i].reset();
         }
         currentActiveLODLevel = -1; // 重置LOD级别
-        
+
         graphs.erase(itr);
     }
     auto opt = graphs.emplace(std::piecewise_construct, std::forward_as_tuple(name),
                               std::forward_as_tuple(nodes, edges, &param));
     opt.first->second.edgeNodegrp = new osg::Group;
     param.grp->addChild(opt.first->second.grp);
-    
 }
 
 std::shared_ptr<std::map<std::string, GraphRenderer::Node>>
@@ -314,8 +313,8 @@ void adjustTextPosition(std::vector<osg::ref_ptr<osgText::Text>> &texts, float n
         // 获取文字的屏幕空间包围盒
         float pixelWidth = info.screenBB._max.x() - info.screenBB._min.x(); // 计算文字宽度（像素）
 
-        const float MAX_OFFSET = (pixelWidth)/1000.0f; // 最大偏移距离
-        const float STEP = MAX_OFFSET / 2.0f;              // 每次尝试偏移的步长
+        const float MAX_OFFSET = (pixelWidth) / 1000.0f; // 最大偏移距离
+        const float STEP = MAX_OFFSET / 2.0f;            // 每次尝试偏移的步长
         // 检查相邻网格中的文字
         bool foundValidPosition = false;
         float currentOffset = 0.0f;
@@ -459,7 +458,8 @@ void GraphRenderer::updateLabelLists(const std::string &graphName) {
     // 如果场景中没有标签，将所有当前节点添加到新增列表
     if (sceneLabels.empty()) {
         for (const auto &node : currentNodes) {
-            if (node.visible)newAddList.push_back(node.id);
+            if (node.visible)
+                newAddList.push_back(node.id);
         }
         return;
     }
@@ -584,7 +584,7 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
             currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
         }
     }
-    
+
     currentNodes.clear();
     for (int i = 0; i <= currentLevel; i++) {
         // 获取level<=currentLevel的nodes
@@ -592,7 +592,6 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
             auto node = levelNodeIndex[i][j];
             currentNodes.push_back(node);
         }
-        
     }
     // frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
     updateLabelLists(graphName);
@@ -609,11 +608,11 @@ void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, doub
 }
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
-    if (height > 1.23384e+07)
+    if (height > 2.64834e+07)
         return 0; // 全球级
-    else if (height > 9.66849e+06)
+    else if (height > 1.73736e+07)
         return 1; // 大陆级
-    else if (height > 8.08623e+06)
+    else if (height > 1.02563e+07)
         return 2; // 国家级
     else
         return 3;
@@ -661,11 +660,12 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     cityLoader.drawBuildings(param.grp, latLonBounds, scale);
     heightMap = cityLoader.getHeightMap();
 
-     QString pointsFileName = ui->pointsFilePath->text();
-     QString edgesFileName = ui->edgesFilePath->text();
-    //QString pointsFileName, edgesFileName;
+    QString pointsFileName = ui->pointsFilePath->text();
+    QString edgesFileName = ui->edgesFilePath->text();
+    // QString pointsFileName, edgesFileName;
     if (pointsFileName.isEmpty()) {
-        pointsFileName = "C:/Users/DELL/Desktop/data/graph_data/usflight/usairports_with_levels.csv";
+        pointsFileName =
+            "C:/Users/DELL/Desktop/data/graph_data/usflight/usairports_with_levels.csv";
     }
     if (edgesFileName.isEmpty()) {
         edgesFileName = "C:/Users/DELL/Desktop/data/graph_data/usflight/usroutes.csv";
@@ -676,7 +676,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         levelIndex[i].clear();
         levelNodeIndex[i].clear();
     }
-    
+
     // 读取CSV文件中的图数据
     try {
         std::string nodesFile = pointsFileName.toStdString();
@@ -745,14 +745,14 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             graphParam->generateHierarchicalGraphs(nodes, edges);
             graphParam->setLevelGraph(0);
             graphParam->setCamera(param._camera);
-            
+
             // 初始化LOD数据 (在GraphRenderer层面)
             this->initializeLODData(nodes, edges);
             updateActiveLOD(cameraHeightPresent);
-            
+
             graphParam->update();
             sceneLabels.clear();
-            cameraUpdate("LoadedGraph",cameraHeightPresent);
+            cameraUpdate("LoadedGraph", cameraHeightPresent);
             // loadMarker();
         }
         myGraph = graph;
@@ -788,13 +788,13 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         QMessageBox::warning(this, tr("警告"), tr("请先加载点文件和边文件"));
         return;
     }
-    
+
     // 清空现有的level数据
     for (int i = 0; i < 4; ++i) {
         levelIndex[i].clear();
         levelNodeIndex[i].clear();
     }
-    
+
     // 读取CSV文件中的图数据
     try {
         std::string nodesFile = pointsFileName.toStdString();
@@ -867,10 +867,10 @@ void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
         graphParam->setTextGeometrySize(.02f * static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
         graphParam->setRestriction(myRestriction);
         graphParam->restrictionOFF = !restrictionOn;
-        
+
         // 初始化LOD数据 (在GraphRenderer层面)
         this->initializeLODData(nodes, edges);
-        
+
         graphParam->update();
         cameraUpdate("LoadedGraph", cameraHeightPresent);
 
@@ -1146,7 +1146,8 @@ void VIS4Earth::GraphRenderer::showGraph() {
 
 void VIS4Earth::GraphRenderer::showBundling() {
     // 首先尝试加载已有的边绑定结果
-    QString bundledEdgesFile = "C:/Users/DL/Desktop/data/graph_data/usflight/bundled_edges_result.csv";
+    QString bundledEdgesFile =
+        "C:/Users/DL/Desktop/data/graph_data/usflight/bundled_edges_result.csv";
     if (QFile::exists(bundledEdgesFile)) {
         // 如果存在缓存文件，直接读取
         try {
@@ -1247,7 +1248,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     myGraph = edgeBundling.GetLayoutedGraph();
 
     // 保存边绑定结果
-    //try {
+    // try {
     //    QFile file(bundledEdgesFile);
     //    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
     //        QTextStream out(&file);
@@ -1289,7 +1290,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
 
     // 复制节点和边的信息
     copyGraphData(nodes, edges);
-    
+
     // 添加图到渲染器中
     addGraph("LoadedGraph", nodes, edges);
     // 更新图渲染
@@ -2373,17 +2374,17 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
              确保所有必要的Uniform都存在
             osg::Uniform *lineDataTexUniform = ss->getUniform("uLineDataTex");
             osg::Uniform *totalLinesUniform = ss->getUniform("uTotalLines");
-            
+
             if (!lineDataTexUniform) {
                 ss->addUniform(new osg::Uniform("uLineDataTex", 0));
                 lineDataTexUniform = ss->getUniform("uLineDataTex");
             }
-            
+
             if (!totalLinesUniform) {
                 ss->addUniform(new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
                 totalLinesUniform = ss->getUniform("uTotalLines");
             }
-            
+
             if (!enableHighlight) {
                 ss->addUniform(new osg::Uniform("uEnableHighlight", false));
                 enableHighlight = ss->getUniform("uEnableHighlight");
@@ -2397,7 +2398,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
             lineDataTex->setResizeNonPowerOfTwoHint(false);
 
             ss->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
-            
+
              安全地设置Uniform值
             if (lineDataTexUniform)
                 lineDataTexUniform->set(0);
@@ -2411,7 +2412,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
             isAnimating = true;
         }
     }*/
-
 
     if (lineGeode && lineGeometry) {
         if (isAnimating) {
@@ -2778,11 +2778,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             lineGeometry = mEdgeGeometry;
             edgeNodegrp->addChild(mEdgeGeode);
             grp->addChild(edgeNodegrp);
-            
+
             // 初始化着色器
             initEdgeShaders();
         }
-        
+
         // 更新VBO数据
         updateEdgeVBO();
     }
@@ -2792,9 +2792,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
     if (!mEdgeProgram) {
         mEdgeProgram = new osg::Program;
-        
+
         // 顶点着色器
-        const char* vertSource = R"(
+        const char *vertSource = R"(
             #version 120
 
             varying vec4 vColorFrom;
@@ -2814,9 +2814,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
                 vLineID = lineID; // 将属性传给片元着色器
             }
         )";
-        
+
         // 片段着色器
-        const char* fragSource = R"(
+        const char *fragSource = R"(
             #version 120
             varying vec4 vColorFrom;
             varying vec4 vColorTo;
@@ -2856,11 +2856,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
                 gl_FragColor = mix(baseColor, uHighlightColor, highlightIntensity);
             }
         )";
-        
+
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
         mEdgeProgram->addBindAttribLocation("lineID", 3); // lineID -> slot 3
-        
         auto stateset = mEdgeGeometry->getOrCreateStateSet();
         stateset->setAttributeAndModes(mEdgeProgram, osg::StateAttribute::ON);
         // 添加动画相关 uniform，默认关闭
@@ -2874,7 +2873,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
 
 // 更新边的VBO数据
 void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
-    if (!edges || edges->empty()) return;
+    if (!edges || edges->empty())
+        return;
     osg::ref_ptr<osg::FloatArray> mLineIDArray = new osg::FloatArray;
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
         // v3.x() 是纬度，v3.y() 是经度
@@ -2899,107 +2899,110 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     mColorFromArray = new osg::Vec4Array;
     mColorToArray = new osg::Vec4Array;
     mWeightArray = new osg::FloatArray;
-    
-    // 设置基准参数
+
+    std::cout << "updateEdgeVBO: Using LOD level " << currentLODLevel << std::endl;
+
+    if (currentLODLevel == 3) {
+        // LOD 3: 使用原有逻辑，完整显示所有边
+        updateEdgeVBO_Original(vec3ToSphere, mLineIDArray);
+        return;
+    }
+
+    // LOD 0, 1, 2: 直接使用已生成的聚合边数据
+    // 检查当前边数据是否为空
+    if (edges->empty()) {
+        std::cout << "No edges data available for LOD level " << currentLODLevel << std::endl;
+        return;
+    }
+
+    std::cout << "Processing " << edges->size() << " aggregated edges for LOD " << currentLODLevel
+              << std::endl;
+
+    // 设置聚合边的基准参数
     const float BASE_LENGTH = 1000.0f; // 基准长度(km)
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
-    const int MIN_SEGMENTS = 10;       // 最小细分段数
-    const int MAX_SEGMENTS = 20;       // 最大细分段数
+    const int MIN_SEGMENTS = 5;        // 最小细分段数（聚合边可以更少）
+    const int MAX_SEGMENTS = 15;       // 最大细分段数（聚合边不需要太多）
     int lineID = 0;
-    // 遍历所有边，生成顶点数据
-    for (const auto& edge : *edges) {
-        if (!edge.visible) continue; // 只处理可见边
-        if (edge.subDivs.empty()) continue; // 跳过没有细分点的边
-        
-        osg::Vec4 fromColor(1.0f, 0.0f, 0.0f, 1.0f);
-        osg::Vec4 toColor(0.0f, 0.0f, 1.0f, 1.0f);
-        
-        // 计算整条边的总长度
-        float totalLength = 0.0f;
-        std::vector<float> segmentLengths;
-        for (size_t i = 1; i < edge.subDivs.size(); ++i) {
-            float lat1 = osg::DegreesToRadians(edge.subDivs[i-1].x());
-            float lon1 = osg::DegreesToRadians(edge.subDivs[i-1].y());
-            float lat2 = osg::DegreesToRadians(edge.subDivs[i].x());
-            float lon2 = osg::DegreesToRadians(edge.subDivs[i].y());
-            
-            float dlat = lat2 - lat1;
-            float dlon = lon2 - lon1;
-            float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
-                     std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
-            float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
-            float length = 6371.0f * c; // 6371km是地球平均半径
-            totalLength += length;
-            segmentLengths.push_back(length);
-        }
-        
-        // 计算总的细分段数
+
+    // 直接遍历当前LOD级别的边数据（这些已经是聚合边）
+    for (const auto &edge : *edges) {
+        if (!edge.visible)
+            continue; // 只处理可见边
+
+        // 获取起点和终点节点
+        auto fromNodeIt = nodes->find(edge.from);
+        auto toNodeIt = nodes->find(edge.to);
+        if (fromNodeIt == nodes->end() || toNodeIt == nodes->end())
+            continue;
+
+        const osg::Vec3 &startPoint = fromNodeIt->second.pos;
+        const osg::Vec3 &endPoint = toNodeIt->second.pos;
+
+        // 计算边长度（大圆距离）
+        float lat1 = osg::DegreesToRadians(startPoint.x());
+        float lon1 = osg::DegreesToRadians(startPoint.y());
+        float lat2 = osg::DegreesToRadians(endPoint.x());
+        float lon2 = osg::DegreesToRadians(endPoint.y());
+
+        float dlat = lat2 - lat1;
+        float dlon = lon2 - lon1;
+        float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                  std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+        float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+        float totalLength = 6371.0f * c; // 6371km是地球平均半径
+
+        // 计算细分段数
         int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
         totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
-        
-        // 根据每段长度占总长度的比例分配细分段数
-        std::vector<int> segmentCounts;
-        float accumulatedLength = 0.0f;
-        osg::Vec3 prevPos;
-        
-        for (size_t i = 0; i < segmentLengths.size(); ++i) {
-            accumulatedLength += segmentLengths[i];
-            float t = accumulatedLength / totalLength;
-            int currentSegments;
-            
-            if (i == segmentLengths.size() - 1) {
-                // 最后一段使用剩余的所有细分段数
-                currentSegments = totalSegments - std::accumulate(segmentCounts.begin(), segmentCounts.end(), 0);
-            } else {
-                currentSegments = static_cast<int>(totalSegments * (segmentLengths[i] / totalLength));
-            }
-            currentSegments = std::max(1, currentSegments); // 确保至少有一个细分段
-            segmentCounts.push_back(currentSegments);
-            
-            // 在当前段内生成插值点
-            const osg::Vec3& startPoint = edge.subDivs[i];
-            const osg::Vec3& endPoint = edge.subDivs[i + 1];
-            
-            for (int j = 0; j <= currentSegments; ++j) {
-                float localT = static_cast<float>(j) / currentSegments;
-                float globalT = (accumulatedLength - segmentLengths[i] + segmentLengths[i] * localT) / totalLength;
-                
-                // 线性插值位置
-                osg::Vec3 interpolatedPos;
-                interpolatedPos.x() = startPoint.x() * (1.0f - localT) + endPoint.x() * localT;
-                interpolatedPos.y() = startPoint.y() * (1.0f - localT) + endPoint.y() * localT;
-                
-                // 使用全局t值计算高度，确保整条边的弧线连续
-                float baseHeight = getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
-                float arcHeight = std::sin(osg::PI * globalT) * 100000.f;
-                interpolatedPos.z() = std::max(baseHeight, arcHeight);
-                
-                // 转换为球面坐标
-                osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
-                
-                if (i > 0 || j > 0) {
-                    // 添加前一个点
-                    mVertexArray->push_back(prevPos);
-                    mColorFromArray->push_back(fromColor);
-                    mColorToArray->push_back(toColor);
-                    mWeightArray->push_back(edge.weight);
-                    
-                    // 添加当前点
-                    mVertexArray->push_back(spherePos);
-                    mColorFromArray->push_back(fromColor);
-                    mColorToArray->push_back(toColor);
-                    mWeightArray->push_back(edge.weight);
 
-                    mLineIDArray->push_back(static_cast<float>(lineID));
-                    mLineIDArray->push_back(static_cast<float>(lineID));
-                }
-                
-                prevPos = spherePos;
+        // 获取边的颜色（使用节点颜色或默认颜色）
+        osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
+        if (currentLODLevel < 3) {
+            // 聚合边使用统一的金色
+            edgeColor = osg::Vec4(0.8f, 0.6f, 0.2f, 1.0f);
+        }
+
+        osg::Vec3 prevPos;
+
+        // 生成边的插值点
+        for (int j = 0; j <= totalSegments; ++j) {
+            float t = static_cast<float>(j) / totalSegments;
+
+            // 线性插值位置
+            osg::Vec3 interpolatedPos;
+            interpolatedPos.x() = startPoint.x() * (1.0f - t) + endPoint.x() * t;
+            interpolatedPos.y() = startPoint.y() * (1.0f - t) + endPoint.y() * t;
+
+            // 计算弧线高度
+            float baseHeight = getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+            float arcHeight = std::sin(osg::PI * t) * 100000.f; // 使用边的最大高度
+            interpolatedPos.z() = std::max(baseHeight, arcHeight);
+
+            // 转换为球面坐标
+            osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+
+            if (j > 0) {
+                // 添加线段的两个顶点
+                mVertexArray->push_back(prevPos);
+                mColorFromArray->push_back(edgeColor);
+                mColorToArray->push_back(edgeColor);
+                mWeightArray->push_back(edge.weight);
+
+                mVertexArray->push_back(spherePos);
+                mColorFromArray->push_back(edgeColor);
+                mColorToArray->push_back(edgeColor);
+                mWeightArray->push_back(edge.weight);
+
+                mLineIDArray->push_back(static_cast<float>(lineID));
+                mLineIDArray->push_back(static_cast<float>(lineID));
             }
+
+            prevPos = spherePos;
         }
         lineID++;
     }
-    
+
     // 设置VBO数据
     mEdgeGeometry->setVertexArray(mVertexArray);
     mEdgeGeometry->setVertexAttribArray(3, mLineIDArray, osg::Array::BIND_PER_VERTEX);
@@ -3007,13 +3010,141 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
 
-    
     // 设置绘制模式
-    mEdgeGeometry->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, mVertexArray->size()));
-    //lineGeode = mEdgeGeode;
-    //lineGeometry = mEdgeGeometry;
+    mEdgeGeometry->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, mVertexArray->size()));
+
+    std::cout << "Generated " << mVertexArray->size() << " vertices from " << edges->size()
+              << " aggregated edges" << std::endl;
 }
 
+// 原有的updateEdgeVBO逻辑，用于LOD 3
+void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
+    const std::function<osg::Vec3(const osg::Vec3 &)> &vec3ToSphere,
+    osg::ref_ptr<osg::FloatArray> lineIDArray) {
+    if (!edges || edges->empty())
+        return;
+
+    // 设置基准参数
+    const float BASE_LENGTH = 1000.0f; // 基准长度(km)
+    const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
+    const int MIN_SEGMENTS = 10;       // 最小细分段数
+    const int MAX_SEGMENTS = 20;       // 最大细分段数
+    int lineID = 0;
+    // 遍历所有边，生成顶点数据
+    for (const auto &edge : *edges) {
+        if (!edge.visible)
+            continue; // 只处理可见边
+        if (edge.subDivs.empty())
+            continue; // 跳过没有细分点的边
+
+        osg::Vec4 fromColor(1.0f, 0.0f, 0.0f, 1.0f);
+        osg::Vec4 toColor(0.0f, 0.0f, 1.0f, 1.0f);
+
+        // 计算整条边的总长度
+        float totalLength = 0.0f;
+        std::vector<float> segmentLengths;
+        for (size_t i = 1; i < edge.subDivs.size(); ++i) {
+            float lat1 = osg::DegreesToRadians(edge.subDivs[i - 1].x());
+            float lon1 = osg::DegreesToRadians(edge.subDivs[i - 1].y());
+            float lat2 = osg::DegreesToRadians(edge.subDivs[i].x());
+            float lon2 = osg::DegreesToRadians(edge.subDivs[i].y());
+
+            float dlat = lat2 - lat1;
+            float dlon = lon2 - lon1;
+            float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                      std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+            float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+            float length = 6371.0f * c; // 6371km是地球平均半径
+            totalLength += length;
+            segmentLengths.push_back(length);
+        }
+
+        // 计算总的细分段数
+        int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
+        totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
+
+        // 根据每段长度占总长度的比例分配细分段数
+        std::vector<int> segmentCounts;
+        float accumulatedLength = 0.0f;
+        osg::Vec3 prevPos;
+
+        for (size_t i = 0; i < segmentLengths.size(); ++i) {
+            accumulatedLength += segmentLengths[i];
+            float t = accumulatedLength / totalLength;
+            int currentSegments;
+
+            if (i == segmentLengths.size() - 1) {
+                // 最后一段使用剩余的所有细分段数
+                currentSegments =
+                    totalSegments - std::accumulate(segmentCounts.begin(), segmentCounts.end(), 0);
+            } else {
+                currentSegments =
+                    static_cast<int>(totalSegments * (segmentLengths[i] / totalLength));
+            }
+            currentSegments = std::max(1, currentSegments); // 确保至少有一个细分段
+            segmentCounts.push_back(currentSegments);
+
+            // 在当前段内生成插值点
+            const osg::Vec3 &startPoint = edge.subDivs[i];
+            const osg::Vec3 &endPoint = edge.subDivs[i + 1];
+
+            for (int j = 0; j <= currentSegments; ++j) {
+                float localT = static_cast<float>(j) / currentSegments;
+                float globalT =
+                    (accumulatedLength - segmentLengths[i] + segmentLengths[i] * localT) /
+                    totalLength;
+
+                // 线性插值位置
+                osg::Vec3 interpolatedPos;
+                interpolatedPos.x() = startPoint.x() * (1.0f - localT) + endPoint.x() * localT;
+                interpolatedPos.y() = startPoint.y() * (1.0f - localT) + endPoint.y() * localT;
+
+                // 使用全局t值计算高度，确保整条边的弧线连续
+                float baseHeight =
+                    getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+                float arcHeight = std::sin(osg::PI * globalT) * 100000.f;
+                interpolatedPos.z() = std::max(baseHeight, arcHeight);
+
+                // 转换为球面坐标
+                osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+
+                if (i > 0 || j > 0) {
+                    // 添加前一个点
+                    mVertexArray->push_back(prevPos);
+                    mColorFromArray->push_back(fromColor);
+                    mColorToArray->push_back(toColor);
+                    mWeightArray->push_back(edge.weight);
+
+                    // 添加当前点
+                    mVertexArray->push_back(spherePos);
+                    mColorFromArray->push_back(fromColor);
+                    mColorToArray->push_back(toColor);
+                    mWeightArray->push_back(edge.weight);
+
+                    lineIDArray->push_back(static_cast<float>(lineID));
+                    lineIDArray->push_back(static_cast<float>(lineID));
+                }
+
+                prevPos = spherePos;
+            }
+        }
+        lineID++;
+    }
+
+    // 设置VBO数据
+    mEdgeGeometry->setVertexArray(mVertexArray);
+    mEdgeGeometry->setVertexAttribArray(3, lineIDArray, osg::Array::BIND_PER_VERTEX);
+    mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
+    mEdgeGeometry->setTexCoordArray(1, mColorToArray);
+    mEdgeGeometry->setTexCoordArray(2, mWeightArray);
+
+    // 设置绘制模式
+    mEdgeGeometry->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, mVertexArray->size()));
+    // lineGeode = mEdgeGeode;
+    // lineGeometry = mEdgeGeometry;
+}
 void VIS4Earth::GraphRenderer::PerGraphParam::setRestriction(VIS4Earth::Area res) {
     restriction = res;
 }
@@ -3106,7 +3237,7 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
         if (graphTypeIndex == 1) {
             // 第一次聚类
             clusterLabels = DBSCAN(positions, 4, /*minPts*/ 1, dbscanedges, nodeIds);
-            
+
             // 找出噪声点
             std::vector<size_t> noisePoints;
             for (size_t i = 0; i < clusterLabels.size(); ++i) {
@@ -3114,14 +3245,14 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
                     noisePoints.push_back(i);
                 }
             }
-            
+
             // 对噪声点进行特殊处理
             if (!noisePoints.empty()) {
                 // 方案1：将噪声点分配给最近的非噪声簇
                 for (size_t idx : noisePoints) {
                     double minDist = std::numeric_limits<double>::max();
                     int nearestCluster = -1;
-                    
+
                     // 找到最近的非噪声簇
                     for (size_t j = 0; j < positions.size(); ++j) {
                         if (clusterLabels[j] != -1) {
@@ -3132,7 +3263,7 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
                             }
                         }
                     }
-                    
+
                     // 将噪声点分配给最近的簇
                     if (nearestCluster != -1) {
                         clusterLabels[idx] = nearestCluster;
@@ -3196,11 +3327,11 @@ void GraphRenderer::PerGraphParam::performClustering(const GraphLevel &previousL
             currentLevel.nodes->at(representativeNodeId).isRepresent = true;
 
             //// 设置代表节点的大小，基于簇中节点的数量
-             float representativeSize =
-                 (static_cast<float>(nodesInCluster.size()) * 0.15 +
-                  previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
+            float representativeSize =
+                (static_cast<float>(nodesInCluster.size()) * 0.15 +
+                 previousLevel.nodes->at(representativeNodeId).size); // 根据节点数量设置大小
             currentLevel.nodes->at(representativeNodeId).size =
-                std::min(representativeSize, currentLevel.nodes->at(representativeNodeId).size*2);
+                std::min(representativeSize, currentLevel.nodes->at(representativeNodeId).size * 2);
 
             processedNodes.insert(representativeNodeId);
 
@@ -3336,53 +3467,219 @@ float VIS4Earth::GraphRenderer::PerGraphParam::getBuildingHeightAtLatLon(float l
 
 // 初始化LOD数据 (在GraphRenderer层面管理)
 void VIS4Earth::GraphRenderer::initializeLODData(
-    std::shared_ptr<std::map<std::string, Node>> allNodes, 
+    std::shared_ptr<std::map<std::string, Node>> allNodes,
     std::shared_ptr<std::vector<Edge>> allEdges) {
-    
+
     // 清空现有的LOD数据
     for (int i = 0; i < 4; ++i) {
         lodNodesData[i].reset();
         lodEdgesData[i].reset();
     }
-    
-    // 为每个LOD层级创建数据子集
-    for (int currentMaxLevel = 0; currentMaxLevel < 4; ++currentMaxLevel) {
-        // 创建当前层级的节点映射
-        auto lodNodes = std::make_shared<std::map<std::string, Node>>();
-        
-        // 遍历所有原始节点，筛选符合条件的节点
-        for (const auto& nodePair : *allNodes) {
-            const Node& node = nodePair.second;
-            if (node.level <= currentMaxLevel) {
-                lodNodes->emplace(nodePair.first, node);
-            }
-        }
-        
-        // 创建当前层级的边向量
-        auto lodEdges = std::make_shared<std::vector<Edge>>();
-        
-        // 遍历所有原始边，筛选符合条件的边
-        for (const auto& edge : *allEdges) {
-            // 检查边的两个端点是否都在当前层级的节点中
-            auto fromNodeIt = allNodes->find(edge.from);
-            auto toNodeIt = allNodes->find(edge.to);
-            
-            if (fromNodeIt != allNodes->end() && 
-                toNodeIt != allNodes->end() &&
-                fromNodeIt->second.level <= currentMaxLevel &&
-                toNodeIt->second.level <= currentMaxLevel) {
-                lodEdges->push_back(edge);
-            }
-        }
-        
-        // 存储到LOD数据容器中
-        lodNodesData[currentMaxLevel] = lodNodes;
-        lodEdgesData[currentMaxLevel] = lodEdges;
-        
-        std::cout << "LOD Level " << currentMaxLevel << ": " 
-                  << lodNodes->size() << " nodes, " 
-                  << lodEdges->size() << " edges" << std::endl;
+
+    // LOD 3: 原始完整数据
+    lodNodesData[3] = allNodes;
+    lodEdgesData[3] = allEdges;
+
+    // 为LOD 0, 1, 2生成层次化的地理聚合数据
+    for (int currentLOD = 0; currentLOD < 3; ++currentLOD) {
+        generateGeographicLODData(currentLOD, allNodes, allEdges);
     }
+
+    // 输出统计信息
+    for (int i = 0; i < 4; ++i) {
+        std::cout << "LOD Level " << i << ": " << lodNodesData[i]->size() << " nodes, "
+                  << lodEdgesData[i]->size() << " edges" << std::endl;
+    }
+}
+
+// 生成基于地理分区的LOD数据
+void VIS4Earth::GraphRenderer::generateGeographicLODData(
+    int lodLevel, std::shared_ptr<std::map<std::string, Node>> allNodes,
+    std::shared_ptr<std::vector<Edge>> allEdges) {
+
+    auto lodNodes = std::make_shared<std::map<std::string, Node>>();
+    auto lodEdges = std::make_shared<std::vector<Edge>>();
+
+    std::cout << "Generating geographic LOD data for level " << lodLevel << std::endl;
+
+    // 根据LOD级别选择对应的地理分区
+    const std::vector<GeographicRegion> *currentRegions = nullptr;
+    switch (lodLevel) {
+    case 0:
+        currentRegions = &LOD0_REGIONS;
+        break;
+    case 1:
+        currentRegions = &LOD1_REGIONS;
+        break;
+    case 2:
+        currentRegions = &LOD2_REGIONS;
+        break;
+    default:
+        std::cout << "Invalid LOD level: " << lodLevel << std::endl;
+        return;
+    }
+
+    std::cout << "Using " << currentRegions->size() << " regions for LOD " << lodLevel << std::endl;
+
+    // 为每个区域分配节点
+    std::map<int, std::vector<std::string>> regionNodes;
+    for (const auto &nodePair : *allNodes) {
+        const Node &node = nodePair.second;
+        float nodeLat = node.pos.x();
+        float nodeLon = node.pos.y();
+
+        // 找到节点所属的地理区域
+        for (const auto &region : *currentRegions) {
+            if (nodeLat >= region.minLat && nodeLat <= region.maxLat && nodeLon >= region.minLon &&
+                nodeLon <= region.maxLon) {
+                regionNodes[region.regionId].push_back(nodePair.first);
+                break; // 节点只属于第一个匹配的区域
+            }
+        }
+    }
+
+    std::cout << "Allocated nodes to " << regionNodes.size() << " regions" << std::endl;
+
+    // 为每个有节点的区域创建代表节点
+    std::map<int, std::string> regionRepresentatives;
+    for (const auto &regionPair : regionNodes) {
+        int regionId = regionPair.first;
+        const std::vector<std::string> &nodeIds = regionPair.second;
+
+        if (nodeIds.empty())
+            continue;
+
+        // 找到区域信息
+        const GeographicRegion *regionInfo = nullptr;
+        for (const auto &region : *currentRegions) {
+            if (region.regionId == regionId) {
+                regionInfo = &region;
+                break;
+            }
+        }
+
+        if (!regionInfo)
+            continue;
+
+        // 创建区域代表节点
+        std::string repNodeId = "rep_" + std::to_string(regionId) + "_" + regionInfo->regionName;
+        Node repNode;
+
+        if (lodLevel == 0) {
+            // LOD 0: 使用区域中心点
+            repNode.pos = regionInfo->centerPoint;
+        } else {
+            // LOD 1/2: 选择区域内最重要的节点位置
+            std::string bestNodeId =
+                *std::max_element(nodeIds.begin(), nodeIds.end(),
+                                  [allNodes](const std::string &a, const std::string &b) {
+                                      const Node &nodeA = allNodes->at(a);
+                                      const Node &nodeB = allNodes->at(b);
+                                      if (nodeA.level != nodeB.level) {
+                                          return nodeA.level > nodeB.level; // level越低优先级越高
+                                      }
+                                      return nodeA.degree < nodeB.degree; // 度数越高优先级越高
+                                  });
+            repNode.pos = allNodes->at(bestNodeId).pos;
+        }
+
+        repNode.id = repNodeId;
+        repNode.color = osg::Vec3(1.0f, 0.8f, 0.0f); // 金色
+        repNode.visible = true;
+        repNode.isRepresent = true;
+        repNode.level = 0;   // 代表节点level为0
+        repNode.size = 2.0f; // 代表节点较大
+        repNode.degree = static_cast<int>(nodeIds.size());
+        repNode.cluster = regionId;
+        repNode.label = regionInfo->regionName;
+
+        (*lodNodes)[repNodeId] = repNode;
+        regionRepresentatives[regionId] = repNodeId;
+
+        std::cout << "Created representative node for region " << regionInfo->regionName << " with "
+                  << nodeIds.size() << " nodes" << std::endl;
+    }
+
+    // 计算区域间连接并生成聚合边
+    std::map<std::pair<int, int>, int> regionConnections;
+    std::map<std::pair<int, int>, float> regionWeights;
+
+    for (const auto &edge : *allEdges) {
+        if (!edge.visible)
+            continue;
+
+        auto fromNodeIt = allNodes->find(edge.from);
+        auto toNodeIt = allNodes->find(edge.to);
+        if (fromNodeIt == allNodes->end() || toNodeIt == allNodes->end())
+            continue;
+
+        // 找到起点和终点节点所属的区域
+        int fromRegion = -1, toRegion = -1;
+
+        float fromLat = fromNodeIt->second.pos.x();
+        float fromLon = fromNodeIt->second.pos.y();
+        float toLat = toNodeIt->second.pos.x();
+        float toLon = toNodeIt->second.pos.y();
+
+        for (const auto &region : *currentRegions) {
+            if (fromRegion == -1 && fromLat >= region.minLat && fromLat <= region.maxLat &&
+                fromLon >= region.minLon && fromLon <= region.maxLon) {
+                fromRegion = region.regionId;
+            }
+            if (toRegion == -1 && toLat >= region.minLat && toLat <= region.maxLat &&
+                toLon >= region.minLon && toLon <= region.maxLon) {
+                toRegion = region.regionId;
+            }
+            if (fromRegion != -1 && toRegion != -1)
+                break;
+        }
+
+        if (fromRegion == -1 || toRegion == -1 || fromRegion == toRegion)
+            continue;
+
+        // 累计区域间连接
+        std::pair<int, int> regionPair =
+            std::make_pair(std::min(fromRegion, toRegion), std::max(fromRegion, toRegion));
+
+        regionConnections[regionPair]++;
+        regionWeights[regionPair] += edge.weight;
+    }
+
+    std::cout << "Found " << regionConnections.size() << " inter-region connections" << std::endl;
+
+    // 生成聚合边
+    for (const auto &connPair : regionConnections) {
+        int region1 = connPair.first.first;
+        int region2 = connPair.first.second;
+        int connectionCount = connPair.second;
+        float totalWeight = regionWeights[connPair.first];
+
+        if (regionRepresentatives.find(region1) == regionRepresentatives.end() ||
+            regionRepresentatives.find(region2) == regionRepresentatives.end()) {
+            continue;
+        }
+
+        Edge aggregatedEdge;
+        aggregatedEdge.id = "agg_" + std::to_string(region1) + "_" + std::to_string(region2);
+        aggregatedEdge.from = regionRepresentatives[region1];
+        aggregatedEdge.to = regionRepresentatives[region2];
+        aggregatedEdge.weight = totalWeight;
+        aggregatedEdge.visible = true;
+        aggregatedEdge.maxHeight = 50000.0f + connectionCount * 10000.0f; // 根据连接数调整高度
+
+        lodEdges->push_back(aggregatedEdge);
+
+        std::cout << "Created aggregated edge between regions " << region1 << " and " << region2
+                  << " with " << connectionCount << " connections, weight=" << totalWeight
+                  << std::endl;
+    }
+
+    std::cout << "Generated " << lodNodes->size() << " representative nodes and "
+              << lodEdges->size() << " aggregated edges for LOD " << lodLevel << std::endl;
+
+    // 设置LOD数据
+    lodNodesData[lodLevel] = lodNodes;
+    lodEdgesData[lodLevel] = lodEdges;
 }
 
 // 设置活动LOD数据源 (从GraphRenderer获取数据)
@@ -3394,35 +3691,36 @@ void VIS4Earth::GraphRenderer::PerGraphParam::setActiveLODDataSource(int targetM
 // 更新活动LOD
 void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
     int targetMaxNodeLevel = getCurrentLevel(cameraHeight);
-    
+
     // 性能优化：只有当LOD级别发生变化时才重新绘制
     if (targetMaxNodeLevel == currentActiveLODLevel) {
         // LOD级别没有变化，只更新标签（因为相机位置可能变化）
         cameraUpdate("LoadedGraph", cameraHeight);
         return;
     }
-    
-    PerGraphParam* graphParam = getGraph("LoadedGraph");
+
+    PerGraphParam *graphParam = getGraph("LoadedGraph");
     if (graphParam && targetMaxNodeLevel >= 0 && targetMaxNodeLevel < 4) {
         // 直接设置PerGraphParam的nodes和edges指针到对应的LOD数据
         if (lodNodesData[targetMaxNodeLevel] && lodEdgesData[targetMaxNodeLevel]) {
             graphParam->nodes = lodNodesData[targetMaxNodeLevel];
             graphParam->edges = lodEdgesData[targetMaxNodeLevel];
-            
-            std::cout << "Switched to LOD level " << targetMaxNodeLevel 
-                      << " with " << graphParam->nodes->size() << " nodes and " 
-                      << graphParam->edges->size() << " edges" << std::endl;
-            
+
+            // 设置PerGraphParam的当前LOD层级
+            graphParam->currentLODLevel = targetMaxNodeLevel;
+
+            std::cout << "Switched to LOD level " << targetMaxNodeLevel << " with "
+                      << graphParam->nodes->size() << " nodes and " << graphParam->edges->size()
+                      << " edges" << std::endl;
+
             // 更新当前活动的LOD级别
             currentActiveLODLevel = targetMaxNodeLevel;
-            
+
             // 重新绘制几何体
             graphParam->update();
             // 更新标签（无论LOD是否变化都需要调用，因为相机位置可能变化）
             sceneLabels.clear();
             cameraUpdate("LoadedGraph", cameraHeight);
         }
-        
-        
     }
 }

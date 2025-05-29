@@ -42,6 +42,7 @@
 #include "graph_draw.h"
 #include <vis4earth/geographics_cmpt.h>
 #include <vis4earth/graph_viser/edge_bundling.h>
+#include <vis4earth/graph_viser/geographic_regions.h>
 #include <vis4earth/graph_viser/graph_io.h>
 #include <vis4earth/graph_viser/node_layout.h>
 #include <vis4earth/osg_util.h>
@@ -211,11 +212,31 @@ class GraphRenderer : public QtOSGReflectableWidget {
     PerRendererParam param; // 移到public部分
 
     // LOD相关数据存储 (类似levelIndex的管理方式)
-    std::array<std::shared_ptr<std::map<std::string, Node>>, 4> lodNodesData; // 4个LOD层级的节点数据
+    std::array<std::shared_ptr<std::map<std::string, Node>>, 4>
+        lodNodesData;                                               // 4个LOD层级的节点数据
     std::array<std::shared_ptr<std::vector<Edge>>, 4> lodEdgesData; // 4个LOD层级的边数据
     int currentActiveLODLevel = -1; // 当前活动的LOD级别，-1表示未初始化
-    
-    //std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
+
+    // 新增：区域和聚合边相关数据结构
+    struct Region {
+        std::vector<std::string> nodeIds; // 区域内的节点ID列表
+        osg::Vec3 centroid;               // 区域质心坐标
+        std::string representativeNodeId; // 区域代表节点ID
+        bool isValid = false;             // 区域是否有效
+    };
+
+    struct AggregatedEdgeInfo {
+        osg::Vec3 startPos;       // 聚合边起点位置
+        osg::Vec3 endPos;         // 聚合边终点位置
+        float totalWeight = 0.0f; // 聚合后的总权重
+        int edgeCount = 0;        // 参与聚合的边数量
+        osg::Vec4 color;          // 聚合边颜色
+    };
+
+    // 按LOD层级存储的区域信息
+    std::array<std::map<int, Region>, 4> lodRegions; // [LOD][RegionID] -> Region
+
+    // std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
   private:
     struct GraphLevel {
         std::shared_ptr<std::map<std::string, Node>> nodes; // 当前层次的节点
@@ -240,16 +261,16 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping;
         std::vector<std::vector<float>> heightMap;
         std::vector<GraphLevel> levels; // 存放多层次的图
-        
+
         osg::ref_ptr<osg::Group> grp;
         osg::ref_ptr<osg::Group> edgeNodegrp;
 
         // 用于边绘制的顶点数据结构
         struct LineVertex {
-            osg::Vec3 position;    // 顶点位置
-            osg::Vec4 colorFrom;   // 起点颜色
-            osg::Vec4 colorTo;     // 终点颜色
-            float weight;          // 边权重
+            osg::Vec3 position;  // 顶点位置
+            osg::Vec4 colorFrom; // 起点颜色
+            osg::Vec4 colorTo;   // 终点颜色
+            float weight;        // 边权重
         };
 
         // VBO相关成员
@@ -262,12 +283,23 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         // Shader相关成员
         osg::ref_ptr<osg::Program> mEdgeProgram;
-        bool mUseNewRenderer = true;  // 控制是否使用新的渲染方式
-        
+        bool mUseNewRenderer = true; // 控制是否使用新的渲染方式
+
+        // LOD数据成员变量（从GraphRenderer同步）
+        std::array<std::shared_ptr<std::map<std::string, Node>>, 4>
+            lodNodesData; // 4个LOD层级的节点数据
+        std::array<std::shared_ptr<std::vector<Edge>>, 4> lodEdgesData; // 4个LOD层级的边数据
+
+        // 当前LOD层级
+        int currentLODLevel = 3; // 默认为最高细节层级
+
         // 初始化Shader程序
         void initEdgeShaders();
         // 更新边的VBO数据
         void updateEdgeVBO();
+        // 原有的VBO更新逻辑（LOD 3使用）
+        void updateEdgeVBO_Original(const std::function<osg::Vec3(const osg::Vec3 &)> &vec3ToSphere,
+                                    osg::ref_ptr<osg::FloatArray> mLineIDArray);
 
       public:
         int graphTypeIndex;
@@ -335,13 +367,19 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         void setUseNewRenderer(bool use) { mUseNewRenderer = use; }
         bool getUseNewRenderer() const { return mUseNewRenderer; }
-        
+
         // LOD相关方法 - 只保留setActiveLODDataSource，用于接收外部设置的数据
         void setActiveLODDataSource(int targetMaxLevel);
 
-      private:
+        // 地理LOD处理函数
+        void generateGeographicLODData(int lodLevel,
+                                       std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                       std::shared_ptr<std::vector<Edge>> allEdges);
+
+        // 实用函数
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
 
+      private:
         friend class GraphRenderer;
     };
     std::map<std::string, PerGraphParam> graphs;
@@ -451,8 +489,13 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     // LOD相关方法
     void updateActiveLOD(double cameraHeight);
-    void initializeLODData(std::shared_ptr<std::map<std::string, Node>> allNodes, 
-                          std::shared_ptr<std::vector<Edge>> allEdges);
+    void initializeLODData(std::shared_ptr<std::map<std::string, Node>> allNodes,
+                           std::shared_ptr<std::vector<Edge>> allEdges);
+
+    // 生成基于地理分区的LOD数据
+    void generateGeographicLODData(int lodLevel,
+                                   std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                   std::shared_ptr<std::vector<Edge>> allEdges);
 
   protected:
     Ui::GraphRenderer *ui;
@@ -523,9 +566,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     void onResolutionSliderValueChanged(int value);
 
-    void updateGraphParameters(PerGraphParam* graphParam);
-    void copyGraphData(std::shared_ptr<std::map<std::string, Node>>& nodes,
-                      std::shared_ptr<std::vector<Edge>>& edges);
+    void updateGraphParameters(PerGraphParam *graphParam);
+    void copyGraphData(std::shared_ptr<std::map<std::string, Node>> &nodes,
+                       std::shared_ptr<std::vector<Edge>> &edges);
 };
 
 } // namespace VIS4Earth
