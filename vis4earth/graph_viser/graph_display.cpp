@@ -578,23 +578,46 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
     */
     cameraHeightPresent = cameraHeight;
     int currentLevel = getCurrentLevel(cameraHeight);
-    // 筛选所有level<=currentLevel的nodes,加入currentLevelLabels
+
+    // 使用渐进式LOD数据而不是原始层级数据
     currentLevelLabels.clear();
-    for (int i = 0; i <= currentLevel; ++i) {
-        // 遍历 levelIndex 中的每个 vector
-        for (const auto &str : levelIndex[i]) {
-            currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
+    currentNodes.clear();
+
+    // 获取当前LOD级别对应的节点数据
+    if (currentLevel >= 0 && currentLevel < 4 && lodNodesData[currentLevel]) {
+        // 遍历当前LOD级别的所有节点
+        for (const auto &nodePair : *lodNodesData[currentLevel]) {
+            const Node &node = nodePair.second;
+
+            // 添加节点ID到标签集合
+            currentLevelLabels.insert(node.id);
+
+            // 添加节点到当前节点列表（直接存储Node对象）
+            currentNodes.push_back(node);
+        }
+
+        std::cout << "CameraUpdate: Using LOD " << currentLevel << " with " << currentNodes.size()
+                  << " nodes" << std::endl;
+    } else {
+        // 如果LOD数据不可用，回退到原始逻辑
+        std::cout << "CameraUpdate: LOD data not available, using original logic" << std::endl;
+
+        for (int i = 0; i <= currentLevel; ++i) {
+            // 遍历 levelIndex 中的每个 vector
+            for (const auto &str : levelIndex[i]) {
+                currentLevelLabels.insert(str); // 将每个字符串插入到 unordered_set 中
+            }
+        }
+
+        for (int i = 0; i <= currentLevel; i++) {
+            // 获取level<=currentLevel的nodes
+            for (int j = 0; j < levelNodeIndex[i].size(); j++) {
+                auto node = levelNodeIndex[i][j];
+                currentNodes.push_back(node);
+            }
         }
     }
 
-    currentNodes.clear();
-    for (int i = 0; i <= currentLevel; i++) {
-        // 获取level<=currentLevel的nodes
-        for (int j = 0; j < levelNodeIndex[i].size(); j++) {
-            auto node = levelNodeIndex[i][j];
-            currentNodes.push_back(node);
-        }
-    }
     // frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
     updateLabelLists(graphName);
     syncSceneGraph(graphName);
@@ -4111,7 +4134,7 @@ void VIS4Earth::GraphRenderer::generateLOD2Edges(
     std::shared_ptr<std::map<std::string, Node>> lodNodes,
     std::shared_ptr<std::vector<Edge>> allEdges,
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
-    
+
     // 第一步：继承LOD1的所有边
     if (lodEdgesData[1]) {
         for (const auto &lod1Edge : *lodEdgesData[1]) {
@@ -4120,7 +4143,7 @@ void VIS4Earth::GraphRenderer::generateLOD2Edges(
         }
         std::cout << "Inherited " << lodEdgesData[1]->size() << " edges from LOD1" << std::endl;
     }
-    
+
     // 第二步：获取LOD2新增节点ID集合（不包括继承的LOD1节点）
     std::set<std::string> lod2NewNodeIds;
     for (const auto &nodePair : *lodNodes) {
@@ -4129,38 +4152,41 @@ void VIS4Earth::GraphRenderer::generateLOD2Edges(
             lod2NewNodeIds.insert(originalId);
         }
     }
-    
+
     std::cout << "LOD2 has " << lod2NewNodeIds.size() << " new nodes beyond LOD1" << std::endl;
-    
+
     // 第三步：添加涉及LOD2新增节点的边
     for (const auto &edge : *allEdges) {
-        if (!edge.visible) continue;
-        
+        if (!edge.visible)
+            continue;
+
         bool fromIsNew = lod2NewNodeIds.find(edge.from) != lod2NewNodeIds.end();
         bool toIsNew = lod2NewNodeIds.find(edge.to) != lod2NewNodeIds.end();
-        
+
         // 只添加至少一端是LOD2新增节点的边，并且两端都在当前LOD2节点集合中
         if ((fromIsNew || toIsNew)) {
             // 检查两端节点是否都在LOD2节点集合中
             bool fromExists = lodNodes->find("lod2_" + edge.from) != lodNodes->end() ||
-                             lodNodes->find("lod1_" + edge.from) != lodNodes->end() ||
-                             lodNodes->find("lod0_" + edge.from.substr(edge.from.find("_") + 1)) != lodNodes->end();
-            bool toExists = lodNodes->find("lod2_" + edge.to) != lodNodes->end() ||
-                           lodNodes->find("lod1_" + edge.to) != lodNodes->end() ||
-                           lodNodes->find("lod0_" + edge.to.substr(edge.to.find("_") + 1)) != lodNodes->end();
-            
+                              lodNodes->find("lod1_" + edge.from) != lodNodes->end() ||
+                              lodNodes->find("lod0_" + edge.from.substr(edge.from.find("_") + 1)) !=
+                                  lodNodes->end();
+            bool toExists =
+                lodNodes->find("lod2_" + edge.to) != lodNodes->end() ||
+                lodNodes->find("lod1_" + edge.to) != lodNodes->end() ||
+                lodNodes->find("lod0_" + edge.to.substr(edge.to.find("_") + 1)) != lodNodes->end();
+
             if (fromExists && toExists) {
                 Edge lod2Edge = edge;
                 lod2Edge.id = "lod2_" + edge.id;
                 lod2Edge.from = "lod2_" + edge.from;
                 lod2Edge.to = "lod2_" + edge.to;
                 lod2Edge.maxHeight = 30000.0f; // 较低高度
-                
+
                 lodEdges->push_back(lod2Edge);
             }
         }
     }
-    
+
     std::cout << "Added " << (lodEdges->size() - (lodEdgesData[1] ? lodEdgesData[1]->size() : 0))
               << " new edges for LOD2" << std::endl;
 }
@@ -4232,7 +4258,7 @@ void VIS4Earth::GraphRenderer::generateGeographicLODData(
         addLOD1Nodes(lodNodes, regionNodes, allNodes);
     } else if (lodLevel == 2) {
         // LOD2: 继承LOD1的所有节点 + 添加更多详细节点
-        
+
         // 首先继承LOD1的所有节点（保持原始ID不变）
         if (lodNodesData[1]) {
             for (const auto &lod1NodePair : *lodNodesData[1]) {
@@ -4242,7 +4268,7 @@ void VIS4Earth::GraphRenderer::generateGeographicLODData(
             }
             std::cout << "Inherited " << lodNodesData[1]->size() << " nodes from LOD1" << std::endl;
         }
-        
+
         // 然后添加LOD2的详细节点
         addLOD2Nodes(lodNodes, regionNodes, allNodes);
     }
