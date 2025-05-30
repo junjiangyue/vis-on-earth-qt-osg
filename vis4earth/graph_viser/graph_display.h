@@ -496,6 +496,54 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void generateGeographicLODData(int lodLevel,
                                    std::shared_ptr<std::map<std::string, Node>> allNodes,
                                    std::shared_ptr<std::vector<Edge>> allEdges);
+    // 生成基于地理分区的LOD数据
+    void generateGeographicLODDataOld(int lodLevel,
+                                      std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                      std::shared_ptr<std::vector<Edge>> allEdges);
+
+    // 渐进式LOD辅助函数
+    std::string simplifyRegionName(const std::string &originalName);
+    osg::Vec3 calculateRegionCentroid(const std::vector<std::string> &nodeIds,
+                                      std::shared_ptr<std::map<std::string, Node>> allNodes);
+    float evaluateNodeImportance(const Node &node);
+    std::vector<std::string>
+    selectRepresentativeNodes(const std::vector<std::string> &nodeIds,
+                              std::shared_ptr<std::map<std::string, Node>> allNodes, int maxNodes,
+                              int minLevel, int maxLevel);
+
+    // 渐进式LOD节点生成函数
+    void generateBaseLODNodes(std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                              const std::vector<GeographicRegion> &regions,
+                              const std::map<int, std::vector<std::string>> &regionNodes,
+                              std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void addLOD1Nodes(std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                      const std::map<int, std::vector<std::string>> &regionNodes,
+                      std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void addLOD2Nodes(std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                      const std::map<int, std::vector<std::string>> &regionNodes,
+                      std::shared_ptr<std::map<std::string, Node>> allNodes);
+
+    // 渐进式LOD边生成函数
+    void generateProgressiveEdges(int lodLevel, std::shared_ptr<std::vector<Edge>> lodEdges,
+                                  std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                                  const std::map<int, std::vector<std::string>> &regionNodes,
+                                  std::map<int, std::string> &regionRepresentatives,
+                                  std::shared_ptr<std::vector<Edge>> allEdges,
+                                  std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void generateLOD0Edges(std::shared_ptr<std::vector<Edge>> lodEdges,
+                           std::map<int, std::string> &regionRepresentatives,
+                           std::shared_ptr<std::vector<Edge>> allEdges,
+                           std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void generateLOD1Edges(std::shared_ptr<std::vector<Edge>> lodEdges,
+                           std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                           const std::map<int, std::vector<std::string>> &regionNodes,
+                           std::map<int, std::string> &regionRepresentatives,
+                           std::shared_ptr<std::vector<Edge>> allEdges,
+                           std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void generateLOD2Edges(std::shared_ptr<std::vector<Edge>> lodEdges,
+                           std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                           std::shared_ptr<std::vector<Edge>> allEdges,
+                           std::shared_ptr<std::map<std::string, Node>> allNodes);
 
   protected:
     Ui::GraphRenderer *ui;

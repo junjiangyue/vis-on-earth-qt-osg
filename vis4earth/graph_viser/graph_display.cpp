@@ -5,7 +5,9 @@
 
 #include "LOUVAIN.h"
 #include "graph_draw.h"
+#include <algorithm>
 #include <osgText/Font>
+#include <set>
 
 using namespace VIS4Earth;
 static std::array<float, 2> lonRng = {-90.f, 90.f};
@@ -3493,7 +3495,7 @@ void VIS4Earth::GraphRenderer::initializeLODData(
 }
 
 // 生成基于地理分区的LOD数据
-void VIS4Earth::GraphRenderer::generateGeographicLODData(
+void VIS4Earth::GraphRenderer::generateGeographicLODDataOld(
     int lodLevel, std::shared_ptr<std::map<std::string, Node>> allNodes,
     std::shared_ptr<std::vector<Edge>> allEdges) {
 
@@ -3723,4 +3725,536 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
             cameraUpdate("LoadedGraph", cameraHeight);
         }
     }
+}
+
+// 简化区域名称
+std::string VIS4Earth::GraphRenderer::simplifyRegionName(const std::string &originalName) {
+    // 将长区域名简化为更短的版本
+    if (originalName.find("North_America") != std::string::npos ||
+        originalName.find("USA") != std::string::npos ||
+        originalName.find("Canada") != std::string::npos) {
+        return "N_America";
+    }
+    if (originalName.find("South_America") != std::string::npos ||
+        originalName.find("Brazil") != std::string::npos ||
+        originalName.find("Argentina") != std::string::npos) {
+        return "S_America";
+    }
+    if (originalName.find("Europe") != std::string::npos ||
+        originalName.find("Germany") != std::string::npos ||
+        originalName.find("France") != std::string::npos ||
+        originalName.find("UK") != std::string::npos) {
+        return "Europe";
+    }
+    if (originalName.find("Asia") != std::string::npos ||
+        originalName.find("China") != std::string::npos ||
+        originalName.find("Japan") != std::string::npos) {
+        return "Asia_East";
+    }
+    if (originalName.find("Africa") != std::string::npos) {
+        return "Africa";
+    }
+    if (originalName.find("Oceania") != std::string::npos ||
+        originalName.find("Australia") != std::string::npos) {
+        return "Oceania";
+    }
+
+    // 默认情况下，简化为前8个字符
+    size_t presetL = 8;
+    std::string simplified = originalName.substr(0, std::min(presetL, originalName.length()));
+    // 移除下划线
+    std::replace(simplified.begin(), simplified.end(), '_', ' ');
+    return simplified;
+}
+
+// 计算区域质心
+osg::Vec3 VIS4Earth::GraphRenderer::calculateRegionCentroid(
+    const std::vector<std::string> &nodeIds,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    if (nodeIds.empty()) {
+        return osg::Vec3(0, 0, 0);
+    }
+
+    double totalLat = 0.0, totalLon = 0.0, totalWeight = 0.0;
+
+    for (const std::string &nodeId : nodeIds) {
+        auto nodeIt = allNodes->find(nodeId);
+        if (nodeIt != allNodes->end()) {
+            const Node &node = nodeIt->second;
+            // 使用degree作为权重，degree越高权重越大
+            double weight = std::max(1.0, static_cast<double>(node.degree));
+
+            totalLat += node.pos.x() * weight;
+            totalLon += node.pos.y() * weight;
+            totalWeight += weight;
+        }
+    }
+
+    if (totalWeight > 0) {
+        return osg::Vec3(totalLat / totalWeight, totalLon / totalWeight, 0);
+    }
+
+    return osg::Vec3(0, 0, 0);
+}
+
+// 评估节点重要性
+float VIS4Earth::GraphRenderer::evaluateNodeImportance(const Node &node) {
+    // 基于level和degree计算重要性分数
+    // level越低分数越高，degree越高分数越高
+    float levelScore =
+        (4.0f - node.level) * 10.0f; // level 0=40分, level 1=30分, level 2=20分, level 3=10分
+    float degreeScore = std::min(node.degree, 50) * 1.0f; // degree最多贡献50分
+
+    return levelScore + degreeScore;
+}
+
+// 从实际数据选择代表节点
+std::vector<std::string> VIS4Earth::GraphRenderer::selectRepresentativeNodes(
+    const std::vector<std::string> &nodeIds, std::shared_ptr<std::map<std::string, Node>> allNodes,
+    int maxNodes, int minLevel, int maxLevel) {
+
+    std::vector<std::pair<std::string, float>> nodeScores;
+
+    // 计算每个节点的重要性分数
+    for (const std::string &nodeId : nodeIds) {
+        auto nodeIt = allNodes->find(nodeId);
+        if (nodeIt != allNodes->end()) {
+            const Node &node = nodeIt->second;
+
+            // 只考虑指定level范围内的节点
+            if (node.level >= minLevel && node.level <= maxLevel) {
+                float importance = evaluateNodeImportance(node);
+                nodeScores.push_back({nodeId, importance});
+            }
+        }
+    }
+
+    // 按重要性排序
+    std::sort(nodeScores.begin(), nodeScores.end(),
+              [](const std::pair<std::string, float> &a, const std::pair<std::string, float> &b) {
+                  return a.second > b.second; // 重要性高的在前
+              });
+
+    // 选择前maxNodes个
+    std::vector<std::string> selected;
+    for (int i = 0; i < std::min(maxNodes, static_cast<int>(nodeScores.size())); i++) {
+        selected.push_back(nodeScores[i].first);
+    }
+
+    return selected;
+}
+
+// 生成LOD0基础代表点
+void VIS4Earth::GraphRenderer::generateBaseLODNodes(
+    std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    const std::vector<GeographicRegion> &regions,
+    const std::map<int, std::vector<std::string>> &regionNodes,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    std::cout << "Generating LOD0 base representative nodes..." << std::endl;
+
+    for (const auto &regionPair : regionNodes) {
+        int regionId = regionPair.first;
+        const std::vector<std::string> &nodeIds = regionPair.second;
+
+        if (nodeIds.empty())
+            continue;
+
+        // 找到区域信息
+        const GeographicRegion *regionInfo = nullptr;
+        for (const auto &region : regions) {
+            if (region.regionId == regionId) {
+                regionInfo = &region;
+                break;
+            }
+        }
+
+        if (!regionInfo)
+            continue;
+
+        // 创建区域质心代表节点
+        std::string repNodeId = "lod0_" + simplifyRegionName(regionInfo->regionName);
+        Node repNode;
+
+        // 使用计算出的质心位置
+        repNode.pos = calculateRegionCentroid(nodeIds, allNodes);
+        repNode.id = repNodeId;
+        repNode.color = osg::Vec3(1.0f, 0.6f, 0.0f); // 橙色
+        repNode.visible = true;
+        repNode.isRepresent = true;
+        repNode.level = 0;   // LOD0代表节点
+        repNode.size = 3.0f; // 较大尺寸
+        repNode.degree = static_cast<int>(nodeIds.size());
+        repNode.cluster = regionId;
+        repNode.label = simplifyRegionName(regionInfo->regionName);
+
+        (*lodNodes)[repNodeId] = repNode;
+
+        std::cout << "Created LOD0 representative: " << repNode.label << " at (" << repNode.pos.x()
+                  << ", " << repNode.pos.y() << ") for " << nodeIds.size() << " nodes" << std::endl;
+    }
+}
+
+// 为LOD1添加实际重要节点
+void VIS4Earth::GraphRenderer::addLOD1Nodes(
+    std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    const std::map<int, std::vector<std::string>> &regionNodes,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    std::cout << "Adding LOD1 actual important nodes..." << std::endl;
+
+    for (const auto &regionPair : regionNodes) {
+        int regionId = regionPair.first;
+        const std::vector<std::string> &nodeIds = regionPair.second;
+
+        // 选择每个区域内最重要的2-3个实际节点
+        // 标准：degree > 高阈值 && level <= 1
+        std::vector<std::string> representatives =
+            selectRepresentativeNodes(nodeIds, allNodes, 3, 0, 1 // 最多3个，level 0-1
+            );
+
+        // 添加这些实际节点到LOD1
+        for (const std::string &nodeId : representatives) {
+            auto nodeIt = allNodes->find(nodeId);
+            if (nodeIt != allNodes->end()) {
+                Node actualNode = nodeIt->second;               // 复制实际节点
+                actualNode.id = "lod1_" + nodeId;               // 添加LOD1前缀
+                actualNode.color = osg::Vec3(0.0f, 0.8f, 1.0f); // 蓝色
+                actualNode.size = 2.0f;                         // 中等尺寸
+
+                (*lodNodes)[actualNode.id] = actualNode;
+
+                std::cout << "Added LOD1 node: " << actualNode.label
+                          << " (degree=" << actualNode.degree << ", level=" << actualNode.level
+                          << ")" << std::endl;
+            }
+        }
+    }
+}
+
+// 为LOD2添加详细实际节点
+void VIS4Earth::GraphRenderer::addLOD2Nodes(
+    std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    const std::map<int, std::vector<std::string>> &regionNodes,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    std::cout << "Adding LOD2 detailed actual nodes..." << std::endl;
+
+    for (const auto &regionPair : regionNodes) {
+        int regionId = regionPair.first;
+        const std::vector<std::string> &nodeIds = regionPair.second;
+
+        // 选择所有level<=2且degree>中等阈值的节点
+        std::vector<std::string> detailedNodes =
+            selectRepresentativeNodes(nodeIds, allNodes, 10, 0, 2 // 最多10个，level 0-2
+            );
+
+        // 添加这些实际节点到LOD2
+        for (const std::string &nodeId : detailedNodes) {
+            auto nodeIt = allNodes->find(nodeId);
+            if (nodeIt != allNodes->end()) {
+                Node actualNode = nodeIt->second;               // 复制实际节点
+                actualNode.id = "lod2_" + nodeId;               // 添加LOD2前缀
+                actualNode.color = osg::Vec3(0.0f, 1.0f, 0.6f); // 绿色
+                actualNode.size = 1.5f;                         // 标准尺寸
+
+                (*lodNodes)[actualNode.id] = actualNode;
+            }
+        }
+
+        std::cout << "Added " << detailedNodes.size() << " LOD2 nodes for region " << regionId
+                  << std::endl;
+    }
+}
+
+// 生成渐进式边连接
+void VIS4Earth::GraphRenderer::generateProgressiveEdges(
+    int lodLevel, std::shared_ptr<std::vector<Edge>> lodEdges,
+    std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    const std::map<int, std::vector<std::string>> &regionNodes,
+    std::map<int, std::string> &regionRepresentatives, std::shared_ptr<std::vector<Edge>> allEdges,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    if (lodLevel == 0) {
+        // LOD0：生成区域间聚合边
+        generateLOD0Edges(lodEdges, regionRepresentatives, allEdges, allNodes);
+    } else if (lodLevel == 1) {
+        // LOD1：继承LOD0边 + 新增实际节点连接
+        generateLOD1Edges(lodEdges, lodNodes, regionNodes, regionRepresentatives, allEdges,
+                          allNodes);
+    } else if (lodLevel == 2) {
+        // LOD2：继承LOD1边 + 新增详细连接
+        generateLOD2Edges(lodEdges, lodNodes, allEdges, allNodes);
+    }
+}
+
+// 生成LOD0区域间聚合边
+void VIS4Earth::GraphRenderer::generateLOD0Edges(
+    std::shared_ptr<std::vector<Edge>> lodEdges, std::map<int, std::string> &regionRepresentatives,
+    std::shared_ptr<std::vector<Edge>> allEdges,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    // 计算区域间连接并生成聚合边
+    std::map<std::pair<int, int>, int> regionConnections;
+    std::map<std::pair<int, int>, float> regionWeights;
+
+    for (const auto &edge : *allEdges) {
+        if (!edge.visible)
+            continue;
+
+        auto fromNodeIt = allNodes->find(edge.from);
+        auto toNodeIt = allNodes->find(edge.to);
+        if (fromNodeIt == allNodes->end() || toNodeIt == allNodes->end())
+            continue;
+
+        // 找到起点和终点节点所属的区域
+        int fromRegion = -1, toRegion = -1;
+
+        float fromLat = fromNodeIt->second.pos.x();
+        float fromLon = fromNodeIt->second.pos.y();
+        float toLat = toNodeIt->second.pos.x();
+        float toLon = toNodeIt->second.pos.y();
+
+        for (const auto &region : LOD0_REGIONS) {
+            if (fromRegion == -1 && fromLat >= region.minLat && fromLat <= region.maxLat &&
+                fromLon >= region.minLon && fromLon <= region.maxLon) {
+                fromRegion = region.regionId;
+            }
+            if (toRegion == -1 && toLat >= region.minLat && toLat <= region.maxLat &&
+                toLon >= region.minLon && toLon <= region.maxLon) {
+                toRegion = region.regionId;
+            }
+            if (fromRegion != -1 && toRegion != -1)
+                break;
+        }
+
+        if (fromRegion == -1 || toRegion == -1 || fromRegion == toRegion)
+            continue;
+
+        std::pair<int, int> regionPair =
+            std::make_pair(std::min(fromRegion, toRegion), std::max(fromRegion, toRegion));
+
+        regionConnections[regionPair]++;
+        regionWeights[regionPair] += edge.weight;
+    }
+
+    std::cout << "Found " << regionConnections.size() << " inter-region connections" << std::endl;
+
+    // 生成LOD0聚合边
+    for (const auto &connPair : regionConnections) {
+        int region1 = connPair.first.first;
+        int region2 = connPair.first.second;
+        float totalWeight = regionWeights[connPair.first];
+
+        if (regionRepresentatives.find(region1) == regionRepresentatives.end() ||
+            regionRepresentatives.find(region2) == regionRepresentatives.end()) {
+            continue;
+        }
+
+        Edge aggregatedEdge;
+        aggregatedEdge.id = "lod0_agg_" + std::to_string(region1) + "_" + std::to_string(region2);
+        aggregatedEdge.from = regionRepresentatives[region1];
+        aggregatedEdge.to = regionRepresentatives[region2];
+        aggregatedEdge.weight = totalWeight;
+        aggregatedEdge.visible = true;
+        aggregatedEdge.maxHeight = 60000.0f; // LOD0边较高
+
+        lodEdges->push_back(aggregatedEdge);
+
+        std::cout << "Created LOD0 aggregated edge between regions " << region1 << " and "
+                  << region2 << " with weight=" << totalWeight << std::endl;
+    }
+}
+
+// 生成LOD1边（实际节点间连接）
+void VIS4Earth::GraphRenderer::generateLOD1Edges(
+    std::shared_ptr<std::vector<Edge>> lodEdges,
+    std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    const std::map<int, std::vector<std::string>> &regionNodes,
+    std::map<int, std::string> &regionRepresentatives, std::shared_ptr<std::vector<Edge>> allEdges,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    // 为LOD1实际节点生成直接连接
+    std::set<std::string> lod1NodeIds;
+    for (const auto &nodePair : *lodNodes) {
+        if (nodePair.first.find("lod1_") == 0) {
+            // 提取原始节点ID
+            std::string originalId = nodePair.first.substr(5); // 移除"lod1_"前缀
+            lod1NodeIds.insert(originalId);
+        }
+    }
+
+    // 查找LOD1节点间的实际边连接
+    for (const auto &edge : *allEdges) {
+        if (!edge.visible)
+            continue;
+
+        if (lod1NodeIds.find(edge.from) != lod1NodeIds.end() &&
+            lod1NodeIds.find(edge.to) != lod1NodeIds.end()) {
+
+            // 这是LOD1节点间的边，添加到LOD1边集合
+            Edge lod1Edge = edge;
+            lod1Edge.id = "lod1_" + edge.id;
+            lod1Edge.from = "lod1_" + edge.from;
+            lod1Edge.to = "lod1_" + edge.to;
+            lod1Edge.maxHeight = 45000.0f; // 中等高度
+
+            lodEdges->push_back(lod1Edge);
+        }
+    }
+}
+
+// 生成LOD2边（继承LOD1+详细连接）
+void VIS4Earth::GraphRenderer::generateLOD2Edges(
+    std::shared_ptr<std::vector<Edge>> lodEdges,
+    std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    std::shared_ptr<std::vector<Edge>> allEdges,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+    
+    // 第一步：继承LOD1的所有边
+    if (lodEdgesData[1]) {
+        for (const auto &lod1Edge : *lodEdgesData[1]) {
+            // 直接继承LOD1的边，保持原始ID和节点连接
+            lodEdges->push_back(lod1Edge);
+        }
+        std::cout << "Inherited " << lodEdgesData[1]->size() << " edges from LOD1" << std::endl;
+    }
+    
+    // 第二步：获取LOD2新增节点ID集合（不包括继承的LOD1节点）
+    std::set<std::string> lod2NewNodeIds;
+    for (const auto &nodePair : *lodNodes) {
+        if (nodePair.first.find("lod2_") == 0) {
+            std::string originalId = nodePair.first.substr(5); // 移除"lod2_"前缀
+            lod2NewNodeIds.insert(originalId);
+        }
+    }
+    
+    std::cout << "LOD2 has " << lod2NewNodeIds.size() << " new nodes beyond LOD1" << std::endl;
+    
+    // 第三步：添加涉及LOD2新增节点的边
+    for (const auto &edge : *allEdges) {
+        if (!edge.visible) continue;
+        
+        bool fromIsNew = lod2NewNodeIds.find(edge.from) != lod2NewNodeIds.end();
+        bool toIsNew = lod2NewNodeIds.find(edge.to) != lod2NewNodeIds.end();
+        
+        // 只添加至少一端是LOD2新增节点的边，并且两端都在当前LOD2节点集合中
+        if ((fromIsNew || toIsNew)) {
+            // 检查两端节点是否都在LOD2节点集合中
+            bool fromExists = lodNodes->find("lod2_" + edge.from) != lodNodes->end() ||
+                             lodNodes->find("lod1_" + edge.from) != lodNodes->end() ||
+                             lodNodes->find("lod0_" + edge.from.substr(edge.from.find("_") + 1)) != lodNodes->end();
+            bool toExists = lodNodes->find("lod2_" + edge.to) != lodNodes->end() ||
+                           lodNodes->find("lod1_" + edge.to) != lodNodes->end() ||
+                           lodNodes->find("lod0_" + edge.to.substr(edge.to.find("_") + 1)) != lodNodes->end();
+            
+            if (fromExists && toExists) {
+                Edge lod2Edge = edge;
+                lod2Edge.id = "lod2_" + edge.id;
+                lod2Edge.from = "lod2_" + edge.from;
+                lod2Edge.to = "lod2_" + edge.to;
+                lod2Edge.maxHeight = 30000.0f; // 较低高度
+                
+                lodEdges->push_back(lod2Edge);
+            }
+        }
+    }
+    
+    std::cout << "Added " << (lodEdges->size() - (lodEdgesData[1] ? lodEdgesData[1]->size() : 0))
+              << " new edges for LOD2" << std::endl;
+}
+
+// 生成基于地理分区的LOD数据（重新设计为渐进式）
+void VIS4Earth::GraphRenderer::generateGeographicLODData(
+    int lodLevel, std::shared_ptr<std::map<std::string, Node>> allNodes,
+    std::shared_ptr<std::vector<Edge>> allEdges) {
+
+    auto lodNodes = std::make_shared<std::map<std::string, Node>>();
+    auto lodEdges = std::make_shared<std::vector<Edge>>();
+
+    std::cout << "Generating progressive LOD data for level " << lodLevel << std::endl;
+
+    // 根据LOD级别选择对应的地理分区
+    const std::vector<GeographicRegion> *currentRegions = nullptr;
+    switch (lodLevel) {
+    case 0:
+        currentRegions = &LOD0_REGIONS;
+        break;
+    case 1:
+        currentRegions = &LOD1_REGIONS;
+        break;
+    case 2:
+        currentRegions = &LOD2_REGIONS;
+        break;
+    default:
+        std::cout << "Invalid LOD level: " << lodLevel << std::endl;
+        return;
+    }
+
+    std::cout << "Using " << currentRegions->size() << " regions for LOD " << lodLevel << std::endl;
+
+    // 为每个区域分配节点
+    std::map<int, std::vector<std::string>> regionNodes;
+    for (const auto &nodePair : *allNodes) {
+        const Node &node = nodePair.second;
+        float nodeLat = node.pos.x();
+        float nodeLon = node.pos.y();
+
+        // 找到节点所属的地理区域
+        for (const auto &region : *currentRegions) {
+            if (nodeLat >= region.minLat && nodeLat <= region.maxLat && nodeLon >= region.minLon &&
+                nodeLon <= region.maxLon) {
+                regionNodes[region.regionId].push_back(nodePair.first);
+                break; // 节点只属于第一个匹配的区域
+            }
+        }
+    }
+
+    std::cout << "Allocated nodes to " << regionNodes.size() << " regions" << std::endl;
+
+    // 存储区域代表节点映射
+    std::map<int, std::string> regionRepresentatives;
+
+    // 渐进式LOD节点生成
+    if (lodLevel == 0) {
+        // LOD0: 只生成区域质心代表节点
+        generateBaseLODNodes(lodNodes, *currentRegions, regionNodes, allNodes);
+
+        // 建立区域代表节点映射
+        for (const auto &nodePair : *lodNodes) {
+            if (nodePair.second.cluster >= 0) {
+                regionRepresentatives[nodePair.second.cluster] = nodePair.first;
+            }
+        }
+    } else if (lodLevel == 1) {
+        // LOD1: 只添加区域内重要的实际节点（不继承LOD0）
+        addLOD1Nodes(lodNodes, regionNodes, allNodes);
+    } else if (lodLevel == 2) {
+        // LOD2: 继承LOD1的所有节点 + 添加更多详细节点
+        
+        // 首先继承LOD1的所有节点（保持原始ID不变）
+        if (lodNodesData[1]) {
+            for (const auto &lod1NodePair : *lodNodesData[1]) {
+                Node inheritedNode = lod1NodePair.second;
+                // 保持原始ID不变，不添加前缀
+                (*lodNodes)[inheritedNode.id] = inheritedNode;
+            }
+            std::cout << "Inherited " << lodNodesData[1]->size() << " nodes from LOD1" << std::endl;
+        }
+        
+        // 然后添加LOD2的详细节点
+        addLOD2Nodes(lodNodes, regionNodes, allNodes);
+    }
+
+    // 生成渐进式边连接
+    generateProgressiveEdges(lodLevel, lodEdges, lodNodes, regionNodes, regionRepresentatives,
+                             allEdges, allNodes);
+
+    std::cout << "Generated " << lodNodes->size() << " nodes and " << lodEdges->size()
+              << " edges for progressive LOD " << lodLevel << std::endl;
+
+    // 设置LOD数据
+    lodNodesData[lodLevel] = lodNodes;
+    lodEdgesData[lodLevel] = lodEdges;
 }
