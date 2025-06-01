@@ -618,6 +618,24 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
         }
     }
 
+    // 对LOD3进行视锥剔除优化，其他级别重置所有可见性
+    if (currentLevel == 3) {
+        PerGraphParam *graphParam = getGraph(graphName);
+        if (graphParam && graphParam->_camera) {
+            // 从相机提取视锥边界并调用剔除
+            SimpleFrustumBounds bounds;
+            if (extractCameraBounds(graphParam->_camera, bounds)) {
+                frustumCulling(graphName, bounds.minLon, bounds.maxLon, bounds.minLat,
+                               bounds.maxLat, currentLevel);
+            }
+        }
+    } else {
+        // 非LOD3级别重置所有可见性，确保数据正常显示
+        if (lodNodesData[currentLevel] && lodEdgesData[currentLevel]) {
+            resetAllVisibility(lodNodesData[currentLevel], lodEdgesData[currentLevel]);
+        }
+    }
+
     // frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
     updateLabelLists(graphName);
     syncSceneGraph(graphName);
@@ -625,11 +643,89 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
 void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, double minLon,
                                               double maxLon, double minLat, double maxLat,
                                               const int currentLevel) {
-    /*视锥剔除*/
+    // 只对LOD3进行视锥剔除，其他级别数据量较少无需剔除
+    if (currentLevel != 3)
+        return;
 
-    // 筛选视角范围内的节点//(double lat_min, double lat_max, double lon_min,double lon_max)
-    // std::vector<std::string> visibleIDs = earthGrid.getNodesInFrustum(minLat, maxLat, minLon,
-    // maxLon); std::cout << "11" << std::endl;
+    PerGraphParam *graphParam = getGraph(graphName);
+    if (!graphParam || !graphParam->_camera)
+        return;
+
+    // 1. 提取视锥参数
+    SimpleFrustumBounds currentBounds;
+    if (!extractCameraBounds(graphParam->_camera, currentBounds)) {
+        std::cout << "Failed to extract camera bounds for frustum culling" << std::endl;
+        return;
+    }
+
+    // 2. 检查视锥是否显著变化，使用缓存优化性能
+    if (!frustumSignificantlyChanged(currentBounds, lastFrustumBounds)) {
+        // 视锥没有显著变化，使用缓存结果
+        std::cout << "Using cached frustum culling results" << std::endl;
+        updateVisibilityFromCache(graphName);
+        return;
+    }
+
+    std::cout << "Performing LOD3 frustum culling..." << std::endl;
+
+    // 调试：检查数据状态
+    std::cout << "\n=== Debugging Data Status ===" << std::endl;
+    debugNodeCoordinates(lodNodesData[3], 5);
+    debugEarthGridStatus();
+    std::cout << "============================\n" << std::endl;
+
+    // 3. 第一阶段：基于地理网格的粗筛 (复用现有EarthGridPartition)
+    std::vector<std::string> candidateNodes = earthGrid.getNodesInFrustum(
+        currentBounds.minLat, currentBounds.maxLat, currentBounds.minLon, currentBounds.maxLon);
+
+    std::cout << "Grid culling: " << candidateNodes.size() << "/" << lodNodesData[3]->size()
+              << " nodes passed first stage" << std::endl;
+
+    // 4. 第二阶段：精确视锥测试（设置节点visible属性）
+    performPreciseCulling(graphParam->_camera, candidateNodes, lodNodesData[3]);
+
+    // 5. 边剔除：基于节点可见性设置边的visible属性
+    cullEdgesByVisibility(lodEdgesData[3], lodNodesData[3]);
+
+    // 6. 输出统计信息
+    int visibleNodeCount = 0, visibleEdgeCount = 0;
+    for (const auto &nodePair : *lodNodesData[3]) {
+        if (nodePair.second.visible)
+            visibleNodeCount++;
+    }
+    for (const auto &edge : *lodEdgesData[3]) {
+        if (edge.visible)
+            visibleEdgeCount++;
+    }
+
+    std::cout << "LOD3 Frustum Culling Results:" << std::endl;
+    std::cout << "  Nodes: " << visibleNodeCount << "/" << lodNodesData[3]->size() << " ("
+              << (100.0 * visibleNodeCount / lodNodesData[3]->size()) << "%)" << std::endl;
+    std::cout << "  Edges: " << visibleEdgeCount << "/" << lodEdgesData[3]->size() << " ("
+              << (100.0 * visibleEdgeCount / lodEdgesData[3]->size()) << "%)" << std::endl;
+
+    // 7. 更新缓存（保存visible状态）
+    lastFrustumBounds = currentBounds;
+    cachedNodeVisibility.clear();
+    cachedEdgeVisibility.clear();
+
+    for (const auto &nodePair : *lodNodesData[3]) {
+        cachedNodeVisibility[nodePair.first] = nodePair.second.visible;
+    }
+    for (const auto &edge : *lodEdgesData[3]) {
+        cachedEdgeVisibility[edge.id] = edge.visible;
+    }
+
+    // 8. 更新当前可见数据（基于visible属性）
+    currentLevelLabels.clear();
+    currentNodes.clear();
+
+    for (const auto &nodePair : *lodNodesData[3]) {
+        if (nodePair.second.visible) {
+            currentLevelLabels.insert(nodePair.first);
+            currentNodes.push_back(nodePair.second);
+        }
+    }
 }
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
@@ -773,6 +869,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
 
             // 初始化LOD数据 (在GraphRenderer层面)
             this->initializeLODData(nodes, edges);
+
             updateActiveLOD(cameraHeightPresent);
 
             graphParam->update();
@@ -3515,6 +3612,33 @@ void VIS4Earth::GraphRenderer::initializeLODData(
         std::cout << "LOD Level " << i << ": " << lodNodesData[i]->size() << " nodes, "
                   << lodEdgesData[i]->size() << " edges" << std::endl;
     }
+
+    // 初始化地理网格，使用LOD3数据（最详细级别）
+    std::cout << "Initializing Earth Grid with LOD3 data..." << std::endl;
+    earthGrid.clearGrid();
+    if (lodNodesData[3]) {
+        int insertCount = 0;
+        double minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0;
+
+        for (const auto &nodePair : *lodNodesData[3]) {
+            earthGrid.insertNodeIntoGrid(nodePair.second);
+            insertCount++;
+
+            // 统计插入节点的坐标范围
+            double lat = nodePair.second.pos.x();
+            double lon = nodePair.second.pos.y();
+            minLat = std::min(minLat, lat);
+            maxLat = std::max(maxLat, lat);
+            minLon = std::min(minLon, lon);
+            maxLon = std::max(maxLon, lon);
+        }
+
+        std::cout << "Initialized Earth Grid with " << insertCount << " nodes" << std::endl;
+        std::cout << "Grid data range: lat[" << minLat << ", " << maxLat << "], lon[" << minLon
+                  << ", " << maxLon << "]" << std::endl;
+    } else {
+        std::cout << "ERROR: LOD3 data is null, cannot initialize Earth Grid" << std::endl;
+    }
 }
 
 // 生成基于地理分区的LOD数据
@@ -3740,6 +3864,16 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
 
             // 更新当前活动的LOD级别
             currentActiveLODLevel = targetMaxNodeLevel;
+
+            // 更新地理网格：清空并重新插入当前LOD的节点
+            earthGrid.clearGrid();
+            if (lodNodesData[targetMaxNodeLevel]) {
+                for (const auto &nodePair : *lodNodesData[targetMaxNodeLevel]) {
+                    earthGrid.insertNodeIntoGrid(nodePair.second);
+                }
+                std::cout << "Updated Earth Grid with " << lodNodesData[targetMaxNodeLevel]->size()
+                          << " nodes for LOD" << targetMaxNodeLevel << std::endl;
+            }
 
             // 重新绘制几何体
             graphParam->update();
@@ -4283,4 +4417,275 @@ void VIS4Earth::GraphRenderer::generateGeographicLODData(
     // 设置LOD数据
     lodNodesData[lodLevel] = lodNodes;
     lodEdgesData[lodLevel] = lodEdges;
+}
+
+// 视锥剔除辅助函数实现
+bool VIS4Earth::GraphRenderer::extractCameraBounds(osg::Camera *camera,
+                                                   SimpleFrustumBounds &bounds) {
+    if (!camera)
+        return false;
+
+    // 复用nodeClickHandler中的相机参数提取逻辑
+    osg::Vec3d eyePosition, center, up;
+    camera->getViewMatrixAsLookAt(eyePosition, center, up);
+
+    double R_earth = 6371000.0; // 地球半径(米)
+    double distance = eyePosition.length();
+    bounds.cameraHeight = distance - R_earth;
+
+    if (bounds.cameraHeight <= 0)
+        return false;
+
+    // 简化的地面投影计算
+    double groundRadius = bounds.cameraHeight * 0.4; // 简化估算系数
+    double latOffset = (groundRadius / R_earth) * 180.0 / osg::PI;
+    double lonOffset = latOffset;
+
+    // 简化的相机位置转经纬度
+    double lat = std::asin(eyePosition.z() / distance) * 180.0 / osg::PI;
+    double lon = std::atan2(eyePosition.y(), eyePosition.x()) * 180.0 / osg::PI;
+
+    bounds.minLat = std::max(lat - latOffset, -90.0);
+    bounds.maxLat = std::min(lat + latOffset, 90.0);
+    bounds.minLon = std::max(lon - lonOffset, -180.0);
+    bounds.maxLon = std::min(lon + lonOffset, 180.0);
+
+    bounds.isValid = true;
+
+    // 添加详细调试信息
+    std::cout << "=== Camera Bounds Debug ===" << std::endl;
+    std::cout << "Camera position: (" << eyePosition.x() << ", " << eyePosition.y() << ", "
+              << eyePosition.z() << ")" << std::endl;
+    std::cout << "Camera distance: " << distance << " meters" << std::endl;
+    std::cout << "Camera height: " << bounds.cameraHeight << " meters" << std::endl;
+    std::cout << "Ground radius: " << groundRadius << " meters" << std::endl;
+    std::cout << "Camera lat/lon: (" << lat << ", " << lon << ")" << std::endl;
+    std::cout << "Lat offset: " << latOffset << ", Lon offset: " << lonOffset << std::endl;
+    std::cout << "Frustum bounds: lat[" << bounds.minLat << ", " << bounds.maxLat << "], lon["
+              << bounds.minLon << ", " << bounds.maxLon << "]" << std::endl;
+    std::cout << "=========================" << std::endl;
+
+    return true;
+}
+
+bool VIS4Earth::GraphRenderer::frustumSignificantlyChanged(const SimpleFrustumBounds &current,
+                                                           const SimpleFrustumBounds &last) {
+    if (!last.isValid)
+        return true;
+
+    const double threshold = 0.1; // 经纬度变化阈值
+    return (std::abs(current.minLat - last.minLat) > threshold ||
+            std::abs(current.maxLat - last.maxLat) > threshold ||
+            std::abs(current.minLon - last.minLon) > threshold ||
+            std::abs(current.maxLon - last.maxLon) > threshold);
+}
+
+osg::Vec3 VIS4Earth::GraphRenderer::latLonToWorldPos(double lat, double lon) {
+    // 复用updateEdgeVBO中的vec3ToSphere逻辑（反向）
+    float latRad = osg::DegreesToRadians(lat);
+    float lonRad = osg::DegreesToRadians(lon);
+    float h = osg::WGS_84_RADIUS_POLAR; // 地表高度
+
+    osg::Vec3 worldPos;
+    worldPos.z() = h * std::sin(latRad);
+    h = h * std::cos(latRad);
+    worldPos.y() = h * std::sin(lonRad);
+    worldPos.x() = h * std::cos(lonRad);
+
+    return worldPos;
+}
+
+void VIS4Earth::GraphRenderer::performPreciseCulling(
+    osg::Camera *camera, const std::vector<std::string> &candidateNodes,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+    // 使用OSG的视锥剔除
+    osg::Polytope frustum;
+    osg::Matrixd mvp = camera->getViewMatrix() * camera->getProjectionMatrix();
+    frustum.setToUnitFrustum(true, true);
+    frustum.transformProvidingInverse(osg::Matrixd::inverse(mvp));
+
+    // 首先将所有节点设为不可见
+    for (auto &nodePair : *allNodes) {
+        nodePair.second.visible = false;
+    }
+
+    // 对候选节点进行精确视锥测试
+    int visibleCount = 0;
+    for (const std::string &nodeId : candidateNodes) {
+        auto it = allNodes->find(nodeId);
+        if (it == allNodes->end())
+            continue;
+
+        osg::Vec3 worldPos = latLonToWorldPos(it->second.pos.x(), it->second.pos.y());
+        if (frustum.contains(worldPos)) {
+            it->second.visible = true; // 设置为可见
+            visibleCount++;
+        }
+    }
+
+    std::cout << "Precise culling: " << visibleCount << "/" << candidateNodes.size()
+              << " nodes are visible" << std::endl;
+}
+
+void VIS4Earth::GraphRenderer::updateVisibilityFromCache(const std::string &graphName) {
+    PerGraphParam *graphParam = getGraph(graphName);
+    if (!graphParam)
+        return;
+
+    // 从缓存恢复节点可见性
+    if (lodNodesData[3]) {
+        for (auto &nodePair : *lodNodesData[3]) {
+            auto cacheIt = cachedNodeVisibility.find(nodePair.first);
+            if (cacheIt != cachedNodeVisibility.end()) {
+                nodePair.second.visible = cacheIt->second;
+            }
+        }
+    }
+
+    // 从缓存恢复边可见性
+    if (lodEdgesData[3]) {
+        for (auto &edge : *lodEdgesData[3]) {
+            auto cacheIt = cachedEdgeVisibility.find(edge.id);
+            if (cacheIt != cachedEdgeVisibility.end()) {
+                edge.visible = cacheIt->second;
+            }
+        }
+    }
+
+    // 更新当前显示的数据（基于visible属性）
+    currentLevelLabels.clear();
+    currentNodes.clear();
+
+    if (lodNodesData[3]) {
+        for (const auto &nodePair : *lodNodesData[3]) {
+            if (nodePair.second.visible) {
+                currentLevelLabels.insert(nodePair.first);
+                currentNodes.push_back(nodePair.second);
+            }
+        }
+    }
+
+    std::cout << "Restored visibility from cache: " << currentNodes.size() << " visible nodes"
+              << std::endl;
+}
+
+void VIS4Earth::GraphRenderer::cullEdgesByVisibility(
+    std::shared_ptr<std::vector<Edge>> allEdges,
+    std::shared_ptr<std::map<std::string, Node>> allNodes) {
+    int visibleEdgeCount = 0;
+    for (auto &edge : *allEdges) {
+        // 检查边的两端节点是否可见
+        auto fromIt = allNodes->find(edge.from);
+        auto toIt = allNodes->find(edge.to);
+
+        bool fromVisible = (fromIt != allNodes->end()) && fromIt->second.visible;
+        bool toVisible = (toIt != allNodes->end()) && toIt->second.visible;
+
+        // 至少一端可见的边保留
+        edge.visible = fromVisible || toVisible;
+        if (edge.visible) {
+            visibleEdgeCount++;
+        }
+    }
+
+    std::cout << "Edge culling: " << visibleEdgeCount << "/" << allEdges->size()
+              << " edges are visible" << std::endl;
+}
+
+void VIS4Earth::GraphRenderer::resetAllVisibility(
+    std::shared_ptr<std::map<std::string, Node>> allNodes,
+    std::shared_ptr<std::vector<Edge>> allEdges) {
+    // 重置所有节点可见性为true
+    for (auto &nodePair : *allNodes) {
+        nodePair.second.visible = true;
+    }
+
+    // 重置所有边可见性为true
+    for (auto &edge : *allEdges) {
+        edge.visible = true;
+    }
+
+    std::cout << "Reset all visibility to true" << std::endl;
+}
+
+// 调试函数实现
+void VIS4Earth::GraphRenderer::debugEarthGridStatus() {
+    std::cout << "=== Earth Grid Debug ===" << std::endl;
+    std::cout << "Grid size: " << earthGrid.latitude_cells << " x " << earthGrid.longitude_cells
+              << std::endl;
+
+    int totalNodes = 0;
+    int nonemptyGrids = 0;
+    double minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0;
+
+    for (int i = 0; i < earthGrid.latitude_cells; ++i) {
+        for (int j = 0; j < earthGrid.longitude_cells; ++j) {
+            int nodeCount = earthGrid.grid[i][j].node_ids.size();
+            if (nodeCount > 0) {
+                totalNodes += nodeCount;
+                nonemptyGrids++;
+
+                // 计算当前网格的地理边界
+                double gridMinLat = (i * 180.0 / earthGrid.latitude_cells) - 90.0;
+                double gridMaxLat = ((i + 1) * 180.0 / earthGrid.latitude_cells) - 90.0;
+                double gridMinLon = (j * 360.0 / earthGrid.longitude_cells) - 180.0;
+                double gridMaxLon = ((j + 1) * 360.0 / earthGrid.longitude_cells) - 180.0;
+
+                minLat = std::min(minLat, gridMinLat);
+                maxLat = std::max(maxLat, gridMaxLat);
+                minLon = std::min(minLon, gridMinLon);
+                maxLon = std::max(maxLon, gridMaxLon);
+
+                if (nonemptyGrids <= 5) { // 只打印前5个非空网格的详细信息
+                    std::cout << "Grid[" << i << "][" << j << "]: " << nodeCount
+                              << " nodes, bounds: lat[" << gridMinLat << ", " << gridMaxLat
+                              << "], lon[" << gridMinLon << ", " << gridMaxLon << "]" << std::endl;
+                }
+            }
+        }
+    }
+
+    std::cout << "Total nodes in grid: " << totalNodes << std::endl;
+    std::cout << "Non-empty grids: " << nonemptyGrids << "/"
+              << (earthGrid.latitude_cells * earthGrid.longitude_cells) << std::endl;
+    if (nonemptyGrids > 0) {
+        std::cout << "Data coverage: lat[" << minLat << ", " << maxLat << "], lon[" << minLon
+                  << ", " << maxLon << "]" << std::endl;
+    }
+    std::cout << "======================" << std::endl;
+}
+
+void VIS4Earth::GraphRenderer::debugNodeCoordinates(
+    std::shared_ptr<std::map<std::string, Node>> nodes, int maxSamples) {
+    if (!nodes || nodes->empty()) {
+        std::cout << "=== Node Coordinates Debug: NO DATA ===" << std::endl;
+        return;
+    }
+
+    std::cout << "=== Node Coordinates Debug ===" << std::endl;
+    std::cout << "Total nodes: " << nodes->size() << std::endl;
+
+    double minLat = 90.0, maxLat = -90.0, minLon = 180.0, maxLon = -180.0;
+    int sampleCount = 0;
+
+    for (const auto &nodePair : *nodes) {
+        const Node &node = nodePair.second;
+        double lat = node.pos.x();
+        double lon = node.pos.y();
+
+        minLat = std::min(minLat, lat);
+        maxLat = std::max(maxLat, lat);
+        minLon = std::min(minLon, lon);
+        maxLon = std::max(maxLon, lon);
+
+        if (sampleCount < maxSamples) {
+            std::cout << "Node[" << node.id << "]: lat=" << lat << ", lon=" << lon
+                      << ", level=" << node.level << std::endl;
+            sampleCount++;
+        }
+    }
+
+    std::cout << "Coordinate range: lat[" << minLat << ", " << maxLat << "], lon[" << minLon << ", "
+              << maxLon << "]" << std::endl;
+    std::cout << "=============================" << std::endl;
 }

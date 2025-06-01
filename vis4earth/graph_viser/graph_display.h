@@ -195,6 +195,15 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
             return visibleNodes;
         }
+        
+        // 清空所有网格
+        void clearGrid() {
+            for (auto &row : grid) {
+                for (auto &cell : row) {
+                    cell.node_ids.clear();
+                }
+            }
+        }
     };
     EarthGridPartition earthGrid{180, 360};
     std::vector<Graph> simplifiedGraphsList;
@@ -235,6 +244,36 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     // 按LOD层级存储的区域信息
     std::array<std::map<int, Region>, 4> lodRegions; // [LOD][RegionID] -> Region
+
+    // 视锥剔除相关数据结构
+    struct SimpleFrustumBounds {
+        double minLat, maxLat, minLon, maxLon;
+        double cameraHeight;
+        bool isValid = false;
+    };
+
+    // 视锥剔除缓存
+    SimpleFrustumBounds lastFrustumBounds;
+    std::map<std::string, bool> cachedNodeVisibility; // 节点可见性缓存
+    std::map<std::string, bool> cachedEdgeVisibility; // 边可见性缓存（使用edge.id作为key）
+    bool frustumBoundsChanged = true;
+
+    // 视锥剔除辅助函数
+    bool extractCameraBounds(osg::Camera *camera, SimpleFrustumBounds &bounds);
+    bool frustumSignificantlyChanged(const SimpleFrustumBounds &current,
+                                     const SimpleFrustumBounds &last);
+    osg::Vec3 latLonToWorldPos(double lat, double lon);
+    void performPreciseCulling(osg::Camera *camera, const std::vector<std::string> &candidateNodes,
+                               std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void cullEdgesByVisibility(std::shared_ptr<std::vector<Edge>> allEdges,
+                               std::shared_ptr<std::map<std::string, Node>> allNodes);
+    void resetAllVisibility(std::shared_ptr<std::map<std::string, Node>> allNodes,
+                            std::shared_ptr<std::vector<Edge>> allEdges);
+    void updateVisibilityFromCache(const std::string &graphName);
+
+    // 调试函数
+    void debugEarthGridStatus();
+    void debugNodeCoordinates(std::shared_ptr<std::map<std::string, Node>> nodes, int maxSamples = 10);
 
     // std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
   private:
