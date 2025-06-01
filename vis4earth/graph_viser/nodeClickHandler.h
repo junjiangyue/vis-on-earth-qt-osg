@@ -121,6 +121,10 @@ class CameraMovementCallback : public osg::NodeCallback {
     void checkCameraMovement(osg::Camera *camera) {
 
         static double lastHeight;
+        static osg::Vec3d lastEyePosition;
+        static osg::Vec3d lastCenter;
+        static bool isFirstCheck = true;
+        
         // 获取当前相机的世界坐标位置（直接从相机矩阵中提取）
         osg::Matrixd viewMatrix = camera->getViewMatrix();
         osg::Vec3d eyePosition, center, up;
@@ -131,26 +135,58 @@ class CameraMovementCallback : public osg::NodeCallback {
         double distance = eyePosition.length(); // 相机到地球中心的距离
         double height = distance - R_earth; // 相机到地球表面的高度（单位：公里）
 
-        if (abs(height - lastHeight) > 1000.0) {
-            // 触发标签更新等后续操作
-            // 获取当前视锥体
-            osg::Polytope frustum;
-            // getViewFrustum(camera, frustum);
+        // 计算相机位置变化
+        bool heightChanged = abs(height - lastHeight) > 1000.0;
+        bool positionChanged = false;
+        bool viewDirectionChanged = false;
+        
+        if (!isFirstCheck) {
+            // 计算位置变化（距离）
+            double positionDistance = (eyePosition - lastEyePosition).length();
+            positionChanged = positionDistance > 500000.0; // 500km的位置变化阈值
+            
+            // 计算视角方向变化
+            osg::Vec3d currentViewDir = center - eyePosition;
+            osg::Vec3d lastViewDir = lastCenter - lastEyePosition;
+            currentViewDir.normalize();
+            lastViewDir.normalize();
+            
+            // 计算两个方向向量的夹角
+            double dotProduct = currentViewDir * lastViewDir;
+            dotProduct = std::max(-1.0, std::min(1.0, dotProduct)); // 限制在[-1,1]范围内
+            double angle = acos(dotProduct) * 180.0 / osg::PI; // 转换为角度
+            
+            viewDirectionChanged = angle > 5.0; // 5度的视角变化阈值
+        }
+
+        // 当高度、位置或视角发生显著变化时更新LOD
+        if (heightChanged || positionChanged || viewDirectionChanged || isFirstCheck) {
             if (!camera || !_graphRenderer)
                 return;
-            // 计算经纬度范围
-            double minLon, maxLon, minLat, maxLat;
-            _graphRenderer->cameraUpdate("LoadedGraph", height); // 调用外部对象的更新方法
+                
+            std::cout << "Camera movement detected - Height: " << heightChanged 
+                      << ", Position: " << positionChanged 
+                      << ", ViewDirection: " << viewDirectionChanged << std::endl;
+                      
             _graphRenderer->updateActiveLOD(height);
+            if (firstDraw) {
+                _graphRenderer->cameraUpdate("LoadedGraph", height); // 调用外部对象的更新方法
+                firstDraw = false;
+            }
+               
             std::cout << "updatecheck" << std::endl;
         }
 
         // 更新记录
         lastHeight = height;
+        lastEyePosition = eyePosition;
+        lastCenter = center;
+        isFirstCheck = false;
     }
 
   private:
     VIS4Earth::GraphRenderer *_graphRenderer; // 弱引用（不管理生命周期）
+    bool firstDraw = true;
 };
 class NodeClickHandler : public osgGA::GUIEventHandler {
   public:

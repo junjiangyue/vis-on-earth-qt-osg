@@ -157,9 +157,14 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         // 将节点按经纬度坐标插入到网格中
         void insertNodeIntoGrid(const Node &node) {
-            // 根据节点的经纬度计算对应的网格索引
-            int lat_idx = static_cast<int>((node.pos.y() + 90.0f) * latitude_cells / 180.0f);
-            int lon_idx = static_cast<int>((node.pos.x() + 180.0f) * longitude_cells / 360.0f);
+            // 假设 node.pos.x() 是 纬度 (Latitude)
+            // 假设 node.pos.y() 是 经度 (Longitude)
+
+            // 正确的纬度索引计算 (使用 node.pos.x())
+            int lat_idx = static_cast<int>((node.pos.x() + 90.0f) * latitude_cells / 180.0f); 
+
+            // 正确的经度索引计算 (使用 node.pos.y())
+            int lon_idx = static_cast<int>((node.pos.y() + 180.0f) * longitude_cells / 360.0f); 
 
             // 防止越界
             lat_idx = std::min(std::max(lat_idx, 0), latitude_cells - 1);

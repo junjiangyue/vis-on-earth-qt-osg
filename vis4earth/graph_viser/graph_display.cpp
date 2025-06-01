@@ -617,25 +617,6 @@ void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double
             }
         }
     }
-
-    // 对LOD3进行视锥剔除优化，其他级别重置所有可见性
-    if (currentLevel == 3) {
-        PerGraphParam *graphParam = getGraph(graphName);
-        if (graphParam && graphParam->_camera) {
-            // 从相机提取视锥边界并调用剔除
-            SimpleFrustumBounds bounds;
-            if (extractCameraBounds(graphParam->_camera, bounds)) {
-                frustumCulling(graphName, bounds.minLon, bounds.maxLon, bounds.minLat,
-                               bounds.maxLat, currentLevel);
-            }
-        }
-    } else {
-        // 非LOD3级别重置所有可见性，确保数据正常显示
-        if (lodNodesData[currentLevel] && lodEdgesData[currentLevel]) {
-            resetAllVisibility(lodNodesData[currentLevel], lodEdgesData[currentLevel]);
-        }
-    }
-
     // frustumCulling(graphName, minLon, maxLon, minLat, maxLat, currentLevel);
     updateLabelLists(graphName);
     syncSceneGraph(graphName);
@@ -675,6 +656,8 @@ void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, doub
     std::cout << "============================\n" << std::endl;
 
     // 3. 第一阶段：基于地理网格的粗筛 (复用现有EarthGridPartition)
+    std::cout << "First Stage: " << currentBounds.minLat << "/" << currentBounds.maxLat<<"/"
+              << currentBounds.minLon<<"/" << currentBounds.maxLon << std::endl;
     std::vector<std::string> candidateNodes = earthGrid.getNodesInFrustum(
         currentBounds.minLat, currentBounds.maxLat, currentBounds.minLon, currentBounds.maxLon);
 
@@ -729,6 +712,8 @@ void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, doub
 }
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
+    if (height < 0)
+        return 0;
     if (height > 2.64834e+07)
         return 0; // 全球级
     else if (height > 1.73736e+07)
@@ -3842,7 +3827,7 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
     int targetMaxNodeLevel = getCurrentLevel(cameraHeight);
 
     // 性能优化：只有当LOD级别发生变化时才重新绘制
-    if (targetMaxNodeLevel == currentActiveLODLevel) {
+    if (targetMaxNodeLevel == currentActiveLODLevel && targetMaxNodeLevel!=3) {
         // LOD级别没有变化，只更新标签（因为相机位置可能变化）
         cameraUpdate("LoadedGraph", cameraHeight);
         return;
@@ -3874,12 +3859,29 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
                 std::cout << "Updated Earth Grid with " << lodNodesData[targetMaxNodeLevel]->size()
                           << " nodes for LOD" << targetMaxNodeLevel << std::endl;
             }
-
-            // 重新绘制几何体
-            graphParam->update();
             // 更新标签（无论LOD是否变化都需要调用，因为相机位置可能变化）
+            // 对LOD3进行视锥剔除优化，其他级别重置所有可见性
+            if (targetMaxNodeLevel == 3) {
+                if (graphParam && graphParam->_camera) {
+                    // 从相机提取视锥边界并调用剔除
+                    SimpleFrustumBounds bounds;
+                    if (extractCameraBounds(graphParam->_camera, bounds)) {
+                        frustumCulling("LoadedGraph", bounds.minLon, bounds.maxLon, bounds.minLat,
+                                       bounds.maxLat, targetMaxNodeLevel);
+                    }
+                }
+            } else {
+                // 非LOD3级别重置所有可见性，确保数据正常显示
+                if (lodNodesData[targetMaxNodeLevel] && lodEdgesData[targetMaxNodeLevel]) {
+                    resetAllVisibility(lodNodesData[targetMaxNodeLevel],
+                                       lodEdgesData[targetMaxNodeLevel]);
+                }
+            }
+            graphParam->update();
             sceneLabels.clear();
             cameraUpdate("LoadedGraph", cameraHeight);
+            // 重新绘制几何体
+            
         }
     }
 }
@@ -4515,7 +4517,8 @@ void VIS4Earth::GraphRenderer::performPreciseCulling(
         auto it = allNodes->find(nodeId);
         if (it == allNodes->end())
             continue;
-
+        it->second.visible = true;
+        visibleCount++;
         osg::Vec3 worldPos = latLonToWorldPos(it->second.pos.x(), it->second.pos.y());
         if (frustum.contains(worldPos)) {
             it->second.visible = true; // 设置为可见
