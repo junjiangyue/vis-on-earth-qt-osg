@@ -156,7 +156,7 @@ class CameraMovementCallback : public osg::NodeCallback {
             dotProduct = std::max(-1.0, std::min(1.0, dotProduct)); // 限制在[-1,1]范围内
             double angle = acos(dotProduct) * 180.0 / osg::PI; // 转换为角度
             
-            viewDirectionChanged = angle > 5.0; // 5度的视角变化阈值
+            viewDirectionChanged = angle > 1.0; // 视角变化阈值
         }
 
         // 当高度、位置或视角发生显著变化时更新LOD
@@ -167,7 +167,7 @@ class CameraMovementCallback : public osg::NodeCallback {
             std::cout << "Camera movement detected - Height: " << heightChanged 
                       << ", Position: " << positionChanged 
                       << ", ViewDirection: " << viewDirectionChanged << std::endl;
-                      
+            _graphRenderer->param.setCamera(camera);
             _graphRenderer->updateActiveLOD(height);
             if (firstDraw) {
                 _graphRenderer->cameraUpdate("LoadedGraph", height); // 调用外部对象的更新方法

@@ -4439,7 +4439,7 @@ bool VIS4Earth::GraphRenderer::extractCameraBounds(osg::Camera *camera,
         return false;
 
     // 简化的地面投影计算
-    double groundRadius = bounds.cameraHeight * 0.4; // 简化估算系数
+    double groundRadius = bounds.cameraHeight * 0.8; // 简化估算系数
     double latOffset = (groundRadius / R_earth) * 180.0 / osg::PI;
     double lonOffset = latOffset;
 
@@ -4585,7 +4585,7 @@ void VIS4Earth::GraphRenderer::cullEdgesByVisibility(
         bool toVisible = (toIt != allNodes->end()) && toIt->second.visible;
 
         // 至少一端可见的边保留
-        edge.visible = fromVisible || toVisible;
+        edge.visible = fromVisible && toVisible;
         if (edge.visible) {
             visibleEdgeCount++;
         }
