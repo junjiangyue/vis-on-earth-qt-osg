@@ -760,7 +760,18 @@ void VIS4Earth::GraphRenderer::loadEdgesCSV() {
     // 设置文件路径到对应的文本框
     ui->edgesFilePath->setText(edgesFileName);
 }
+void hexToRGBf(const std::string &hex, float &r, float &g, float &b) {
+    std::string hexCode = (hex[0] == '#') ? hex.substr(1) : hex;
 
+    // 假设 hexCode 长度始终为 6，且合法
+    int ri = std::stoi(hexCode.substr(0, 2), nullptr, 16);
+    int gi = std::stoi(hexCode.substr(2, 2), nullptr, 16);
+    int bi = std::stoi(hexCode.substr(4, 2), nullptr, 16);
+
+    r = ri / 255.0f;
+    g = gi / 255.0f;
+    b = bi / 255.0f;
+}
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     //   加载城市建筑物的 OBB 数据
     VIS4Earth::CityLoader cityLoader;
@@ -818,7 +829,9 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         for (auto itr = graph->getNodes().begin(); itr != graph->getNodes().end(); ++itr) {
             VIS4Earth::GraphRenderer::Node node;
             node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
-            node.color = colors[i];
+            float r, g, b;
+            hexToRGBf(itr->second.color, r, g, b);
+            node.color = osg::Vec3(r, g, b);
             node.id = itr->first;
             node.level = itr->second.level;
             levelIndex[node.level].push_back(node.id);
@@ -2681,7 +2694,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         if (!itr->second.visible)
             continue; // 只处理可见节点
-        osg::Vec4 color = generateColor(static_cast<float>(itr->second.cluster));
+        // osg::Vec4 color = generateColor(static_cast<float>(itr->second.cluster));
+        osg::Vec4 color = osg::Vec4(itr->second.color, 1.0f);
 
         if (!restrictionOFF) {
             if (itr->second.pos.x() >= restriction.leftBound &&

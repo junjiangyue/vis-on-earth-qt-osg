@@ -34,6 +34,7 @@ struct Node {
     glm::vec3 force;
     int level;
     std::string name;
+    std::string color;
 
     Node()
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0), pos(0.0f),
@@ -48,6 +49,10 @@ struct Node {
     Node(double x, double y, double level, std::string name)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name) {}
+    Node(double x, double y, double level, std::string name, std::string color)
+        : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
+          pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name),
+          color(color) {}
 };
 
 struct Edge {
@@ -492,9 +497,9 @@ struct Graph {
     void buildCompatibilityListsIfNeeded() {
         buildCompatibilityLists(); // (3) 实际初始化逻辑
 
-        //std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
-        //    buildCompatibilityLists();               // (3) 实际初始化逻辑
-        //});
+        // std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
+        //     buildCompatibilityLists();               // (3) 实际初始化逻辑
+        // });
     }
 
     static double distance(const glm::vec3 &v1, const glm::vec3 &v2) {

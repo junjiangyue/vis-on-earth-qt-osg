@@ -214,13 +214,15 @@ class GraphLoader {
         char name[100];
         double latitude, longitude;
         int level;
+        char color[10];
         std::unordered_map<std::string, Node> read_nodes;
 
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
-            sscanf(line, "%d,%[^,],%lg,%lg,%d", &labelCh, name, &latitude, &longitude, &level);
-            read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh),
-                                                           Node(latitude, longitude, level)));
+            sscanf(line, "%d,%[^,],%lg,%lg,%d,%s", &labelCh, name, &latitude, &longitude, &level,
+                   color);
+            read_nodes.insert(std::pair<std::string, Node>(
+                std::to_string(labelCh), Node(latitude, longitude, level, name, color)));
         }
         f.Close();
 
@@ -236,10 +238,9 @@ class GraphLoader {
         char src[128], dst[128];
         double w, wmax = 0.0;
         std::vector<Edge> allEdges;
-        for (int r = 0; r < rowsEdge - 1; r++) {
+        for (int r = 1; r < rowsEdge; r++) {
             edgeF.GetText(line, 1024);
-            w = 1.0;
-            sscanf(line, "%s %s %lg", src, dst, &w);
+            sscanf(line, "%[^,],%[^,],%lg", src, dst, &w);
             allEdges.push_back(Edge(std::string(src), std::string(dst),
                                     read_nodes[std::string(src)].pos,
                                     read_nodes[std::string(dst)].pos, w + 1.0));
