@@ -3140,12 +3140,15 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
         int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
         totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
 
+        osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.0f);
+        osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
+        osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
         // 获取边的颜色（使用节点颜色或默认颜色）
-        osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
-        if (currentLODLevel < 3) {
-            // 聚合边使用统一的金色
-            edgeColor = osg::Vec4(0.8f, 0.6f, 0.2f, 1.0f);
-        }
+        // osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
+        // if (currentLODLevel < 3) {
+        //    // 聚合边使用统一的金色
+        //    edgeColor = osg::Vec4(0.8f, 0.6f, 0.2f, 1.0f);
+        //}
 
         osg::Vec3 prevPos;
 
@@ -3221,9 +3224,16 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
             continue; // 只处理可见边
         if (edge.subDivs.empty())
             continue; // 跳过没有细分点的边
-
-        osg::Vec4 fromColor(0.8f, 0.6f, 0.2f, 1.0f); // 统一的金色
-        osg::Vec4 toColor(0.8f, 0.6f, 0.2f, 1.0f);   // 统一的金色
+        auto fromNodeIt = nodes->find(edge.from);
+        auto toNodeIt = nodes->find(edge.to);
+        osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.50f);
+        osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
+        osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
+        osg::Vec4 fromColor = edgeColor;
+        osg::Vec4 toColor = edgeColor;
+        //
+        // osg::Vec4 fromColor(0.8f, 0.6f, 0.2f, 1.0f); // 统一的金色
+        // osg::Vec4 toColor(0.8f, 0.6f, 0.2f, 1.0f);   // 统一的金色
 
         // 计算整条边的总长度
         float totalLength = 0.0f;
