@@ -278,7 +278,14 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     // 调试函数
     void debugEarthGridStatus();
-    void debugNodeCoordinates(std::shared_ptr<std::map<std::string, Node>> nodes, int maxSamples = 10);
+    void debugNodeCoordinates(std::shared_ptr<std::map<std::string, Node>> nodes,
+                              int maxSamples = 10);
+
+    void generateAggregatedEdgesForLOD(int lodLevel,
+                                       std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                                       std::shared_ptr<std::vector<Edge>> lodEdges,
+                                       std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                       std::shared_ptr<std::vector<Edge>> allEdges);
 
     // std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
   private:
@@ -415,10 +422,27 @@ class GraphRenderer : public QtOSGReflectableWidget {
         // LOD相关方法 - 只保留setActiveLODDataSource，用于接收外部设置的数据
         void setActiveLODDataSource(int targetMaxLevel);
 
+        // 发光效果控制方法
+        void setGlowIntensity(float intensity);
+        void setGlobalAlpha(float alpha);
+        void setLineThickness(float thickness);
+
         // 地理LOD处理函数
         void generateGeographicLODData(int lodLevel,
                                        std::shared_ptr<std::map<std::string, Node>> allNodes,
                                        std::shared_ptr<std::vector<Edge>> allEdges);
+
+        // 为指定LOD级别生成聚合边
+        void generateAggregatedEdgesForLOD(int lodLevel,
+                                           std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                                           std::shared_ptr<std::vector<Edge>> lodEdges,
+                                           std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                           std::shared_ptr<std::vector<Edge>> allEdges);
+
+        // 生成基于地理分区的LOD数据
+        void generateGeographicLODDataOld(int lodLevel,
+                                          std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                          std::shared_ptr<std::vector<Edge>> allEdges);
 
         // 实用函数
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
