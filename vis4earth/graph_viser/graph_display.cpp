@@ -3208,8 +3208,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
         if (edge.subDivs.empty())
             continue; // 跳过没有细分点的边
 
-        osg::Vec4 fromColor(1.0f, 0.0f, 0.0f, 1.0f);
-        osg::Vec4 toColor(0.0f, 0.0f, 1.0f, 1.0f);
+        osg::Vec4 fromColor(0.8f, 0.6f, 0.2f, 1.0f); // 统一的金色
+        osg::Vec4 toColor(0.8f, 0.6f, 0.2f, 1.0f);   // 统一的金色
 
         // 计算整条边的总长度
         float totalLength = 0.0f;
