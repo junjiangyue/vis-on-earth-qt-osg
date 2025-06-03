@@ -153,6 +153,21 @@ void VIS4Earth::GraphRenderer::addGraph(const std::string &name,
     param.grp->addChild(opt.first->second.grp);
 }
 
+void VIS4Earth::GraphRenderer::addGraphForBundling(const std::string &name,
+                                        std::shared_ptr<std::map<std::string, Node>> nodes,
+                                        std::shared_ptr<std::vector<Edge>> edges) {
+    auto itr = graphs.find(name);
+    if (itr != graphs.end()) {
+        param.grp->removeChild(itr->second.grp);
+        sceneLabels.clear();
+        graphs.erase(itr);
+    }
+    auto opt = graphs.emplace(std::piecewise_construct, std::forward_as_tuple(name),
+                              std::forward_as_tuple(nodes, edges, &param));
+    opt.first->second.edgeNodegrp = new osg::Group;
+    param.grp->addChild(opt.first->second.grp);
+}
+
 std::shared_ptr<std::map<std::string, GraphRenderer::Node>>
 GraphRenderer::getNodes(const std::string &graphName) {
     auto itr = graphs.find(graphName);
@@ -814,8 +829,8 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         }
 
         for (auto itr = graph->getEdges().begin(); itr != graph->getEdges().end(); ++itr) {
+            
             edges->emplace_back();
-
             auto &edge = edges->back();
             edge.from = itr->sourceLabel;
             edge.to = itr->targetLabel;
@@ -828,6 +843,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
                     edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
                 edge.subDivs.emplace_back(osg::Vec3(itr->end.x, itr->end.y, 0.f));
             }
+            //edges->emplace_back(edge);
         }
         // 计算每个节点的度数
         for (const auto &edge : *edges) {
@@ -856,16 +872,13 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             this->initializeLODData(nodes, edges);
 
             updateActiveLOD(cameraHeightPresent);
-
-            graphParam->update();
+            //graphParam->update();
             sceneLabels.clear();
             cameraUpdate("LoadedGraph", cameraHeightPresent);
             // loadMarker();
         }
-        myGraph = graph;
 
-        compatibilityFuture = std::async(std::launch::async,
-                                         [this]() { myGraph->buildCompatibilityListsIfNeeded(); });
+        
         // myGraph.buildCompatibilityListsIfNeeded();
         //  初始化 UI
         QLabel *coordRangeLabel = ui->labelCurrentCoordRange; // 假设使用 ui 指针来访问 UI 元素
@@ -1253,91 +1266,91 @@ void VIS4Earth::GraphRenderer::showGraph() {
 
 void VIS4Earth::GraphRenderer::showBundling() {
     // 首先尝试加载已有的边绑定结果
-    QString bundledEdgesFile =
-        "C:/Users/DL/Desktop/data/graph_data/usflight/bundled_edges_result.csv";
-    if (QFile::exists(bundledEdgesFile)) {
-        // 如果存在缓存文件，直接读取
-        try {
-            QFile file(bundledEdgesFile);
-            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-                QTextStream in(&file);
+    //QString bundledEdgesFile =
+    //    "C:/Users/DL/Desktop/data/graph_data/usflight/bundled_edges_result.csv";
+    //if (QFile::exists(bundledEdgesFile)) {
+    //    // 如果存在缓存文件，直接读取
+    //    try {
+    //        QFile file(bundledEdgesFile);
+    //        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+    //            QTextStream in(&file);
 
-                auto nodes = std::make_shared<std::map<std::string, Node>>();
-                auto edges = std::make_shared<std::vector<Edge>>();
+    //            auto nodes = std::make_shared<std::map<std::string, Node>>();
+    //            auto edges = std::make_shared<std::vector<Edge>>();
 
-                // 复制节点信息
-                for (const auto &node : myGraph->getNodes()) {
-                    Node newNode;
-                    newNode.pos = osg::Vec3(node.second.pos.x, node.second.pos.y, 0.f);
-                    newNode.id = node.first;
-                    nodes->emplace(node.first, newNode);
-                }
+    //            // 复制节点信息
+    //            for (const auto &node : myGraph->getNodes()) {
+    //                Node newNode;
+    //                newNode.pos = osg::Vec3(node.second.pos.x, node.second.pos.y, 0.f);
+    //                newNode.id = node.first;
+    //                nodes->emplace(node.first, newNode);
+    //            }
 
-                // 读取边的信息
-                while (!in.atEnd()) {
-                    QString line = in.readLine();
-                    QStringList fields = line.split(",");
-                    if (fields.size() >= 6) { // from,to,hasSubdiv,numPoints,x1,y1,...
-                        Edge edge;
-                        edge.from = fields[0].toStdString();
-                        edge.to = fields[1].toStdString();
+    //            // 读取边的信息
+    //            while (!in.atEnd()) {
+    //                QString line = in.readLine();
+    //                QStringList fields = line.split(",");
+    //                if (fields.size() >= 6) { // from,to,hasSubdiv,numPoints,x1,y1,...
+    //                    Edge edge;
+    //                    edge.from = fields[0].toStdString();
+    //                    edge.to = fields[1].toStdString();
 
-                        bool hasSubdiv = fields[2].toInt() == 1;
-                        int numPoints = fields[3].toInt();
+    //                    bool hasSubdiv = fields[2].toInt() == 1;
+    //                    int numPoints = fields[3].toInt();
 
-                        if (!hasSubdiv) {
-                            // 只有起点和终点
-                            float startX = fields[4].toFloat();
-                            float startY = fields[5].toFloat();
-                            float endX = fields[6].toFloat();
-                            float endY = fields[7].toFloat();
-                            edge.subDivs.emplace_back(osg::Vec3(startX, startY, 0.f));
-                            edge.subDivs.emplace_back(osg::Vec3(endX, endY, 0.f));
-                        } else {
-                            // 有细分点
-                            for (int i = 4; i < fields.size(); i += 2) {
-                                float x = fields[i].toFloat();
-                                float y = fields[i + 1].toFloat();
-                                edge.subDivs.emplace_back(osg::Vec3(x, y, 0.f));
-                            }
-                        }
-                        edges->push_back(edge);
-                    }
-                }
-                file.close();
+    //                    if (!hasSubdiv) {
+    //                        // 只有起点和终点
+    //                        float startX = fields[4].toFloat();
+    //                        float startY = fields[5].toFloat();
+    //                        float endX = fields[6].toFloat();
+    //                        float endY = fields[7].toFloat();
+    //                        edge.subDivs.emplace_back(osg::Vec3(startX, startY, 0.f));
+    //                        edge.subDivs.emplace_back(osg::Vec3(endX, endY, 0.f));
+    //                    } else {
+    //                        // 有细分点
+    //                        for (int i = 4; i < fields.size(); i += 2) {
+    //                            float x = fields[i].toFloat();
+    //                            float y = fields[i + 1].toFloat();
+    //                            edge.subDivs.emplace_back(osg::Vec3(x, y, 0.f));
+    //                        }
+    //                    }
+    //                    edges->push_back(edge);
+    //                }
+    //            }
+    //            file.close();
 
-                // 使用读取的结果更新图形
-                auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-                lonRng[0] += lonOffs;
-                lonRng[1] += lonOffs;
+    //            // 使用读取的结果更新图形
+    //            auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
+    //            lonRng[0] += lonOffs;
+    //            lonRng[1] += lonOffs;
 
-                addGraph("LoadedGraph", nodes, edges);
-                auto graphParam = getGraph("LoadedGraph");
-                if (graphParam) {
-                    graphParam->graphTypeIndex = graphTypeIndex;
-                    graphParam->heightMap = heightMap;
-                    graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
-                    graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
-                    graphParam->setHeightFromCenterRange(
-                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-                        static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-                    graphParam->setNodeGeometrySize(.02f *
-                                                    static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-                    graphParam->setTextGeometrySize(.02f *
-                                                    static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-                    graphParam->setRestriction(myRestriction);
-                    graphParam->restrictionOFF = true;
-                    graphParam->generateHierarchicalGraphs(nodes, edges);
-                    graphParam->setLevelGraph(0);
-                    graphParam->setCamera(param._camera);
-                    graphParam->update();
-                }
-                return;
-            }
-        } catch (const std::exception &e) {
-            qDebug() << "Error loading bundled edges:" << e.what();
-        }
-    }
+    //            addGraph("LoadedGraph", nodes, edges);
+    //            auto graphParam = getGraph("LoadedGraph");
+    //            if (graphParam) {
+    //                graphParam->graphTypeIndex = graphTypeIndex;
+    //                graphParam->heightMap = heightMap;
+    //                graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
+    //                graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
+    //                graphParam->setHeightFromCenterRange(
+    //                    static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
+    //                    static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
+    //                graphParam->setNodeGeometrySize(.02f *
+    //                                                static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+    //                graphParam->setTextGeometrySize(.02f *
+    //                                                static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
+    //                graphParam->setRestriction(myRestriction);
+    //                graphParam->restrictionOFF = true;
+    //                graphParam->generateHierarchicalGraphs(nodes, edges);
+    //                graphParam->setLevelGraph(0);
+    //                graphParam->setCamera(param._camera);
+    //                graphParam->update();
+    //            }
+    //            return;
+    //        }
+    //    } catch (const std::exception &e) {
+    //        qDebug() << "Error loading bundled edges:" << e.what();
+    //    }
+    //}
 
     // 如果没有缓存文件或读取失败，执行边绑定计算
     auto edgeBundling = VIS4Earth::EdgeBundling();
@@ -1348,7 +1361,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
         compatibilityFuture.wait(); // 阻塞直到任务完成
     }
     // 在需要边绑定效果时才计算兼容性
-    // myGraph.buildCompatibilityListsIfNeeded();
+    myGraph->buildCompatibilityListsIfNeeded();
 
     edgeBundling.SetParameter(mybundlingParam);
     edgeBundling.EdgeBundle();
@@ -1399,7 +1412,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     copyGraphData(nodes, edges);
 
     // 添加图到渲染器中
-    addGraph("LoadedGraph", nodes, edges);
+    addGraphForBundling("LoadedGraph", nodes, edges);
     // 更新图渲染
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
@@ -2683,7 +2696,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
         p = vec3ToSphere(p);
         auto sphere = new osg::ShapeDrawable(
-            new osg::Sphere(p, itr->second.size * .10f * nodeGeomSize), tessl);
+            new osg::Sphere(p, itr->second.size * .050f * nodeGeomSize), tessl);
         osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
         centerData->push_back(itr->second.pos);
         sphere->setUserData(centerData);
@@ -3877,11 +3890,32 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
                                        lodEdgesData[targetMaxNodeLevel]);
                 }
             }
+            
+            // 重新绘制几何体
+            std::unordered_map<std::string, VIS4Earth::Node> graphNodes;
+            for (auto itr = graphParam->nodes->begin(); itr != graphParam->nodes->end(); ++itr) {
+                graphNodes.insert(std::pair<std::string, VIS4Earth::Node>(
+                    std::string(itr->first),
+                    VIS4Earth::Node(itr->second.pos.x(), itr->second.pos.y(), itr->second.level)));
+            }
+            std::vector<VIS4Earth::Edge> garphEdges;
+
+            for (auto itr = graphParam->edges->begin(); itr != graphParam->edges->end(); ++itr) {
+                osg::Vec3 fromPos = graphParam->nodes->at(itr->from).pos;
+                osg::Vec3 toPos = graphParam->nodes->at(itr->to).pos;
+                glm::vec3 from = glm::vec3(fromPos.x(), fromPos.y(), 0.f);
+                glm::vec3 to = glm::vec3(toPos.x(), toPos.y(), 0.f);
+                garphEdges.push_back(VIS4Earth::Edge(itr->from, itr->to, from, to, itr->weight));
+            }
+            auto graphSetLOD = std::make_shared<VIS4Earth::Graph>();
+            graphSetLOD->set(graphNodes, garphEdges);
+            myGraph = graphSetLOD;
+            //compatibilityFuture = std::async(
+            //    std::launch::async, [this]() { myGraph->buildCompatibilityListsIfNeeded(); });
+            //showBundling();
             graphParam->update();
             sceneLabels.clear();
             cameraUpdate("LoadedGraph", cameraHeight);
-            // 重新绘制几何体
-            
         }
     }
 }
@@ -4012,6 +4046,7 @@ void VIS4Earth::GraphRenderer::generateBaseLODNodes(
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
 
     std::cout << "Generating LOD0 base representative nodes..." << std::endl;
+    static int lod0NodeCounter = 0;  // 用于生成唯一的数字ID
 
     for (const auto &regionPair : regionNodes) {
         int regionId = regionPair.first;
@@ -4032,8 +4067,8 @@ void VIS4Earth::GraphRenderer::generateBaseLODNodes(
         if (!regionInfo)
             continue;
 
-        // 创建区域质心代表节点
-        std::string repNodeId = "lod0_" + simplifyRegionName(regionInfo->regionName);
+        // 创建区域质心代表节点，使用数字ID
+        std::string repNodeId = std::to_string(lod0NodeCounter++);
         Node repNode;
 
         // 使用计算出的质心位置
@@ -4046,7 +4081,7 @@ void VIS4Earth::GraphRenderer::generateBaseLODNodes(
         repNode.size = 3.0f; // 较大尺寸
         repNode.degree = static_cast<int>(nodeIds.size());
         repNode.cluster = regionId;
-        repNode.label = simplifyRegionName(regionInfo->regionName);
+        repNode.label = simplifyRegionName(regionInfo->regionName);  // 描述性文本放在label中
 
         (*lodNodes)[repNodeId] = repNode;
 
@@ -4062,6 +4097,7 @@ void VIS4Earth::GraphRenderer::addLOD1Nodes(
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
 
     std::cout << "Adding LOD1 actual important nodes..." << std::endl;
+    static int lod1NodeCounter = 10000;  // LOD1节点ID从10000开始，避免与LOD0冲突
 
     for (const auto &regionPair : regionNodes) {
         int regionId = regionPair.first;
@@ -4078,9 +4114,13 @@ void VIS4Earth::GraphRenderer::addLOD1Nodes(
             auto nodeIt = allNodes->find(nodeId);
             if (nodeIt != allNodes->end()) {
                 Node actualNode = nodeIt->second;               // 复制实际节点
-                actualNode.id = "lod1_" + nodeId;               // 添加LOD1前缀
+                actualNode.id = std::to_string(lod1NodeCounter++);  // 使用数字ID
                 actualNode.color = osg::Vec3(0.0f, 0.8f, 1.0f); // 蓝色
                 actualNode.size = 2.0f;                         // 中等尺寸
+                // 保持原有节点的label
+                if (actualNode.label.empty()) {
+                    actualNode.label = nodeId;  // 如果原节点没有label，使用原始ID作为label
+                }
 
                 (*lodNodes)[actualNode.id] = actualNode;
 
@@ -4098,32 +4138,39 @@ void VIS4Earth::GraphRenderer::addLOD2Nodes(
     const std::map<int, std::vector<std::string>> &regionNodes,
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
 
-    std::cout << "Adding LOD2 detailed actual nodes..." << std::endl;
+    std::cout << "Adding LOD2 detailed nodes..." << std::endl;
+    static int lod2NodeCounter = 20000;  // LOD2节点ID从20000开始，避免与LOD0/LOD1冲突
 
     for (const auto &regionPair : regionNodes) {
         int regionId = regionPair.first;
         const std::vector<std::string> &nodeIds = regionPair.second;
 
-        // 选择所有level<=2且degree>中等阈值的节点
+        // 选择每个区域内的详细节点
+        // 标准：level <= 2 的所有节点
         std::vector<std::string> detailedNodes =
             selectRepresentativeNodes(nodeIds, allNodes, 10, 0, 2 // 最多10个，level 0-2
             );
 
-        // 添加这些实际节点到LOD2
+        // 添加这些详细节点到LOD2
         for (const std::string &nodeId : detailedNodes) {
             auto nodeIt = allNodes->find(nodeId);
             if (nodeIt != allNodes->end()) {
                 Node actualNode = nodeIt->second;               // 复制实际节点
-                actualNode.id = "lod2_" + nodeId;               // 添加LOD2前缀
-                actualNode.color = osg::Vec3(0.0f, 1.0f, 0.6f); // 绿色
-                actualNode.size = 1.5f;                         // 标准尺寸
+                actualNode.id = std::to_string(lod2NodeCounter++);  // 使用数字ID
+                actualNode.color = osg::Vec3(0.2f, 1.0f, 0.2f); // 绿色
+                actualNode.size = 1.5f;                         // 较小尺寸
+                // 保持原有节点的label
+                if (actualNode.label.empty()) {
+                    actualNode.label = nodeId;  // 如果原节点没有label，使用原始ID作为label
+                }
 
                 (*lodNodes)[actualNode.id] = actualNode;
+
+                std::cout << "Added LOD2 node: " << actualNode.label
+                          << " (degree=" << actualNode.degree << ", level=" << actualNode.level
+                          << ")" << std::endl;
             }
         }
-
-        std::cout << "Added " << detailedNodes.size() << " LOD2 nodes for region " << regionId
-                  << std::endl;
     }
 }
 
@@ -4153,6 +4200,8 @@ void VIS4Earth::GraphRenderer::generateLOD0Edges(
     std::shared_ptr<std::vector<Edge>> lodEdges, std::map<int, std::string> &regionRepresentatives,
     std::shared_ptr<std::vector<Edge>> allEdges,
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
+
+    static int lod0EdgeCounter = 0;  // 用于生成唯一的边ID
 
     // 计算区域间连接并生成聚合边
     std::map<std::pair<int, int>, int> regionConnections;
@@ -4212,7 +4261,7 @@ void VIS4Earth::GraphRenderer::generateLOD0Edges(
         }
 
         Edge aggregatedEdge;
-        aggregatedEdge.id = "lod0_agg_" + std::to_string(region1) + "_" + std::to_string(region2);
+        aggregatedEdge.id = std::to_string(lod0EdgeCounter++);  // 使用数字ID
         aggregatedEdge.from = regionRepresentatives[region1];
         aggregatedEdge.to = regionRepresentatives[region2];
         aggregatedEdge.weight = totalWeight;
@@ -4221,8 +4270,9 @@ void VIS4Earth::GraphRenderer::generateLOD0Edges(
 
         lodEdges->push_back(aggregatedEdge);
 
-        std::cout << "Created LOD0 aggregated edge between regions " << region1 << " and "
-                  << region2 << " with weight=" << totalWeight << std::endl;
+        std::cout << "Created LOD0 aggregated edge " << aggregatedEdge.id 
+                  << " between regions " << region1 << " and " << region2 
+                  << " with weight=" << totalWeight << std::endl;
     }
 }
 
@@ -4234,13 +4284,15 @@ void VIS4Earth::GraphRenderer::generateLOD1Edges(
     std::map<int, std::string> &regionRepresentatives, std::shared_ptr<std::vector<Edge>> allEdges,
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
 
+    static int lod1EdgeCounter = 10000;  // LOD1边ID从10000开始，避免与LOD0冲突
+
     // 为LOD1实际节点生成直接连接
-    std::set<std::string> lod1NodeIds;
+    std::map<std::string, std::string> originalToLOD1;  // 映射原始ID到LOD1 ID
     for (const auto &nodePair : *lodNodes) {
-        if (nodePair.first.find("lod1_") == 0) {
-            // 提取原始节点ID
-            std::string originalId = nodePair.first.substr(5); // 移除"lod1_"前缀
-            lod1NodeIds.insert(originalId);
+        const std::string &lod1Id = nodePair.first;
+        const Node &node = nodePair.second;
+        if (!node.label.empty()) {
+            originalToLOD1[node.label] = lod1Id;  // 使用label（原始ID）建立映射
         }
     }
 
@@ -4249,15 +4301,16 @@ void VIS4Earth::GraphRenderer::generateLOD1Edges(
         if (!edge.visible)
             continue;
 
-        if (lod1NodeIds.find(edge.from) != lod1NodeIds.end() &&
-            lod1NodeIds.find(edge.to) != lod1NodeIds.end()) {
+        auto fromIt = originalToLOD1.find(edge.from);
+        auto toIt = originalToLOD1.find(edge.to);
 
+        if (fromIt != originalToLOD1.end() && toIt != originalToLOD1.end()) {
             // 这是LOD1节点间的边，添加到LOD1边集合
             Edge lod1Edge = edge;
-            lod1Edge.id = "lod1_" + edge.id;
-            lod1Edge.from = "lod1_" + edge.from;
-            lod1Edge.to = "lod1_" + edge.to;
-            lod1Edge.maxHeight = 45000.0f; // 中等高度
+            lod1Edge.id = std::to_string(lod1EdgeCounter++);  // 使用数字ID
+            lod1Edge.from = fromIt->second;  // 使用新的LOD1节点ID
+            lod1Edge.to = toIt->second;      // 使用新的LOD1节点ID
+            lod1Edge.maxHeight = 45000.0f;   // 中等高度
 
             lodEdges->push_back(lod1Edge);
         }
@@ -4271,6 +4324,8 @@ void VIS4Earth::GraphRenderer::generateLOD2Edges(
     std::shared_ptr<std::vector<Edge>> allEdges,
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
 
+    static int lod2EdgeCounter = 20000;  // LOD2边ID从20000开始，避免与LOD0/LOD1冲突
+
     // 第一步：继承LOD1的所有边
     if (lodEdgesData[1]) {
         for (const auto &lod1Edge : *lodEdgesData[1]) {
@@ -4280,46 +4335,32 @@ void VIS4Earth::GraphRenderer::generateLOD2Edges(
         std::cout << "Inherited " << lodEdgesData[1]->size() << " edges from LOD1" << std::endl;
     }
 
-    // 第二步：获取LOD2新增节点ID集合（不包括继承的LOD1节点）
-    std::set<std::string> lod2NewNodeIds;
+    // 第二步：建立原始ID到LOD2 ID的映射
+    std::map<std::string, std::string> originalToLOD2;  // 映射原始ID到LOD2 ID
     for (const auto &nodePair : *lodNodes) {
-        if (nodePair.first.find("lod2_") == 0) {
-            std::string originalId = nodePair.first.substr(5); // 移除"lod2_"前缀
-            lod2NewNodeIds.insert(originalId);
+        const std::string &lod2Id = nodePair.first;
+        const Node &node = nodePair.second;
+        if (!node.label.empty()) {
+            originalToLOD2[node.label] = lod2Id;  // 使用label（原始ID）建立映射
         }
     }
-
-    std::cout << "LOD2 has " << lod2NewNodeIds.size() << " new nodes beyond LOD1" << std::endl;
 
     // 第三步：添加涉及LOD2新增节点的边
     for (const auto &edge : *allEdges) {
         if (!edge.visible)
             continue;
 
-        bool fromIsNew = lod2NewNodeIds.find(edge.from) != lod2NewNodeIds.end();
-        bool toIsNew = lod2NewNodeIds.find(edge.to) != lod2NewNodeIds.end();
+        auto fromIt = originalToLOD2.find(edge.from);
+        auto toIt = originalToLOD2.find(edge.to);
 
-        // 只添加至少一端是LOD2新增节点的边，并且两端都在当前LOD2节点集合中
-        if ((fromIsNew || toIsNew)) {
-            // 检查两端节点是否都在LOD2节点集合中
-            bool fromExists = lodNodes->find("lod2_" + edge.from) != lodNodes->end() ||
-                              lodNodes->find("lod1_" + edge.from) != lodNodes->end() ||
-                              lodNodes->find("lod0_" + edge.from.substr(edge.from.find("_") + 1)) !=
-                                  lodNodes->end();
-            bool toExists =
-                lodNodes->find("lod2_" + edge.to) != lodNodes->end() ||
-                lodNodes->find("lod1_" + edge.to) != lodNodes->end() ||
-                lodNodes->find("lod0_" + edge.to.substr(edge.to.find("_") + 1)) != lodNodes->end();
+        if (fromIt != originalToLOD2.end() && toIt != originalToLOD2.end()) {
+            Edge lod2Edge = edge;
+            lod2Edge.id = std::to_string(lod2EdgeCounter++);  // 使用数字ID
+            lod2Edge.from = fromIt->second;  // 使用新的LOD2节点ID
+            lod2Edge.to = toIt->second;      // 使用新的LOD2节点ID
+            lod2Edge.maxHeight = 30000.0f;   // 较低高度
 
-            if (fromExists && toExists) {
-                Edge lod2Edge = edge;
-                lod2Edge.id = "lod2_" + edge.id;
-                lod2Edge.from = "lod2_" + edge.from;
-                lod2Edge.to = "lod2_" + edge.to;
-                lod2Edge.maxHeight = 30000.0f; // 较低高度
-
-                lodEdges->push_back(lod2Edge);
-            }
+            lodEdges->push_back(lod2Edge);
         }
     }
 
@@ -4439,7 +4480,7 @@ bool VIS4Earth::GraphRenderer::extractCameraBounds(osg::Camera *camera,
         return false;
 
     // 简化的地面投影计算
-    double groundRadius = bounds.cameraHeight * 0.8; // 简化估算系数
+    double groundRadius = bounds.cameraHeight *1.0; // 简化估算系数
     double latOffset = (groundRadius / R_earth) * 180.0 / osg::PI;
     double lonOffset = latOffset;
 
@@ -4584,7 +4625,7 @@ void VIS4Earth::GraphRenderer::cullEdgesByVisibility(
         bool fromVisible = (fromIt != allNodes->end()) && fromIt->second.visible;
         bool toVisible = (toIt != allNodes->end()) && toIt->second.visible;
 
-        // 至少一端可见的边保留
+
         edge.visible = fromVisible && toVisible;
         if (edge.visible) {
             visibleEdgeCount++;

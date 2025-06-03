@@ -60,7 +60,6 @@ struct Edge {
     double width;
     std::vector<int> compatibleEdges;
     int weight;
-
     Edge(const std::string &mySourceLabel, const std::string &myTargetLabel,
          const glm::vec3 &myStart, const glm::vec3 &myEnd, double myWidth)
         : sourceLabel(mySourceLabel), targetLabel(myTargetLabel), start(myStart), end(myEnd),
@@ -491,9 +490,11 @@ struct Graph {
     }
 
     void buildCompatibilityListsIfNeeded() {
-        std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
-            buildCompatibilityLists();               // (3) 实际初始化逻辑
-        });
+        buildCompatibilityLists(); // (3) 实际初始化逻辑
+
+        //std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
+        //    buildCompatibilityLists();               // (3) 实际初始化逻辑
+        //});
     }
 
     static double distance(const glm::vec3 &v1, const glm::vec3 &v2) {

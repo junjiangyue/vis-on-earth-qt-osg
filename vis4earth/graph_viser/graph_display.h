@@ -493,6 +493,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     void addGraph(const std::string &name, std::shared_ptr<std::map<std::string, Node>> nodes,
                   std::shared_ptr<std::vector<Edge>> edges);
+    void addGraphForBundling(const std::string &name,
+                             std::shared_ptr<std::map<std::string, Node>> nodes,
+                  std::shared_ptr<std::vector<Edge>> edges);
     PerGraphParam *getGraph(const std::string &name) {
         auto itr = graphs.find(name);
         if (itr == graphs.end())

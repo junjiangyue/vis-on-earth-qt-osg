@@ -156,11 +156,11 @@ class CameraMovementCallback : public osg::NodeCallback {
             dotProduct = std::max(-1.0, std::min(1.0, dotProduct)); // 限制在[-1,1]范围内
             double angle = acos(dotProduct) * 180.0 / osg::PI; // 转换为角度
             
-            viewDirectionChanged = angle > 1.0; // 视角变化阈值
+            viewDirectionChanged = angle > 10.0; // 视角变化阈值
         }
 
         // 当高度、位置或视角发生显著变化时更新LOD
-        if (heightChanged || positionChanged || viewDirectionChanged || isFirstCheck) {
+        if (heightChanged || viewDirectionChanged) {
             if (!camera || !_graphRenderer)
                 return;
                 
