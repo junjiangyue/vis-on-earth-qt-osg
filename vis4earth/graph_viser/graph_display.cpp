@@ -1962,6 +1962,13 @@ osg::Image *VIS4Earth::GraphRenderer::PerGraphParam::createLineDataTexture() {
     float *data = reinterpret_cast<float *>(image->data());
     int x = 0;
     for (auto &edge : *edges) {
+        // 第0行: 动画参数 (y=0.0)
+        int paramPos = (0 * texWidth + x) * 4;
+        data[paramPos] = edge.highlightPos; // highlightPos
+        data[paramPos + 1] = edge.speed;    // speed
+        data[paramPos + 2] = 0.0f;          // 保留
+        data[paramPos + 3] = 0.0f;          // 保留
+
         // 第1行: 起点 (y=1)
         int startPos = (1 * texWidth + x) * 4;
         auto realPos = vec3ToSphere(nodes->at(edge.from).pos);
@@ -2036,15 +2043,17 @@ class TextureBasedAnimationCallback : public osg::NodeCallback {
 
         // 更新本地缓存
         for (size_t i = 0; i < _lines->size(); ++i) {
-            // 独立更新每条线的高光位置
-            _lines->at(i).highlightPos =
-                fmod(_lines->at(i).highlightPos + _lines->at(i).speed * deltaTime, 1.1f);
+            // 更新高光位置
+            _lines->at(i).highlightPos += _lines->at(i).speed * deltaTime;
+            if (_lines->at(i).highlightPos >= 1.0f) {
+                _lines->at(i).highlightPos = 0.0f; // 重置到起点
+            }
 
             int baseIdx = i * 4;
-            _paramCache[baseIdx] = _lines->at(i).highlightPos;
-            _paramCache[baseIdx + 1] = _lines->at(i).speed;
-            _paramCache[baseIdx + 2] = 0.0f; // 保留
-            _paramCache[baseIdx + 3] = 0.0f; // 保留
+            _paramCache[baseIdx] = _lines->at(i).highlightPos; // 高光位置
+            _paramCache[baseIdx + 1] = _lines->at(i).speed;    // 速度
+            _paramCache[baseIdx + 2] = 0.0f;                   // 保留
+            _paramCache[baseIdx + 3] = 0.0f;                   // 保留
         }
 
         // 更新纹理（仅参数行）
@@ -2070,8 +2079,8 @@ class TextureBasedAnimationCallback : public osg::NodeCallback {
   private:
     osg::ref_ptr<osg::Image> _lineDataImage;
     std::shared_ptr<std::vector<GraphRenderer::Edge>> _lines;
-    std::vector<float> _paramCache; // 本地参数缓存
-    bool _firstFrame = true;
+    std::vector<float> _paramCache;
+    bool _firstFrame;
 };
 class TextureBasedAnimationColorCallback : public osg::NodeCallback {
   public:
@@ -2148,7 +2157,6 @@ varying vec3 vLineEnd;
 
 uniform sampler2D uLineDataTex;
 uniform float uTotalLines;
-varying vec4 vColor;
 
 void main() {
     vPosition = vertexPosition;
@@ -2158,7 +2166,7 @@ void main() {
     float texX = (lineID + 0.5) / uTotalLines;
     vLineStart = texture2D(uLineDataTex, vec2(texX, 0.25)).rgb;
     vLineEnd = texture2D(uLineDataTex, vec2(texX, 0.5)).rgb;
-    vColor = gl_Color;
+    
     gl_Position = gl_ModelViewProjectionMatrix * vec4(vertexPosition, 1.0);
 }
 )";
@@ -2169,49 +2177,62 @@ uniform sampler2D uLineDataTex;
 uniform float uTotalLines;
 uniform float uHighlightWidth;
 uniform vec4 uHighlightColor;
+uniform float uGlowIntensity;    // 发光强度
+uniform float uGlobalAlpha;      // 全局透明度
+uniform float uLineThickness;    // 线条粗细
 
 varying vec3 vPosition;
 varying float vLineID;
 varying vec3 vLineStart;
 varying vec3 vLineEnd;
-varying vec4 vColor;
 
 void main() {
-    
-    // 获取当前线段的高光位置
+    // 获取当前线段的动画参数
     float texX = (vLineID + 0.5) / uTotalLines;
     float highlightPos = texture2D(uLineDataTex, vec2(texX, 0.0)).r;
     
-    // 计算线段方向和长度
+    // 计算当前点在线段上的投影位置 [0,1]
     vec3 lineVec = vLineEnd - vLineStart;
     float lineLength = length(lineVec);
     vec3 lineDir = lineVec / lineLength;
-    
-    // 计算当前点在直线上的投影
     float t = dot(vPosition - vLineStart, lineDir) / lineLength;
     t = clamp(t, 0.0, 1.0);
     
-    // 计算到线段的真实距离（用于线宽控制）
+    // 计算到线段中心的距离（用于发光效果）
     vec3 projectedPos = vLineStart + t * lineVec;
-    float dist = length(vPosition - projectedPos);
-    float uHighlightl = lineLength/20;
+    float centerDistance = length(vPosition - projectedPos);
+    float glowRadius = uLineThickness * 2.0;
+    float glowFactor = 1.0 - smoothstep(0.0, glowRadius, centerDistance);
+    glowFactor = pow(glowFactor, 2.0); // 增强发光衰减
     
-    // 高光强度计算（仅在前向移动方向增强）
-    float highlightIntensity = 0.0;
-    if(t >= highlightPos - 0.10 && t <= highlightPos) {
-        float falloff = 1.0 - smoothstep(highlightPos - 0.05, highlightPos, t);
-        highlightIntensity = falloff * exp(-pow((highlightPos - t)/0.1, 2.0));
-    }
+    // 计算高光效果（使用更窄的高光区域和更强的亮度）
+    float dist = abs(t - highlightPos);
+    float highlightWidth = uHighlightWidth * 0.5; // 减小高光宽度，使其更集中
+    float highlightIntensity = 1.0 - smoothstep(0.0, highlightWidth, dist);
+    highlightIntensity = pow(highlightIntensity, 0.5); // 使高光更亮
     
-    // 基础颜色
-    vec4 baseColor = vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f);
-    // 最终颜色
-    gl_FragColor =mix(baseColor, uHighlightColor, highlightIntensity*1);
+    // 基础颜色（深蓝色）(0.8f, 0.6f, 0.2f, 1.0f)
+    vec4 baseColor = vec4(0.85f, 0.5f, 0.12f, uGlobalAlpha);
+    
+    // 发光效果
+    vec3 glowColor = baseColor.rgb * uGlowIntensity * glowFactor;
+    vec3 finalColor = baseColor.rgb + glowColor;
+    
+    // 高光颜色（明亮的白色）
+    vec3 highlightColorRGB = vec3(1.0, 1.0, 1.0) * 1.2; // 增强高光亮度
+    
+    // 混合高光（使用更强的混合比例）
+    finalColor = mix(finalColor, highlightColorRGB, highlightIntensity);
+    
+    // 最终透明度计算（增加高光处的透明度）
+    float finalAlpha = baseColor.a * (1.0 + glowFactor * 0.5 + highlightIntensity * 0.5);
+    finalAlpha = clamp(finalAlpha, 0.0, 1.0);
+    
+    gl_FragColor = vec4(finalColor, finalAlpha);
 }
 )";
 
     osg::ref_ptr<osg::Program> program = new osg::Program;
-    // 必须显式绑定属性位置
     program->addBindAttribLocation("vertexPosition", 0);
     program->addBindAttribLocation("lineID", 1);
     program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
@@ -2377,34 +2398,49 @@ void main() {
 void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
     if (isAnimating) {
         // 停止动画
-        if (lineGeode) {
-            lineGeode->setUpdateCallback(nullptr); // 将颜色设置为初始颜色
-            // 2. 直接重置几何体颜色（强制GPU更新）
-            osg::Geometry *geom = dynamic_cast<osg::Geometry *>(lineGeode->getDrawable(0));
-            if (geom) {
+        if (lineGeometry) {
+            lineGeometry->setUpdateCallback(nullptr);
+            //// 重置几何体颜色
+            // osg::Geometry *geom = dynamic_cast<osg::Geometry *>(lineGeode->getDrawable(0));
+            if (lineGeometry) {
                 osg::Vec4Array *colors = new osg::Vec4Array(1);
-                (*colors)[0] = osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f); // 初始蓝色
-                geom->setColorArray(colors, osg::Array::BIND_OVERALL);
-                geom->dirtyDisplayList(); // 比dirtyDisplayList()更彻底
+                (*colors)[0] = osg::Vec4(0.8f, 0.6f, 0.2f, 0.25f);
+                lineGeometry->setColorArray(colors, osg::Array::BIND_OVERALL);
+                lineGeometry->dirtyDisplayList();
             }
+            // 2. 使用 ref_ptr 确保线程安全
+            osg::ref_ptr<osg::StateSet> ss = lineGeometry->getOrCreateStateSet();
+            if (ss.valid()) {
+                // 3. 创建新的状态集合
+                osg::ref_ptr<osg::StateSet> newSS = new osg::StateSet(*ss);
 
-            // 3. 清除所有动画相关状态（关键！）
-            osg::StateSet *ss = lineGeode->getStateSet();
+                // 4. 在新的状态集合上进行修改
+                newSS->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
+                newSS->removeUniform("uHighlightColor");
+                newSS->removeAttribute(osg::StateAttribute::PROGRAM);
+                newSS->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+
+                // 5. 原子性地替换状态集合
+                lineGeometry->setStateSet(newSS);
+            }
+            // 清除动画状态
+            /*osg::StateSet *ss = lineGeometry->getOrCreateStateSet();
             if (ss) {
                 ss->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
-                ss->removeUniform("uHighlightColor");
-                ss->removeAttribute(osg::StateAttribute::PROGRAM); // 移除着色器
-                ss->setMode(GL_LIGHTING, osg::StateAttribute::ON); // 恢复光照
-                for (auto &edge : *edges) {
-                    edge.highlightPos = 0.0f;
-                }
-            }
+                ss->removeUniform("uHighlightColor");*/
+            // ss->removeAttribute(osg::StateAttribute::PROGRAM);
+            // ss->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+            // for (auto &edge : *edges) {
+            //     edge.highlightPos = 0.0f;
+            //     edge.speed = 0.5f; // 重置速度
+            // }
+            //}
         }
         isAnimating = false;
     } else {
         // 开始动画
         if (lineGeode && lineGeometry) {
-
+            // 创建并设置数据纹理
             osg::ref_ptr<osg::Image> lineDataImage = createLineDataTexture();
             osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
             lineDataTex->setImage(lineDataImage);
@@ -2412,20 +2448,48 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
             lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
             lineDataTex->setResizeNonPowerOfTwoHint(false);
 
-            // 禁用光照
-            auto arrowStates = lineGeode->getOrCreateStateSet();
+            // 设置着色器和状态
+            auto arrowStates = lineGeometry->getOrCreateStateSet();
             arrowStates->setAttributeAndModes(createTextureBasedShaderProgram(edges->size()),
                                               osg::StateAttribute::ON);
 
-            // 绑定纹理
+            // 启用透明度混合
+            osg::BlendFunc *blendFunc = new osg::BlendFunc();
+            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // 加法混合
+            arrowStates->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
+
+            // 禁用深度写入但保留深度测试
+            osg::Depth *depth = new osg::Depth();
+            depth->setWriteMask(false);
+            arrowStates->setAttributeAndModes(depth, osg::StateAttribute::ON);
+
+            // 设置渲染顺序
+            arrowStates->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+            arrowStates->setRenderBinDetails(10, "DepthSortedBin");
+
+            // 绑定纹理和uniform变量
             arrowStates->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
             arrowStates->addUniform(new osg::Uniform("uLineDataTex", 0));
             arrowStates->addUniform(
                 new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
-            arrowStates->addUniform(new osg::Uniform("uHighlightWidth", 20.f));
-            arrowStates->addUniform(
-                new osg::Uniform("uHighlightColor", osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)));
-            lineGeode->setUpdateCallback(new TextureBasedAnimationCallback(lineDataImage, edges));
+            arrowStates->addUniform(new osg::Uniform("uHighlightWidth", 0.05f)); // 增加高光宽度
+            arrowStates->addUniform(new osg::Uniform(
+                "uHighlightColor", osg::Vec4(1.2f, 1.2f, 1.2f, 1.0f))); // 增强高光亮度
+
+            // 发光和透明度控制参数
+            arrowStates->addUniform(new osg::Uniform("uGlowIntensity", 0.2f)); // 适当降低发光强度
+            arrowStates->addUniform(new osg::Uniform("uGlobalAlpha", 0.2f)); // 增加全局透明度
+            arrowStates->addUniform(new osg::Uniform("uLineThickness", 1.5f)); // 减小线条粗细
+
+            // 初始化每条边的动画参数
+            for (auto &edge : *edges) {
+                edge.highlightPos = 0.0f;
+                edge.speed = 0.3f; // 降低移动速度，使高光更容易观察
+            }
+
+            // 设置动画回调
+            lineGeometry->setUpdateCallback(
+                new TextureBasedAnimationCallback(lineDataImage, edges));
         }
         isAnimating = true;
     }
@@ -2936,7 +3000,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
             varying float vLineID;
             varying float vDistanceToCamera;
 
-            attribute float lineID; // 显式绑定 slot 3（在 C++ 中 addBindAttribLocation）
+            attribute float lineID; // 显式绑定 slot 1（在 C++ 中 addBindAttribLocation）
 
             void main() {
                 vec4 worldPos = gl_ModelViewMatrix * gl_Vertex;
@@ -3019,7 +3083,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
 
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
-        mEdgeProgram->addBindAttribLocation("lineID", 3); // lineID -> slot 3
+        mEdgeProgram->addBindAttribLocation("lineID", 1); // lineID -> slot 1
     }
 
     // 每次调用都为当前几何体设置StateSet和uniform参数
@@ -3158,8 +3222,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
             // 线性插值位置
             osg::Vec3 interpolatedPos;
-            interpolatedPos.x() = startPoint.x() * (1.0f - t) + endPoint.x() * t;
-            interpolatedPos.y() = startPoint.y() * (1.0f - t) + endPoint.y() * t;
+            interpolatedPos.x() =
+                fromNodeIt->second.pos.x() * (1.0f - t) + toNodeIt->second.pos.x() * t;
+            interpolatedPos.y() =
+                fromNodeIt->second.pos.y() * (1.0f - t) + toNodeIt->second.pos.y() * t;
 
             // 计算弧线高度
             float baseHeight = getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
@@ -3192,7 +3258,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
     // 设置VBO数据
     mEdgeGeometry->setVertexArray(mVertexArray);
-    mEdgeGeometry->setVertexAttribArray(3, mLineIDArray, osg::Array::BIND_PER_VERTEX);
+    mEdgeGeometry->setVertexAttribArray(0, mVertexArray, osg::Array::BIND_PER_VERTEX);
+    mEdgeGeometry->setVertexAttribArray(1, mLineIDArray, osg::Array::BIND_PER_VERTEX);
     mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
@@ -3200,6 +3267,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     // 设置绘制模式
     mEdgeGeometry->addPrimitiveSet(
         new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, mVertexArray->size()));
+    lineGeode = mEdgeGeode;
+    lineGeometry = mEdgeGeometry;
 
     std::cout << "Generated " << mVertexArray->size() << " vertices from " << edges->size()
               << " aggregated edges" << std::endl;
@@ -3328,7 +3397,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
 
     // 设置VBO数据
     mEdgeGeometry->setVertexArray(mVertexArray);
-    mEdgeGeometry->setVertexAttribArray(3, lineIDArray, osg::Array::BIND_PER_VERTEX);
+    mEdgeGeometry->setVertexAttribArray(1, lineIDArray, osg::Array::BIND_PER_VERTEX);
     mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
@@ -3336,8 +3405,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
     // 设置绘制模式
     mEdgeGeometry->addPrimitiveSet(
         new osg::DrawArrays(osg::PrimitiveSet::LINES, 0, mVertexArray->size()));
-    // lineGeode = mEdgeGeode;
-    // lineGeometry = mEdgeGeometry;
+    lineGeode = mEdgeGeode;
+    lineGeometry = mEdgeGeometry;
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::setRestriction(VIS4Earth::Area res) {
     restriction = res;
