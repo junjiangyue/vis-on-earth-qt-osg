@@ -2381,7 +2381,7 @@ void main() {
     }
     
     // 基础颜色
-    vec4 baseColor = vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f);
+    vec4 baseColor = vec4(0.85f, 0.5f, 0.12f, 0.2f);
     // 最终颜色
     gl_FragColor =mix(baseColor, uHighlightColor, highlightIntensity*1);
 }
@@ -2423,18 +2423,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
                 // 5. 原子性地替换状态集合
                 lineGeometry->setStateSet(newSS);
             }
-            // 清除动画状态
-            /*osg::StateSet *ss = lineGeometry->getOrCreateStateSet();
-            if (ss) {
-                ss->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
-                ss->removeUniform("uHighlightColor");*/
-            // ss->removeAttribute(osg::StateAttribute::PROGRAM);
-            // ss->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-            // for (auto &edge : *edges) {
-            //     edge.highlightPos = 0.0f;
-            //     edge.speed = 0.5f; // 重置速度
-            // }
-            //}
+            for (auto &edge : *edges) {
+                edge.highlightPos = 0.0f;
+                edge.speed = 0.3f; // 重置速度
+            }
         }
         isAnimating = false;
     } else {
@@ -2557,81 +2549,36 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
 }
 
 void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
-    /*if (mEdgeGeode && mEdgeGeometry) {
-        osg::StateSet *ss = mEdgeGeometry->getOrCreateStateSet();
-        osg::Uniform *enableHighlight = ss->getUniform("uEnableHighlight");
-
-        if (isAnimating) {
-            mEdgeGeometry->setUpdateCallback(nullptr);
-            if (enableHighlight)
-                enableHighlight->set(false);
-            isAnimating = false;
-        } else {
-             确保所有必要的Uniform都存在
-            osg::Uniform *lineDataTexUniform = ss->getUniform("uLineDataTex");
-            osg::Uniform *totalLinesUniform = ss->getUniform("uTotalLines");
-
-            if (!lineDataTexUniform) {
-                ss->addUniform(new osg::Uniform("uLineDataTex", 0));
-                lineDataTexUniform = ss->getUniform("uLineDataTex");
-            }
-
-            if (!totalLinesUniform) {
-                ss->addUniform(new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
-                totalLinesUniform = ss->getUniform("uTotalLines");
-            }
-
-            if (!enableHighlight) {
-                ss->addUniform(new osg::Uniform("uEnableHighlight", false));
-                enableHighlight = ss->getUniform("uEnableHighlight");
-            }
-
-            osg::ref_ptr<osg::Image> lineDataImage = createLineDataTexture();
-            osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
-            lineDataTex->setImage(lineDataImage);
-            lineDataTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
-            lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
-            lineDataTex->setResizeNonPowerOfTwoHint(false);
-
-            ss->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
-
-             安全地设置Uniform值
-            if (lineDataTexUniform)
-                lineDataTexUniform->set(0);
-            if (totalLinesUniform)
-                totalLinesUniform->set(static_cast<float>(edges->size()));
-            if (enableHighlight)
-                enableHighlight->set(true);
-
-            mEdgeGeometry->setUpdateCallback(
-                new TextureBasedAnimationCallback(lineDataImage, edges));
-            isAnimating = true;
-        }
-    }*/
 
     if (lineGeode && lineGeometry) {
         if (isAnimating) {
             // 当前正在动画中，结束动画
-            lineGeode->setUpdateCallback(nullptr); // 将颜色设置为初始颜色
+            lineGeometry->setUpdateCallback(nullptr); // 将颜色设置为初始颜色
             // 2. 直接重置几何体颜色（强制GPU更新）
-            osg::Geometry *geom = dynamic_cast<osg::Geometry *>(lineGeode->getDrawable(0));
-            if (geom) {
+            if (lineGeometry) {
                 osg::Vec4Array *colors = new osg::Vec4Array(1);
-                (*colors)[0] = osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f); // 初始蓝色
-                geom->setColorArray(colors, osg::Array::BIND_OVERALL);
-                geom->dirtyDisplayList(); // 比dirtyDisplayList()更彻底
+                (*colors)[0] = osg::Vec4(0.8f, 0.6f, 0.2f, 0.15f);
+                lineGeometry->setColorArray(colors, osg::Array::BIND_OVERALL);
+                lineGeometry->dirtyDisplayList(); // 比dirtyDisplayList()更彻底
             }
 
-            // 3. 清除所有动画相关状态（关键！）
-            osg::StateSet *ss = lineGeode->getStateSet();
-            if (ss) {
-                ss->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
-                ss->removeUniform("uHighlightColor");
-                ss->removeAttribute(osg::StateAttribute::PROGRAM); // 移除着色器
-                ss->setMode(GL_LIGHTING, osg::StateAttribute::ON); // 恢复光照
-                for (auto &edge : *edges) {
-                    edge.highlightPos = 0.0f;
-                }
+            osg::ref_ptr<osg::StateSet> ss = lineGeometry->getOrCreateStateSet();
+            if (ss.valid()) {
+                // 3. 创建新的状态集合
+                osg::ref_ptr<osg::StateSet> newSS = new osg::StateSet(*ss);
+
+                // 4. 在新的状态集合上进行修改
+                newSS->removeTextureAttribute(0, osg::StateAttribute::TEXTURE);
+                newSS->removeUniform("uHighlightColor");
+                newSS->removeAttribute(osg::StateAttribute::PROGRAM);
+                newSS->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
+
+                // 5. 原子性地替换状态集合
+                lineGeometry->setStateSet(newSS);
+            }
+            for (auto &edge : *edges) {
+                edge.highlightPos = 0.0f;
+                edge.speed = 0.3f; // 重置速度
             }
             isAnimating = false;
             // update(); // 重新绘制图形
@@ -2647,7 +2594,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
                 lineDataTex->setResizeNonPowerOfTwoHint(false);
 
                 // 禁用光照
-                auto arrowStates = lineGeode->getOrCreateStateSet();
+                auto arrowStates = lineGeometry->getOrCreateStateSet();
                 arrowStates->setAttributeAndModes(
                     createTextureBasedShaderProgramStarFlow(edges->size()),
                     osg::StateAttribute::ON);
@@ -2660,7 +2607,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
                 arrowStates->addUniform(new osg::Uniform("uHighlightWidth", 20.f));
                 arrowStates->addUniform(
                     new osg::Uniform("uHighlightColor", osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)));
-                lineGeode->setUpdateCallback(
+                lineGeometry->setUpdateCallback(
                     new TextureBasedAnimationCallback(lineDataImage, edges));
             }
             isAnimating = true;
