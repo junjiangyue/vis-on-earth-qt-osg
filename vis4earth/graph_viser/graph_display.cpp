@@ -1595,6 +1595,7 @@ void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {
 void VIS4Earth::GraphRenderer::onTextureFlowButtonClicked() {
     auto graphParam = getGraph("LoadedGraph");
     graphParam->startTextureAnimation();
+    // graphParam->startTextureFlowAnimation();
 }
 
 void VIS4Earth::GraphRenderer::onStarFlowButtonClicked() {
@@ -5029,3 +5030,266 @@ void VIS4Earth::GraphRenderer::PerGraphParam::setLineThickness(float thickness) 
 }
 
 // 更新边的VBO数据
+
+osg::Program *createTextureFlowShaderProgram() {
+    const char *vertexShaderSource = R"(
+        #version 120
+        attribute vec3 vertexPosition; // Vertex position in model space
+        attribute float lineID;       // Unique ID for each line segment
+
+        varying vec3 v_LineStart;     // Start position of the current line
+        varying vec3 v_LineEnd;       // End position of the current line
+        varying vec3 v_Position;      // Vertex position to be passed to fragment shader
+
+        uniform sampler2D uLineDataTex; // Texture containing line start/end data
+        uniform float uTotalLines;    // Total number of lines for texture coordinate calculation
+
+        void main()
+        {
+            v_Position = vertexPosition;
+            // Calculate texture X coordinate to fetch line start/end from uLineDataTex
+            float texX = (lineID + 0.5) / uTotalLines; 
+            v_LineStart = texture2D(uLineDataTex, vec2(texX, 0.25)).rgb;
+            v_LineEnd = texture2D(uLineDataTex, vec2(texX, 0.5)).rgb;
+
+            // Standard model-view-projection transformation
+            gl_Position = gl_ModelViewProjectionMatrix * vec4(vertexPosition, 1.0);
+        }
+    )";
+
+    const char *fragmentShaderSource = R"(
+        #version 120
+        uniform sampler2D baseTexture; // The flowing arrow texture (on texture unit 1)
+        uniform float u_time;          // Time uniform for animation
+
+        varying vec3 v_Position;       // Current fragment's position
+        varying vec3 v_LineStart;      // Start position of the current line
+        varying vec3 v_LineEnd;        // End position of the current line
+
+        void main()
+        {
+            if (length(v_LineEnd - v_LineStart) < 0.0001) { // Avoid division by zero for zero-length lines
+                 discard;
+            }
+            vec3 lineDir = normalize(v_LineEnd - v_LineStart);
+            float lineLength = length(v_LineEnd - v_LineStart);
+            
+            // Project current fragment position onto the line to get 't' [0,1]
+            float t = dot(v_Position - v_LineStart, lineDir) / lineLength;
+            t = clamp(t, 0.0, 1.0); // Ensure t is within [0,1]
+
+            // Animate texture coordinate along the line
+            // The texture S coordinate scrolls with time.
+            // V coordinate is 0.5 for using the middle of the texture.
+            vec2 texCoord = vec2(t * 2.0 + u_time, 0.5); // t*2.0 to make texture repeat more often along the line if desired, adjust as needed
+
+            gl_FragColor = texture2D(baseTexture, texCoord);
+            // For potentially better alpha blending with existing glow:
+            // vec4 texColor = texture2D(baseTexture, texCoord);
+            // gl_FragColor = vec4(texColor.rgb, texColor.a * 0.7); // Modulate alpha
+        }
+    )";
+
+    osg::ref_ptr<osg::Program> program = new osg::Program;
+    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("lineID", 1); // Make sure lineID is bound
+    program->addShader(new osg::Shader(osg::Shader::VERTEX, vertexShaderSource));
+    program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragmentShaderSource));
+    return program.release();
+}
+
+// Insert TextureFlowAnimationCallback class definition here
+
+class TextureFlowAnimationCallback : public osg::NodeCallback {
+  public:
+    TextureFlowAnimationCallback(osg::Uniform *timeUniform)
+        : _timeUniform(timeUniform), _startTime(-1.0), _pausedTime(0.0), _isPaused(false) {}
+
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        if (!_timeUniform || !nv || !nv->getFrameStamp()) {
+            traverse(node, nv);
+            return;
+        }
+
+        double currentTime = nv->getFrameStamp()->getSimulationTime();
+
+        if (_isPaused) {
+            traverse(node, nv);
+            return;
+        }
+
+        if (_startTime < 0.0) {
+            _startTime = currentTime;
+        }
+
+        float timeVal =
+            static_cast<float>((currentTime - _startTime) * 0.2f); // Animation speed factor
+        _timeUniform->set(timeVal);
+
+        traverse(node, nv);
+    }
+
+    void pause() {
+        if (!_isPaused) {
+            _isPaused = true;
+            double currentTime = osg::Timer::instance()->time_s();
+            if (_startTime >= 0.0) {
+                _pausedTime = currentTime - _startTime;
+            } else {
+                _pausedTime = 0.0;
+            }
+        }
+    }
+
+    void resume() {
+        if (_isPaused) {
+            _isPaused = false;
+            double currentTime = osg::Timer::instance()->time_s();
+            _startTime = currentTime - _pausedTime;
+        }
+    }
+
+    void reset() {
+        _startTime = -1.0;
+        _pausedTime = 0.0;
+        _isPaused = false; // Ensure it's not stuck in paused state if reset is called externally
+        if (_timeUniform.valid())
+            _timeUniform->set(0.0f);
+    }
+
+  private:
+    osg::ref_ptr<osg::Uniform> _timeUniform;
+    double _startTime;
+    double _pausedTime;
+    bool _isPaused;
+};
+
+void VIS4Earth::GraphRenderer::PerGraphParam::startTextureFlowAnimation() {
+    if (isTextureFlowAnimating) {
+        OSG_NOTIFY(osg::INFO) << "Stopping Texture Flow Animation." << std::endl;
+        if (lineGeometry) {
+            // Pause and remove our specific callback
+            if (textureFlowCallback.valid()) {
+                // Check if the current callback is ours before removing,
+                // or simply remove all if this function manages the callback exclusively.
+                if (lineGeometry->getUpdateCallback() == textureFlowCallback.get()) {
+                    lineGeometry->setUpdateCallback(nullptr);
+                }
+                // We might want to keep the callback instance if we intend to resume it with its
+                // previous state intact Or clear it: textureFlowCallback = nullptr;
+            } else {
+                // If no specific callback reference, just remove any existing one.
+                lineGeometry->setUpdateCallback(nullptr);
+            }
+
+            osg::ref_ptr<osg::StateSet> currentSS = lineGeometry->getStateSet();
+            if (currentSS.valid()) {
+                osg::ref_ptr<osg::StateSet> newSS = new osg::StateSet(*currentSS);
+
+                // Remove attributes specific to texture flow animation
+                newSS->removeTextureAttribute(
+                    1, osg::StateAttribute::TEXTURE); // baseTexture was on unit 1
+                newSS->removeUniform("baseTexture");
+                newSS->removeUniform("u_time");
+
+                // Remove the shader program. This assumes this animation was the one that set it.
+                // If multiple effects might be active, program management needs to be more
+                // sophisticated.
+                newSS->removeAttribute(osg::StateAttribute::PROGRAM);
+
+                // Restore default blend state (typically OFF)
+                newSS->setMode(GL_BLEND, osg::StateAttribute::OFF);
+                osg::BlendFunc *defaultBlendFunc =
+                    new osg::BlendFunc(); // Default (GL_ONE, GL_ZERO)
+                newSS->setAttributeAndModes(defaultBlendFunc, osg::StateAttribute::OVERRIDE |
+                                                                  osg::StateAttribute::ON);
+
+                // Restore default depth state (typically write enabled, test LESS)
+                osg::Depth *defaultDepth = new osg::Depth();
+                defaultDepth->setWriteMask(true);
+                defaultDepth->setFunction(osg::Depth::LESS);
+                newSS->setAttributeAndModes(defaultDepth, osg::StateAttribute::OVERRIDE |
+                                                              osg::StateAttribute::ON);
+
+                newSS->setRenderingHint(osg::StateSet::DEFAULT_BIN);
+
+                lineGeometry->setStateSet(newSS);
+                lineGeometry->dirtyDisplayList();
+            }
+        }
+        isTextureFlowAnimating = false;
+    } else {
+        OSG_NOTIFY(osg::INFO) << "开始纹理流动动画." << std::endl;
+
+        if (lineGeode && lineGeometry) {
+            // 创建线数据纹理（几何信息）
+            lineDataImageForGeom = createLineDataTexture();
+            osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
+            lineDataTex->setImage(lineDataImageForGeom);
+            lineDataTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+            lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+            lineDataTex->setResizeNonPowerOfTwoHint(false);
+
+            // 加载箭头流动纹理
+            osg::ref_ptr<osg::Image> arrowTextureImage =
+                osgDB::readImageFile("D:/A-my-work/vis-qt-osg/vis-on-earth-qt-osg-master-ui/"
+                                     "bug-fix/improved_arrow_texture.png");
+            if (!arrowTextureImage.valid()) {
+                OSG_NOTIFY(osg::WARN)
+                    << "无法加载纹理文件: improved_arrow_texture.png" << std::endl;
+                isTextureFlowAnimating = false;
+                return;
+            }
+
+            osg::ref_ptr<osg::Texture2D> arrowTexture = new osg::Texture2D;
+            arrowTexture->setImage(arrowTextureImage);
+            arrowTexture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+            arrowTexture->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP_TO_EDGE);
+            arrowTexture->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+            arrowTexture->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+
+            // 获取状态集
+            osg::ref_ptr<osg::StateSet> stateSet = lineGeometry->getOrCreateStateSet();
+
+            // 设置着色器程序
+            stateSet->setAttributeAndModes(createTextureFlowShaderProgram(),
+                                           osg::StateAttribute::ON);
+
+            // 绑定纹理单元
+            stateSet->setTextureAttributeAndModes(0, lineDataTex,
+                                                  osg::StateAttribute::ON); // 线几何数据纹理
+            stateSet->setTextureAttributeAndModes(1, arrowTexture,
+                                                  osg::StateAttribute::ON); // 箭头流动纹理
+
+            // 设置uniform变量
+            stateSet->addUniform(new osg::Uniform("uLineDataTex", 0));
+            stateSet->addUniform(new osg::Uniform("baseTexture", 1));
+            stateSet->addUniform(
+                new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
+
+            // 创建时间uniform
+            osg::ref_ptr<osg::Uniform> timeUniform = new osg::Uniform("u_time", 0.0f);
+            stateSet->addUniform(timeUniform);
+
+            // 设置透明混合
+            stateSet->setMode(GL_BLEND, osg::StateAttribute::ON);
+            osg::ref_ptr<osg::BlendFunc> blendFunc = new osg::BlendFunc();
+            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            stateSet->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
+            stateSet->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+
+            // 设置深度测试
+            osg::ref_ptr<osg::Depth> depth = new osg::Depth();
+            depth->setWriteMask(false); // 禁用深度写入但保留深度测试
+            stateSet->setAttributeAndModes(depth, osg::StateAttribute::ON);
+
+            // 创建动画回调
+            textureFlowCallback = new TextureFlowAnimationCallback(timeUniform);
+            lineGeometry->setUpdateCallback(textureFlowCallback);
+
+            OSG_NOTIFY(osg::INFO) << "纹理流动动画设置完成." << std::endl;
+        }
+
+        isTextureFlowAnimating = true;
+    }
+}

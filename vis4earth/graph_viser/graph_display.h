@@ -306,6 +306,12 @@ class GraphRenderer : public QtOSGReflectableWidget {
         bool volStartFromLonZero;
         bool arrowFlowEnabled = false; // 标志变量
         bool isAnimating = false;
+        
+        // 纹理流动动画相关成员变量
+        bool isTextureFlowAnimating = false;
+        osg::ref_ptr<osg::NodeCallback> textureFlowCallback;
+        osg::ref_ptr<osg::Image> lineDataImageForGeom;
+        
         std::shared_ptr<std::map<std::string, Node>> nodes;                           // 当前nodes
         std::shared_ptr<std::vector<Edge>> edges;                                     // 当前edges
         std::shared_ptr<std::map<std::string, std::vector<std::string>>> nodeMapping; // 节点映射
@@ -396,6 +402,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void startHighlightAnimation();
         void startTextureAnimation();
         void startStarAnimation();
+        void startTextureFlowAnimation(); // 新增纹理流动动画函数
         void setRestriction(VIS4Earth::Area res);
         bool setLongitudeRange(float minLonDeg, float maxLonDeg);
 
