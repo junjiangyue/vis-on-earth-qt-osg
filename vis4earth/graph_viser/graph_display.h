@@ -68,7 +68,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
     VIS4Earth::EdgeBundling::BundlingParam mybundlingParam = {
         mybundlingParam.K = 0.1,
         mybundlingParam.I = 90,
-        mybundlingParam.cycles = 5,
+        mybundlingParam.cycles = 3,
         mybundlingParam.iter = 90,
         mybundlingParam.compatibilityThreshold = 0.6,
         mybundlingParam.smoothWidth = 3,

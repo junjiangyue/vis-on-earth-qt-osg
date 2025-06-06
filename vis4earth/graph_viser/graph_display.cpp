@@ -2234,7 +2234,7 @@ void main() {
 )";
 
     osg::ref_ptr<osg::Program> program = new osg::Program;
-    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("vertexPosition", 2);
     program->addBindAttribLocation("lineID", 1);
     program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
     program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
@@ -2307,7 +2307,7 @@ void main() {
 
     osg::ref_ptr<osg::Program> program = new osg::Program;
     // 必须显式绑定属性位置
-    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("vertexPosition", 2);
     program->addBindAttribLocation("lineID", 1);
     program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
     program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
@@ -2390,7 +2390,7 @@ void main() {
 
     osg::ref_ptr<osg::Program> program = new osg::Program;
     // 必须显式绑定属性位置
-    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("vertexPosition", 2);
     program->addBindAttribLocation("lineID", 1);
     program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
     program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
@@ -2950,6 +2950,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
             varying float vLineID;
             varying float vDistanceToCamera;
 
+            attribute vec3 vertexPosition;
             attribute float lineID; // 显式绑定 slot 1（在 C++ 中 addBindAttribLocation）
 
             void main() {
@@ -3034,6 +3035,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
         mEdgeProgram->addBindAttribLocation("lineID", 1); // lineID -> slot 1
+        mEdgeProgram->addBindAttribLocation("vertexPosition", 2); // lineID -> slot 1
     }
 
     // 每次调用都为当前几何体设置StateSet和uniform参数
@@ -3208,7 +3210,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
     // 设置VBO数据
     mEdgeGeometry->setVertexArray(mVertexArray);
-    mEdgeGeometry->setVertexAttribArray(0, mVertexArray, osg::Array::BIND_PER_VERTEX);
+    mEdgeGeometry->setVertexAttribArray(2, mVertexArray, osg::Array::BIND_PER_VERTEX);
     mEdgeGeometry->setVertexAttribArray(1, mLineIDArray, osg::Array::BIND_PER_VERTEX);
     mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
@@ -3348,6 +3350,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
     // 设置VBO数据
     mEdgeGeometry->setVertexArray(mVertexArray);
     mEdgeGeometry->setVertexAttribArray(1, lineIDArray, osg::Array::BIND_PER_VERTEX);
+    mEdgeGeometry->setVertexAttribArray(2, mVertexArray, osg::Array::BIND_PER_VERTEX);
     mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
@@ -5091,7 +5094,7 @@ osg::Program *createTextureFlowShaderProgram() {
     )";
 
     osg::ref_ptr<osg::Program> program = new osg::Program;
-    program->addBindAttribLocation("vertexPosition", 0);
+    program->addBindAttribLocation("vertexPosition", 2);
     program->addBindAttribLocation("lineID", 1); // Make sure lineID is bound
     program->addShader(new osg::Shader(osg::Shader::VERTEX, vertexShaderSource));
     program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragmentShaderSource));
