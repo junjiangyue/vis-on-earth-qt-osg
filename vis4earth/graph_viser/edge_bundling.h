@@ -8,6 +8,7 @@
 #include <vector>
 #include <vis4earth/graph_viser/graph.h>
 #include <chrono>
+#include <omp.h>
 
 namespace VIS4Earth {
 class EdgeBundling {
@@ -139,15 +140,21 @@ class EdgeBundling {
         size_t maxNeighbors = 0;
         size_t minNeighbors = (size_t)-1;
         // 3. 静电力计算
+        #pragma omp parallel for
         for (int edgeIdx = 0; edgeIdx < edgesNum; ++edgeIdx) {
             for (int subdivIdx = 0; subdivIdx < (int)edges[edgeIdx].subdivs.size(); ++subdivIdx) {
                 glm::vec3 pos = edges[edgeIdx].subdivs[subdivIdx];
                 auto neighbors = quadtree.query(pos, radius);
                 size_t nsize = neighbors.size();
+                #pragma omp atomic
                 totalQueries++;
+                #pragma omp atomic
                 totalNeighbors += nsize;
-                if (nsize > maxNeighbors) maxNeighbors = nsize;
-                if (nsize < minNeighbors) minNeighbors = nsize;
+                #pragma omp critical
+                {
+                    if (nsize > maxNeighbors) maxNeighbors = nsize;
+                    if (nsize < minNeighbors) minNeighbors = nsize;
+                }
                 for (const auto &n : neighbors) {
                     int nEdgeIdx = n.first;
                     if (nEdgeIdx == edgeIdx)

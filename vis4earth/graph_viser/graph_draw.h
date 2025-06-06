@@ -65,7 +65,7 @@ class CityLoader {
             geode = createOBBBox(obb, latLonBounds, scale);
 
             // 将建筑物添加到场景的根节点中
-            // root->addChild(geode);
+            root->addChild(geode);
         }
         calculateHeightMap(coords, latLonBounds);
     }
@@ -163,64 +163,73 @@ class CityLoader {
         return osg::Vec3(latConverted, lonConverted, z);
     }
 
-    // 创建建筑物的 OBB 边框
+    // 创建建筑物
     osg::ref_ptr<osg::Geode> createOBBBox(const std::vector<osg::Vec3> &obb,
                                           const std::vector<std::pair<float, float>> &latLonBounds,
                                           float scale) {
-
         auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-            // v3.x() 是纬度，v3.y() 是经度
-            float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-            float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
-
-            float h = 6371000.0f + v3.z(); // 固定为地球半径，单位为米
+            float lat = osg::DegreesToRadians(v3.x());
+            float lon = osg::DegreesToRadians(v3.y());
+            float h = 6371000.0f + v3.z();
 
             osg::Vec3 ret;
-            ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
-
-            h = h * cosf(lat); // 根据纬度调整水平投影的半径
-
-            ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-            ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
-
+            ret.z() = h * sinf(lat);
+            h = h * cosf(lat);
+            ret.y() = h * sinf(lon);
+            ret.x() = h * cosf(lon);
             return ret;
         };
-        auto geom = new osg::Geometry;
-        osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array();
+
+        osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
+        osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
 
         for (const auto &point : obb) {
             vertices->push_back(vec3ToSphere(convertToLatLon(point, latLonBounds, scale)));
         }
-        geom->setVertexArray(vertices);
+        geom->setVertexArray(vertices.get());
 
-        // 创建连接各顶点的线条
-        osg::ref_ptr<osg::DrawElementsUInt> indices = new osg::DrawElementsUInt(GL_LINES, 24);
-        for (size_t i = 0; i < 4; ++i) {
-            (*indices)[i * 2 + 0] = i;
-            (*indices)[i * 2 + 1] = (i + 1) % 4;
-        }
-        for (size_t i = 4; i < 8; ++i) {
-            (*indices)[(i - 4) * 2 + 0] = i;
-            (*indices)[(i - 4) * 2 + 1] = (i + 1) % 4 + 4;
-        }
-        for (size_t i = 0; i < 4; ++i) {
-            (*indices)[8 + i * 2 + 0] = i;
-            (*indices)[8 + i * 2 + 1] = i + 4;
-        }
+        // 绘制五个面（排除底面）
+        osg::ref_ptr<osg::DrawElementsUInt> faces = new osg::DrawElementsUInt(GL_QUADS);
 
-        geom->addPrimitiveSet(indices);
-        // 创建一个新的 Geode 并添加几何体
-        osg::ref_ptr<osg::Geode> geode = new osg::Geode();
+        // 顶面 (4, 5, 6, 7)
+        faces->push_back(4);
+        faces->push_back(5);
+        faces->push_back(6);
+        faces->push_back(7);
+
+        // 四个侧面
+        faces->push_back(0);
+        faces->push_back(1);
+        faces->push_back(5);
+        faces->push_back(4); // 前
+        faces->push_back(1);
+        faces->push_back(2);
+        faces->push_back(6);
+        faces->push_back(5); // 右
+        faces->push_back(2);
+        faces->push_back(3);
+        faces->push_back(7);
+        faces->push_back(6); // 后
+        faces->push_back(3);
+        faces->push_back(0);
+        faces->push_back(4);
+        faces->push_back(7); // 左
+
+        geom->addPrimitiveSet(faces.get());
+
+        // 设置颜色（淡蓝，带透明）
+        osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array;
+        colors->push_back(osg::Vec4(0.2f, 0.5f, 1.0f, 0.6f)); // 半透明蓝
+        geom->setColorArray(colors.get(), osg::Array::BIND_OVERALL);
+
+        // 设置状态
+        osg::ref_ptr<osg::StateSet> ss = geom->getOrCreateStateSet();
+        ss->setMode(GL_BLEND, osg::StateAttribute::ON);
+        ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        ss->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+
+        osg::ref_ptr<osg::Geode> geode = new osg::Geode;
         geode->addDrawable(geom);
-
-        // 设置线条的颜色为红色
-        osg::ref_ptr<osg::StateSet> stateSet = geode->getOrCreateStateSet();
-        stateSet->setMode(GL_LIGHTING, osg::StateAttribute::OFF);
-        stateSet->setMode(GL_BLEND, osg::StateAttribute::OFF); // 开启混合模式
-        // 设置线条宽度
-        osg::ref_ptr<osg::LineWidth> lineWidth = new osg::LineWidth(2.0f); // 线条宽度为2
-        stateSet->setAttribute(lineWidth.get());
-
         return geode;
     }
 };
