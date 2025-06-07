@@ -1,6 +1,7 @@
 ﻿#ifndef VIS4EARTH_COMMON_GRAPH_H
 #define VIS4EARTH_COMMON_GRAPH_H
 
+#include "spatial_grid_bundling.h"
 #include <algorithm>
 #include <cmath>
 #include <future>
@@ -34,6 +35,7 @@ struct Node {
     glm::vec3 force;
     int level;
     std::string name;
+    std::string color;
 
     Node()
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0), pos(0.0f),
@@ -48,6 +50,10 @@ struct Node {
     Node(double x, double y, double level, std::string name)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name) {}
+    Node(double x, double y, double level, std::string name, std::string color)
+        : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
+          pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name),
+          color(color) {}
 };
 
 struct Edge {
@@ -433,8 +439,34 @@ struct Graph {
 
     void buildCompatibilityLists() {
         int edgesNum = static_cast<int>(edges.size());
+        if (edgesNum == 0)
+            return;
+        // 1. 计算所有边的中点
+        std::vector<glm::vec3> edgeMids(edgesNum);
+        float minX = edges[0].start.x, maxX = edges[0].start.x;
+        float minY = edges[0].start.y, maxY = edges[0].start.y;
         for (int i = 0; i < edgesNum; ++i) {
-            for (int j = i + 1; j < edgesNum; ++j) {
+            edgeMids[i] = (edges[i].start + edges[i].end) * 0.5f;
+            minX = std::min(minX, std::min(edges[i].start.x, edges[i].end.x));
+            maxX = std::max(maxX, std::max(edges[i].start.x, edges[i].end.x));
+            minY = std::min(minY, std::min(edges[i].start.y, edges[i].end.y));
+            maxY = std::max(maxY, std::max(edges[i].start.y, edges[i].end.y));
+        }
+        float cellSize = (maxX - minX + maxY - minY) / (2.0f * std::sqrt((float)edgesNum));
+        if (cellSize < 1e-6f)
+            cellSize = 1.0f;
+        // 用四叉树分区
+        VIS4Earth::QuadtreeBundling quadtree(minX, minY, maxX, maxY, 16, 12);
+        for (int i = 0; i < edgesNum; ++i) {
+            quadtree.insert(i, 0, edgeMids[i]);
+        }
+        // 2. 只对空间邻近的边对计算兼容性
+        for (int i = 0; i < edgesNum; ++i) {
+            auto neighbors = quadtree.query(edgeMids[i], cellSize * 1.5f);
+            for (const auto &n : neighbors) {
+                int j = n.first;
+                if (j <= i)
+                    continue; // 避免重复
                 double comp = Edge::angleCompatibility(edges[i], edges[j]) *
                               Edge::scaleCompatibility(edges[i], edges[j]) *
                               Edge::positionCompatibility(edges[i], edges[j]) *
@@ -492,9 +524,9 @@ struct Graph {
     void buildCompatibilityListsIfNeeded() {
         buildCompatibilityLists(); // (3) 实际初始化逻辑
 
-        //std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
-        //    buildCompatibilityLists();               // (3) 实际初始化逻辑
-        //});
+        // std::call_once(compatibilityFlag, [this]() { // (2) 保证仅执行一次
+        //     buildCompatibilityLists();               // (3) 实际初始化逻辑
+        // });
     }
 
     static double distance(const glm::vec3 &v1, const glm::vec3 &v2) {

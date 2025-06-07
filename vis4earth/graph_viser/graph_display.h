@@ -67,9 +67,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     VIS4Earth::EdgeBundling::BundlingParam mybundlingParam = {
         mybundlingParam.K = 0.1,
-        mybundlingParam.I = 90,
-        mybundlingParam.cycles = 5,
-        mybundlingParam.iter = 90,
+        mybundlingParam.I = 50,
+        mybundlingParam.cycles = 3,
+        mybundlingParam.iter = 50,
         mybundlingParam.compatibilityThreshold = 0.6,
         mybundlingParam.smoothWidth = 3,
         mybundlingParam.S = 0.4,
@@ -278,7 +278,14 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     // 调试函数
     void debugEarthGridStatus();
-    void debugNodeCoordinates(std::shared_ptr<std::map<std::string, Node>> nodes, int maxSamples = 10);
+    void debugNodeCoordinates(std::shared_ptr<std::map<std::string, Node>> nodes,
+                              int maxSamples = 10);
+
+    void generateAggregatedEdgesForLOD(int lodLevel,
+                                       std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                                       std::shared_ptr<std::vector<Edge>> lodEdges,
+                                       std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                       std::shared_ptr<std::vector<Edge>> allEdges);
 
     // std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
   private:
@@ -299,6 +306,12 @@ class GraphRenderer : public QtOSGReflectableWidget {
         bool volStartFromLonZero;
         bool arrowFlowEnabled = false; // 标志变量
         bool isAnimating = false;
+        
+        // 纹理流动动画相关成员变量
+        bool isTextureFlowAnimating = false;
+        osg::ref_ptr<osg::NodeCallback> textureFlowCallback;
+        osg::ref_ptr<osg::Image> lineDataImageForGeom;
+        
         std::shared_ptr<std::map<std::string, Node>> nodes;                           // 当前nodes
         std::shared_ptr<std::vector<Edge>> edges;                                     // 当前edges
         std::shared_ptr<std::map<std::string, std::vector<std::string>>> nodeMapping; // 节点映射
@@ -389,6 +402,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
         void startHighlightAnimation();
         void startTextureAnimation();
         void startStarAnimation();
+        void startTextureFlowAnimation(); // 新增纹理流动动画函数
         void setRestriction(VIS4Earth::Area res);
         bool setLongitudeRange(float minLonDeg, float maxLonDeg);
 
@@ -415,10 +429,27 @@ class GraphRenderer : public QtOSGReflectableWidget {
         // LOD相关方法 - 只保留setActiveLODDataSource，用于接收外部设置的数据
         void setActiveLODDataSource(int targetMaxLevel);
 
+        // 发光效果控制方法
+        void setGlowIntensity(float intensity);
+        void setGlobalAlpha(float alpha);
+        void setLineThickness(float thickness);
+
         // 地理LOD处理函数
         void generateGeographicLODData(int lodLevel,
                                        std::shared_ptr<std::map<std::string, Node>> allNodes,
                                        std::shared_ptr<std::vector<Edge>> allEdges);
+
+        // 为指定LOD级别生成聚合边
+        void generateAggregatedEdgesForLOD(int lodLevel,
+                                           std::shared_ptr<std::map<std::string, Node>> lodNodes,
+                                           std::shared_ptr<std::vector<Edge>> lodEdges,
+                                           std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                           std::shared_ptr<std::vector<Edge>> allEdges);
+
+        // 生成基于地理分区的LOD数据
+        void generateGeographicLODDataOld(int lodLevel,
+                                          std::shared_ptr<std::map<std::string, Node>> allNodes,
+                                          std::shared_ptr<std::vector<Edge>> allEdges);
 
         // 实用函数
         float deg2Rad(float deg) { return deg * osg::PI / 180.f; };
