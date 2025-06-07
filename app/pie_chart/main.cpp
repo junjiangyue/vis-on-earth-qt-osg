@@ -96,293 +96,257 @@
 //     std::cerr << errMsg << std::endl;
 //     return 1;
 // }
+#include <cmath>
 #include <osg/Geode>
 #include <osg/Geometry>
-#include <osg/LineWidth>
-#include <osg/NodeCallback>
+#include <osg/PositionAttitudeTransform>
 #include <osg/Program>
-#include <osg/Shader>
+#include <osg/StateSet>
+#include <osg/TexEnv>
 #include <osg/Texture2D>
-#include <osg/Vec3>
+#include <osg/Uniform>
 #include <osgDB/ReadFile>
+#include <osgDB/WriteFile>
 #include <osgViewer/Viewer>
-#include <osgViewer/ViewerEventHandlers>
 
-// 线条数据结构
-struct LineSegment {
-    osg::Vec3 start;
-    osg::Vec3 end;
-    float highlightPos; // 0.0到1.0之间的高光位置
-    float speed;
-};
+// 创建一条简单的正弦曲线几何体
+osg::ref_ptr<osg::Geometry> createCurveGeometry() {
+    osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
+    osg::ref_ptr<osg::Vec2Array> texcoords = new osg::Vec2Array;
 
-class TextureBasedAnimationCallback : public osg::NodeCallback {
-  public:
-    TextureBasedAnimationCallback(osg::Image *lineDataImage, const std::vector<LineSegment> &lines)
-        : _lineDataImage(lineDataImage), _lines(lines), _firstFrame(true) {
-        // 预分配足够大小的缓存
-        _paramCache.resize(lines.size() * 4); // 每个线条4个float(RGBA)
+    int count = 200;
+    float length = 10.0f;
+    for (int i = 0; i < count; ++i) {
+        float t = float(i) / (count - 1);
+        float x = t * length;
+        float y = std::sin(t * osg::PI * 2.0f);
+        vertices->push_back(osg::Vec3(x, y, 0.0f));
+        texcoords->push_back(osg::Vec2(t * 5.0f, 0.5f)); // U坐标拉伸，V恒定
     }
 
-    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) {
-        static double lastTime = nv->getFrameStamp()->getSimulationTime();
+    osg::ref_ptr<osg::Geometry> geometry = new osg::Geometry;
+    geometry->setVertexArray(vertices);
+    geometry->setTexCoordArray(0, texcoords);
+    geometry->addPrimitiveSet(new osg::DrawArrays(GL_LINE_STRIP, 0, count));
+    return geometry;
+}
 
-        double currentTime = nv->getFrameStamp()->getSimulationTime();
-        // 首次运行初始化时间
-        if (_firstFrame) {
-            lastTime = currentTime;
-            _firstFrame = false;
-            return; // 跳过第一帧更新
-        }
-        double deltaTime = currentTime - lastTime;
-        lastTime = currentTime;
+// 创建 Shader 程序
+osg::ref_ptr<osg::Program> createShaderProgram() {
+    const char *vertexShaderSource = R"(
+         #version 120
+         varying vec2 v_TexCoord;
+         void main()
+         {
+             gl_Position = ftransform();
+             v_TexCoord = gl_MultiTexCoord0.xy;
+         }
+     )";
 
-        // 更新本地缓存
-        for (size_t i = 0; i < _lines.size(); ++i) {
-            // 独立更新每条线的高光位置
-            _lines[i].highlightPos =
-                fmod(_lines[i].highlightPos + _lines[i].speed * deltaTime, 1.0f);
+    const char *fragmentShaderSource = R"(
+         #version 120
+         uniform sampler2D baseTexture;
+         uniform float u_time;
+         varying vec2 v_TexCoord;
+         void main()
+         {
+             vec2 coord = v_TexCoord;
+             coord.x += u_time;
+             gl_FragColor = texture2D(baseTexture, coord);
+         }
+     )";
 
-            int baseIdx = i * 4;
-            _paramCache[baseIdx] = _lines[i].highlightPos;
-            _paramCache[baseIdx + 1] = _lines[i].speed;
-            _paramCache[baseIdx + 2] = 0.0f; // 保留
-            _paramCache[baseIdx + 3] = 0.0f; // 保留
-        }
+    osg::ref_ptr<osg::Program> program = new osg::Program;
+    program->addShader(new osg::Shader(osg::Shader::VERTEX, vertexShaderSource));
+    program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragmentShaderSource));
+    return program;
+}
+class TimeUpdateCallback : public osg::NodeCallback {
+  public:
+    TimeUpdateCallback(osg::Uniform *timeUniform) : _timeUniform(timeUniform), _startTime(-1.0) {}
 
-        // 更新纹理（仅参数行）
-        if (_lineDataImage.valid()) {
-            float *data = reinterpret_cast<float *>(_lineDataImage->data());
-            if (data) {
-                const int rowStride = _lineDataImage->s() * 4;
-                for (size_t i = 0; i < _lines.size(); ++i) {
-                    int dstPos = i * 4; // 第0行参数
-                    int srcPos = i * 4;
-                    data[dstPos] = _paramCache[srcPos];
-                    data[dstPos + 1] = _paramCache[srcPos + 1];
-                    data[dstPos + 2] = _paramCache[srcPos + 2];
-                    data[dstPos + 3] = _paramCache[srcPos + 3];
-                }
-                _lineDataImage->dirty();
-            }
-        }
+    virtual void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+        double current = nv->getFrameStamp()->getReferenceTime();
+        if (_startTime < 0.0)
+            _startTime = current; // 第一次记录
 
+        float time = fmod((current - _startTime) * 0.5f, 1.0f);
+        _timeUniform->set(time);
         traverse(node, nv);
     }
 
   private:
-    osg::ref_ptr<osg::Image> _lineDataImage;
-    std::vector<LineSegment> _lines;
-    std::vector<float> _paramCache; // 本地参数缓存
-    bool _firstFrame = true;
+    osg::ref_ptr<osg::Uniform> _timeUniform;
+    double _startTime;
 };
-// 创建着色器程序（纹理版本）
-osg::Program *createTextureBasedShaderProgram(int lineCount) {
-    std::string vertSource = R"(
-#version 120
-attribute vec3 vertexPosition;
-attribute float lineID;
-
-varying vec3 vPosition;
-varying float vLineID;
-varying vec3 vLineStart;
-varying vec3 vLineEnd;
-
-uniform sampler2D uLineDataTex;
-uniform float uTotalLines;
-
-void main() {
-    vPosition = vertexPosition;
-    vLineID = lineID;
-    
-    // 从纹理获取当前线段的起点终点
-    float texX = (lineID + 0.5) / uTotalLines;
-    vLineStart = texture2D(uLineDataTex, vec2(texX, 0.25)).rgb;
-    vLineEnd = texture2D(uLineDataTex, vec2(texX, 0.5)).rgb;
-    
-    gl_Position = gl_ModelViewProjectionMatrix * vec4(vertexPosition, 1.0);
-}
-)";
-
-    std::string fragSource = R"(
-#version 120
-uniform sampler2D uLineDataTex;
-uniform float uTotalLines;
-uniform float uHighlightWidth;
-uniform vec4 uHighlightColor;
-
-varying vec3 vPosition;
-varying float vLineID;
-varying vec3 vLineStart;
-varying vec3 vLineEnd;
-
-void main() {
-    // 获取当前线段的高光位置
-    float texX = (vLineID + 0.5) / uTotalLines;
-    float highlightPos = texture2D(uLineDataTex, vec2(texX, 0.0)).r;
-    
-    // 计算线段方向和长度
-    vec3 lineVec = vLineEnd - vLineStart;
-    float lineLength = length(lineVec);
-    vec3 lineDir = lineVec / lineLength;
-    
-    // 计算当前点在直线上的投影
-    float t = dot(vPosition - vLineStart, lineDir) / lineLength;
-    t = clamp(t, 0.0, 1.0);
-    
-    // 计算到线段的真实距离（用于线宽控制）
-    vec3 projectedPos = vLineStart + t * lineVec;
-    float dist = length(vPosition - projectedPos);
-    //if(dist > uHighlightWidth) discard;
-    
-    // 高光强度计算（仅在前向移动方向增强）
-    float highlightIntensity = 0.0;
-    if(t >= highlightPos - uHighlightWidth && t <= highlightPos) {
-        float falloff = 1.0 - smoothstep(highlightPos - uHighlightWidth, highlightPos, t);
-        highlightIntensity = falloff * exp(-pow((highlightPos - t)/0.05, 2.0));
-    }
-    
-    // 基础颜色
-    vec4 baseColor = vec4(0.2, 0.2, 1.0, 1.0);
-    
-    // 最终颜色
-    gl_FragColor = mix(baseColor, uHighlightColor, highlightIntensity);
-}
-)";
-
-    osg::ref_ptr<osg::Program> program = new osg::Program;
-    // 必须显式绑定属性位置
-    program->addBindAttribLocation("vertexPosition", 0);
-    program->addBindAttribLocation("lineID", 1);
-    program->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
-    program->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
-    return program.release();
-}
-
-// 创建线条几何体（每个线段3个顶点）
-osg::Geometry *createMultiLineGeometry(const std::vector<LineSegment> &lines) {
-    osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
-    osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
-    osg::ref_ptr<osg::FloatArray> lineIDs = new osg::FloatArray;
-
-    for (size_t i = 0; i < lines.size(); ++i) {
-        // 起点、中点、终点
-        vertices->push_back(lines[i].start);
-        vertices->push_back((lines[i].start + lines[i].end) * 0.5f);
-        vertices->push_back(lines[i].end);
-
-        lineIDs->push_back(static_cast<float>(i));
-        lineIDs->push_back(static_cast<float>(i));
-        lineIDs->push_back(static_cast<float>(i));
-    }
-
-    geom->setVertexArray(vertices);
-    // 修改顶点属性设置
-    geom->setVertexAttribArray(0, vertices, osg::Array::BIND_PER_VERTEX);
-    geom->setVertexAttribArray(1, lineIDs, osg::Array::BIND_PER_VERTEX);
-
-    osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array;
-    colors->push_back(osg::Vec4(0.2f, 0.2f, 1.0f, 1.0f));
-    geom->setColorArray(colors, osg::Array::BIND_OVERALL);
-    geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_STRIP, 0, vertices->size()));
-    // for (size_t i = 0; i < lines.size(); ++i) {
-    //     geom->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINE_STRIP, i * 3, 3));
-    // }
-
-    osg::ref_ptr<osg::LineWidth> linewidth = new osg::LineWidth(2.0f);
-    geom->getOrCreateStateSet()->setAttributeAndModes(linewidth, osg::StateAttribute::ON);
-
-    return geom.release();
-}
-
-osg::Image *createLineDataTexture(const std::vector<LineSegment> &lines) {
-    int texWidth = lines.size();
-    int texHeight = 4; // 使用4行存储不同参数
-
-    osg::Image *image = new osg::Image;
-    image->allocateImage(texWidth, texHeight, 1, GL_RGBA, GL_FLOAT);
-    image->setInternalTextureFormat(GL_RGBA32F_ARB);
-
-    // 初始填充0
-    memset(image->data(), 0, texWidth * texHeight * 4 * sizeof(float));
-
-    // 初始化静态数据(起点/终点)
-    float *data = reinterpret_cast<float *>(image->data());
-    for (int x = 0; x < texWidth; ++x) {
-        // 第1行: 起点 (y=1)
-        int startPos = (1 * texWidth + x) * 4;
-        data[startPos] = lines[x].start.x();
-        data[startPos + 1] = lines[x].start.y();
-        data[startPos + 2] = lines[x].start.z();
-        data[startPos + 3] = 1.0f;
-
-        // 第2行: 终点 (y=2)
-        int endPos = (2 * texWidth + x) * 4;
-        data[endPos] = lines[x].end.x();
-        data[endPos + 1] = lines[x].end.y();
-        data[endPos + 2] = lines[x].end.z();
-        data[endPos + 3] = 1.0f;
-    }
-
-    return image;
-}
-
-osg::Node *createTextureBasedAnimatedLines(const std::vector<LineSegment> &lines) {
-    // 创建几何体
-    osg::ref_ptr<osg::Geometry> geom = createMultiLineGeometry(lines);
+int main() {
+    osg::ref_ptr<osg::Geometry> curve = createCurveGeometry();
     osg::ref_ptr<osg::Geode> geode = new osg::Geode;
-    geode->addDrawable(geom);
+    geode->addDrawable(curve);
 
-    // 创建数据纹理
-    osg::ref_ptr<osg::Image> lineDataImage = createLineDataTexture(lines);
-    osg::ref_ptr<osg::Texture2D> lineDataTex = new osg::Texture2D;
-    lineDataTex->setImage(lineDataImage);
-    lineDataTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
-    lineDataTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
-    lineDataTex->setResizeNonPowerOfTwoHint(false);
+    osg::ref_ptr<osg::StateSet> stateSet = geode->getOrCreateStateSet();
 
-    // 设置着色器
-    osg::StateSet *ss = geode->getOrCreateStateSet();
-    ss->setAttributeAndModes(createTextureBasedShaderProgram(lines.size()),
-                             osg::StateAttribute::ON);
+    // 加载纹理
+    osg::ref_ptr<osg::Image> image = osgDB::readImageFile(
+        "D:/A-my-work/vis-qt-osg/vis-on-earth-qt-osg-master-ui/bug-fix/improved_arrow_texture.png");
+    osg::ref_ptr<osg::Texture2D> texture = new osg::Texture2D(image);
+    texture->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+    texture->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP);
+    texture->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+    texture->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+    stateSet->setTextureAttributeAndModes(0, texture, osg::StateAttribute::ON);
 
-    // 绑定纹理
-    ss->setTextureAttributeAndModes(0, lineDataTex, osg::StateAttribute::ON);
-    ss->addUniform(new osg::Uniform("uLineDataTex", 0));
-    ss->addUniform(new osg::Uniform("uTotalLines", static_cast<float>(lines.size())));
-    ss->addUniform(new osg::Uniform("uHighlightWidth", 0.15f));
-    ss->addUniform(new osg::Uniform("uHighlightColor", osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)));
+    // 设置混合（支持透明）
+    stateSet->setMode(GL_BLEND, osg::StateAttribute::ON);
+    stateSet->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
 
-    // 设置回调
-    geode->setUpdateCallback(new TextureBasedAnimationCallback(lineDataImage, lines));
+    // 设置 Shader 程序
+    osg::ref_ptr<osg::Program> program = createShaderProgram();
+    stateSet->setAttributeAndModes(program, osg::StateAttribute::ON);
 
-    return geode.release();
+    // 设置时间 Uniform
+    osg::ref_ptr<osg::Uniform> timeUniform = new osg::Uniform("u_time", 0.0f);
+    stateSet->addUniform(timeUniform);
+
+    // Viewer 和更新回调
+    auto *viewer = new osgViewer::Viewer;
+    viewer->setUpViewInWindow(200, 50, 1000, 1000);
+
+    geode->addUpdateCallback(new TimeUpdateCallback(timeUniform.get()));
+    viewer->setSceneData(geode);
+
+    return viewer->run();
 }
-
-int main(int argc, char **argv) {
-    // 创建测试线条
-    std::vector<LineSegment> lines;
-    for (int i = 0; i < 10000; ++i) { // 测试1000条线
-        float y = static_cast<float>(i) * 0.1f - 50.0f;
-        LineSegment line;
-        line.start = osg::Vec3(-50.0f, y, 0.0f);
-        line.end = osg::Vec3(50.0f, y, 0.0f);
-        line.highlightPos = 0.0f;
-        // line.speed = 0.5f + static_cast<float>(i) * 0.002f;
-        line.speed = 0.5f;
-        lines.push_back(line);
-    }
-
-    // 创建场景
-    osg::ref_ptr<osg::Group> root = new osg::Group;
-    root->addChild(createTextureBasedAnimatedLines(lines));
-
-    // 设置查看器
-    osgViewer::Viewer viewer;
-    auto pStatsEventHandler = new osgViewer::StatsHandler; // 构造一视景器统计事件处理器
-    viewer.addEventHandler(pStatsEventHandler); // 向视景器增加统计事件处理器
-    viewer.setSceneData(root);
-    viewer.setUpViewInWindow(100, 100, 800, 600);
-
-    return viewer.run();
-}
+//
+// #include <cmath>
+// #include <osg/BlendFunc>
+// #include <osg/Geode>
+// #include <osg/Geometry>
+// #include <osg/Program>
+// #include <osg/StateSet>
+// #include <osg/Texture2D>
+// #include <osg/Uniform>
+// #include <osgDB/ReadFile>
+// #include <osgViewer/Viewer>
+//
+//// 构建带宽度的带状面片（triangle strip）
+// osg::ref_ptr<osg::Geometry> createArrowRibbon() {
+//     osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
+//     osg::ref_ptr<osg::Vec2Array> texcoords = new osg::Vec2Array;
+//
+//     int count = 100;
+//     float length = 10.0f;
+//     float halfWidth = 0.1f;
+//
+//     for (int i = 0; i < count; ++i) {
+//         float t = static_cast<float>(i) / (count - 1);
+//         float x = t * length;
+//         float y = std::sin(t * osg::PI * 2.0f);
+//
+//         osg::Vec3 center(x, y, 0.0f);
+//         osg::Vec3 normal(0.0f, 0.0f, 1.0f); // 假设 z 朝上
+//         osg::Vec3 tangent(1.0f, std::cos(t * osg::PI * 2.0f) * osg::PI * 2.0f, 0.0f);
+//         osg::Vec3 binormal = normal ^ tangent; // 叉乘求垂线
+//         binormal.normalize();
+//
+//         osg::Vec3 left = center - binormal * halfWidth;
+//         osg::Vec3 right = center + binormal * halfWidth;
+//
+//         vertices->push_back(left);
+//         texcoords->push_back(osg::Vec2(t * 5.0f, 0.0f));
+//
+//         vertices->push_back(right);
+//         texcoords->push_back(osg::Vec2(t * 5.0f, 1.0f));
+//     }
+//
+//     osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
+//     geom->setVertexArray(vertices);
+//     geom->setTexCoordArray(0, texcoords);
+//     geom->addPrimitiveSet(new osg::DrawArrays(GL_TRIANGLE_STRIP, 0, vertices->size()));
+//     return geom;
+// }
+//
+// osg::ref_ptr<osg::Program> createShaderProgram() {
+//     const char *vert = R"(
+//         #version 120
+//         varying vec2 v_TexCoord;
+//         void main() {
+//             gl_Position = ftransform();
+//             v_TexCoord = gl_MultiTexCoord0.xy;
+//         }
+//     )";
+//
+//     const char *frag = R"(
+//         #version 120
+//         uniform sampler2D baseTexture;
+//         uniform float u_time;
+//         varying vec2 v_TexCoord;
+//         void main() {
+//             vec2 coord = v_TexCoord;
+//             coord.x += u_time;
+//             gl_FragColor = texture2D(baseTexture, coord);
+//         }
+//     )";
+//
+//     osg::ref_ptr<osg::Program> prog = new osg::Program;
+//     prog->addShader(new osg::Shader(osg::Shader::VERTEX, vert));
+//     prog->addShader(new osg::Shader(osg::Shader::FRAGMENT, frag));
+//     return prog;
+// }
+//
+// class AnimateCallback : public osg::NodeCallback {
+//   public:
+//     AnimateCallback(osg::Uniform *timeUniform) : _uniform(timeUniform), _start(-1.0) {}
+//
+//     void operator()(osg::Node *node, osg::NodeVisitor *nv) override {
+//         if (!nv->getFrameStamp())
+//             return;
+//         double now = nv->getFrameStamp()->getSimulationTime();
+//         if (_start < 0.0)
+//             _start = now;
+//         float time = fmod((now - _start) * 0.5, 1.0);
+//         _uniform->set(time);
+//         traverse(node, nv);
+//     }
+//
+//   private:
+//     osg::ref_ptr<osg::Uniform> _uniform;
+//     double _start;
+// };
+//
+// int main() {
+//     auto geom = createArrowRibbon();
+//     auto geode = new osg::Geode;
+//     geode->addDrawable(geom);
+//
+//     osg::StateSet *ss = geode->getOrCreateStateSet();
+//
+//     // 加载纹理
+//     auto img = osgDB::readImageFile(
+//         "D:/A-my-work/vis-qt-osg/vis-on-earth-qt-osg-master-ui/bug-fix/improved_arrow_texture.png");
+//     auto tex = new osg::Texture2D(img);
+//     tex->setWrap(osg::Texture::WRAP_S, osg::Texture::REPEAT);
+//     tex->setWrap(osg::Texture::WRAP_T, osg::Texture::CLAMP);
+//     tex->setFilter(osg::Texture::MIN_FILTER, osg::Texture::LINEAR);
+//     tex->setFilter(osg::Texture::MAG_FILTER, osg::Texture::LINEAR);
+//     ss->setTextureAttributeAndModes(0, tex, osg::StateAttribute::ON);
+//
+//     // 设置透明混合
+//     ss->setMode(GL_BLEND, osg::StateAttribute::ON);
+//     ss->setAttributeAndModes(new osg::BlendFunc, osg::StateAttribute::ON);
+//     ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+//
+//     // Shader 和时间控制
+//     auto prog = createShaderProgram();
+//     ss->setAttributeAndModes(prog, osg::StateAttribute::ON);
+//     auto u_time = new osg::Uniform("u_time", 0.0f);
+//     ss->addUniform(u_time);
+//
+//     // 回调更新动画
+//     geode->addUpdateCallback(new AnimateCallback(u_time));
+//
+//     osgViewer::Viewer viewer;
+//     viewer.setUpViewInWindow(200, 50, 1000, 1000);
+//     viewer.setSceneData(geode);
+//     return viewer.run();
+// }
