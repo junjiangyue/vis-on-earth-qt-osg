@@ -44,15 +44,18 @@ struct Node {
     Node(double x, double y)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f) {}
-    Node(double x, double y, int level)
+    Node(double x, double y, double h,int level)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
-          pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level) {}
+          pos(x, y, h), vel(1.0f), acc(1.0f), force(0.0f), level(level) {}
+    Node(double x, double y, double h, int level, std::string color)
+        : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
+          pos(x, y, h), vel(1.0f), acc(1.0f), force(0.0f), level(level), color(color) {}
     Node(double x, double y, double level, std::string name)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
           pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name) {}
-    Node(double x, double y, double level, std::string name, std::string color)
+    Node(double x, double y, double h,double level, std::string name, std::string color)
         : degree(0), radius(1), mass(1.0), repulsion(1.0), stiffness(1.0), damping(1.0),
-          pos(x, y, 0.0), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name),
+          pos(x, y, h), vel(1.0f), acc(1.0f), force(0.0f), level(level), name(name),
           color(color) {}
 };
 

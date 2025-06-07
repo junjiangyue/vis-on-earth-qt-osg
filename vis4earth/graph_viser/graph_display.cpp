@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <osgText/Font>
 #include <set>
+#include <memory>
 
 using namespace VIS4Earth;
 static std::array<float, 2> lonRng = {-90.f, 90.f};
@@ -772,6 +773,19 @@ void hexToRGBf(const std::string &hex, float &r, float &g, float &b) {
     g = gi / 255.0f;
     b = bi / 255.0f;
 }
+std::string rgbToHex(float r, float g, float b) {
+    // 将 [0.0, 1.0] 范围的 r, g, b 转换为 [0, 255] 范围
+    int ri = static_cast<int>(r * 255);
+    int gi = static_cast<int>(g * 255);
+    int bi = static_cast<int>(b * 255);
+
+    // 使用 ostringstream 拼接每个分量的 16 进制字符串
+    std::ostringstream oss;
+    oss << "#" << (ri < 16 ? "0" : "") << std::hex << ri << (gi < 16 ? "0" : "") << std::hex << gi
+        << (bi < 16 ? "0" : "") << std::hex << bi;
+
+    return oss.str();
+}
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     //   加载城市建筑物的 OBB 数据
     VIS4Earth::CityLoader cityLoader;
@@ -787,9 +801,9 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
 
     // 设置比例因子，将建筑物的尺寸映射到地球表面
     float scale = 1000.f; // 可调整的比例因子，根据需要调整
-
+    int targetMaxNodeLevel = getCurrentLevel(cameraHeightPresent);
     // 绘制建筑物
-    cityLoader.drawBuildings(param.grp, latLonBounds, scale);
+    cityLoader.drawBuildings(param.grp, latLonBounds, scale, targetMaxNodeLevel);
     heightMap = cityLoader.getHeightMap();
 
     QString pointsFileName = ui->pointsFilePath->text();
@@ -828,14 +842,17 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
         size_t i = 0;
         for (auto itr = graph->getNodes().begin(); itr != graph->getNodes().end(); ++itr) {
             VIS4Earth::GraphRenderer::Node node;
-            node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, 0.f);
+            node.pos = osg::Vec3(itr->second.pos.x, itr->second.pos.y, itr->second.pos.z);
             float r, g, b;
             hexToRGBf(itr->second.color, r, g, b);
             node.color = osg::Vec3(r, g, b);
             node.id = itr->first;
             node.level = itr->second.level;
-            levelIndex[node.level].push_back(node.id);
-            levelNodeIndex[node.level].push_back(node);
+            if (node.level < 100) {
+                levelIndex[node.level].push_back(node.id);
+                levelNodeIndex[node.level].push_back(node);
+            }
+            
             nodes->emplace(std::make_pair(itr->first, node));
             earthGrid.insertNodeIntoGrid(node);
             ++i;
@@ -883,7 +900,6 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
 
             // 初始化LOD数据 (在GraphRenderer层面)
             this->initializeLODData(nodes, edges);
-
             updateActiveLOD(cameraHeightPresent);
             // graphParam->update();
             sceneLabels.clear();
@@ -1428,7 +1444,8 @@ void VIS4Earth::GraphRenderer::showBundling() {
     // 更新图渲染
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
-        updateGraphParameters(graphParam);
+        graphParam->currentLODLevel = 3;
+        updateGraphParameters(graphParam); 
         cameraUpdate("LoadedGraph", cameraHeightPresent);
     }
 }
@@ -1464,9 +1481,10 @@ void VIS4Earth::GraphRenderer::copyGraphData(std::shared_ptr<std::map<std::strin
     size_t i = 0;
     for (const auto &itr : myGraph->getNodes()) {
         Node node;
-        node.pos = osg::Vec3(itr.second.pos.x, itr.second.pos.y, 0.f);
-        node.color = colors[i];
+        node.pos = osg::Vec3(itr.second.pos.x, itr.second.pos.y, itr.second.pos.z);
+        hexToRGBf(itr.second.color, node.color.x(), node.color.y(), node.color.z());
         node.id = itr.first;
+        node.level = itr.second.level;
         nodes->emplace(itr.first, node);
         ++i;
     }
@@ -1476,14 +1494,14 @@ void VIS4Earth::GraphRenderer::copyGraphData(std::shared_ptr<std::map<std::strin
         edge.from = itr.sourceLabel;
         edge.to = itr.targetLabel;
         if (itr.subdivs.empty()) {
-            edge.subDivs.emplace_back(osg::Vec3(itr.start.x, itr.start.y, 0.f));
-            edge.subDivs.emplace_back(osg::Vec3(itr.end.x, itr.end.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr.start.x, itr.start.y, itr.start.z));
+            edge.subDivs.emplace_back(osg::Vec3(itr.end.x, itr.end.y, itr.end.z));
         } else {
-            edge.subDivs.emplace_back(osg::Vec3(itr.start.x, itr.start.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr.start.x, itr.start.y, itr.start.z));
             for (const auto &subdiv : itr.subdivs) {
-                edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, 0.f));
+                edge.subDivs.emplace_back(osg::Vec3(subdiv.x, subdiv.y, subdiv.z));
             }
-            edge.subDivs.emplace_back(osg::Vec3(itr.end.x, itr.end.y, 0.f));
+            edge.subDivs.emplace_back(osg::Vec3(itr.end.x, itr.end.y, itr.end.z));
         }
         edges->push_back(edge);
     }
@@ -2704,7 +2722,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     tessl->setDetailRatio(1.f);
     std::map<std::string, osg::ShapeDrawable *> osgNodes;
     std::vector<osg::ref_ptr<osgText::Text>> textNodes;
-
+    
+    
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         if (!itr->second.visible)
             continue; // 只处理可见节点
@@ -2720,10 +2739,16 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             }
         }
         auto p = itr->second.pos;
-        p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
+        if (p.z() < 100.f) {
+            p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
+        }
         p = vec3ToSphere(p);
+        int scale = .050f;
+        if (itr->second.level == 100) {
+            scale = 1.f;
+        }
         auto sphere = new osg::ShapeDrawable(
-            new osg::Sphere(p, itr->second.size * .050f * nodeGeomSize), tessl);
+            new osg::Sphere(p, itr->second.size * scale * nodeGeomSize), tessl);
         osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
         centerData->push_back(itr->second.pos);
         sphere->setUserData(centerData);
@@ -2925,12 +2950,12 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             lineGeometry = mEdgeGeometry;
             edgeNodegrp->addChild(mEdgeGeode);
             grp->addChild(edgeNodegrp);
-
             // 初始化着色器
             initEdgeShaders();
         }
 
         // 更新VBO数据
+        // LOD 3: 使用原有逻辑，完整显示所有边
         updateEdgeVBO();
     }
 }
@@ -3093,17 +3118,72 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
         return ret;
     };
+    auto isLinePassingThroughEarth = [&](const osg::Vec3 &surfacePoint,
+                                         const osg::Vec3 &satellite) -> bool {
+        // 地球半径（使用极地半径作为基准）
+        const float earthRadius = osg::WGS_84_RADIUS_POLAR;
+
+        // 计算线段参数化方程: P(t) = surfacePoint + t * (satellite - surfacePoint)
+        // 其中 t ∈ [0, 1]
+        osg::Vec3 direction = satellite - surfacePoint;
+
+        // 计算线段到原点（地心）的最近距离
+        // 对于线段 P(t) = A + t * (B - A)，到原点距离的平方为：
+        // |P(t)|² = |A + t*D|² = |A|² + 2t*(A·D) + t²*|D|²
+        // 其中 A = surfacePoint, D = direction
+
+        float a = direction.length2();               // |D|²
+        float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
+        float c = surfacePoint.length2();            // |A|²
+
+        // 如果 a 接近 0，说明两点几乎重合
+        if (std::abs(a) < 1e-6f) {
+            return surfacePoint.length() < earthRadius;
+        }
+
+        // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
+        // 得到 t = -(A·D) / |D|²
+        float t = -b / (2.0f * a);
+
+        // 将 t 限制在 [0, 1] 范围内（线段范围）
+        t = std::max(0.0f, std::min(1.0f, t));
+
+        // 计算线段上最近点到地心的距离
+        osg::Vec3 closestPoint = surfacePoint + direction * t;
+        float minDistance = closestPoint.length();
+
+        // 如果最近距离小于地球半径，则线段穿过地球
+        return minDistance < earthRadius;
+    };
+
 
     // 创建顶点数组
     mVertexArray = new osg::Vec3Array;
     mColorFromArray = new osg::Vec4Array;
     mColorToArray = new osg::Vec4Array;
     mWeightArray = new osg::FloatArray;
-
+    int lineID = 0;
+    
     std::cout << "updateEdgeVBO: Using LOD level " << currentLODLevel << std::endl;
 
     if (currentLODLevel == 3) {
-        // LOD 3: 使用原有逻辑，完整显示所有边
+        //   加载城市建筑物的 OBB 数据
+        VIS4Earth::CityLoader cityLoader;
+        if (!cityLoader.loadBuildingsFromCSV(DATA_PATH_PREFIX "buildings_obb.csv")) {
+            std::cerr << "Failed to load building data!" << std::endl;
+        }
+
+        // 设置经纬度范围（lat_min, lon_min）到（lat_max, lon_max）
+        std::vector<std::pair<float, float>> latLonBounds = {
+            {20.0f, -85.0f}, // 经纬度范围的左下角
+            {41.0f, -74.0f}  // 经纬度范围的右上角
+        };
+
+        // 设置比例因子，将建筑物的尺寸映射到地球表面
+        float scale = 1000.f; // 可调整的比例因子，根据需要调整
+        cityLoader.drawBuildings(grp, latLonBounds, scale, currentLODLevel);
+        heightMap = cityLoader.getHeightMap();
+
         updateEdgeVBO_Original(vec3ToSphere, mLineIDArray);
         return;
     }
@@ -3123,12 +3203,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
     const int MIN_SEGMENTS = 5;        // 最小细分段数（聚合边可以更少）
     const int MAX_SEGMENTS = 15;       // 最大细分段数（聚合边不需要太多）
-    int lineID = 0;
+    
 
     // 直接遍历当前LOD级别的边数据（这些已经是聚合边）
-    for (const auto &edge : *edges) {
+    for (auto &edge : *edges) {
         if (!edge.visible)
             continue; // 只处理可见边
+
 
         // 获取起点和终点节点
         auto fromNodeIt = nodes->find(edge.from);
@@ -3138,74 +3219,116 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
         const osg::Vec3 &startPoint = fromNodeIt->second.pos;
         const osg::Vec3 &endPoint = toNodeIt->second.pos;
+        
+        if (fromNodeIt->second.level == 100 || toNodeIt->second.level == 100) {
+            // 判断线条是否穿过地球
+            if (fromNodeIt->second.level == 100) {
+                if (isLinePassingThroughEarth(vec3ToSphere(endPoint), vec3ToSphere(startPoint))) {
+                    lineID++;
+                    edge.visible = false;
+                    continue; // 如果穿过地球则跳过该线条
+                }
+            }
+            else {
+                if (isLinePassingThroughEarth(vec3ToSphere(startPoint), vec3ToSphere(endPoint))) {
+                    lineID++;
+                    continue; // 如果穿过地球则跳过该线条
+                }
+            }
+            
+            // 获取边的颜色（可以使用自定义的颜色或者节点的颜色）
+            osg::Vec4 edgeColor(1.0f, 1.0f, 1.0f, 1.0f); // 默认白色，可以修改为其他颜色
 
-        // 计算边长度（大圆距离）
-        float lat1 = osg::DegreesToRadians(startPoint.x());
-        float lon1 = osg::DegreesToRadians(startPoint.y());
-        float lat2 = osg::DegreesToRadians(endPoint.x());
-        float lon2 = osg::DegreesToRadians(endPoint.y());
+            // 将边的起点和终点加入顶点数组
+            mVertexArray->push_back(vec3ToSphere(startPoint));
+            mColorFromArray->push_back(edgeColor);
+            mColorToArray->push_back(edgeColor);
 
-        float dlat = lat2 - lat1;
-        float dlon = lon2 - lon1;
-        float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
-                  std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
-        float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
-        float totalLength = 6371.0f * c; // 6371km是地球平均半径
+            mVertexArray->push_back(vec3ToSphere(endPoint));
+            mColorFromArray->push_back(edgeColor);
+            mColorToArray->push_back(edgeColor);
 
-        // 计算细分段数
-        int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
-        totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
+            // 记录该线段的标识符（如果需要）
+            mLineIDArray->push_back(static_cast<float>(lineID));
+            mLineIDArray->push_back(static_cast<float>(lineID));
 
-        // osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.0f);
-        // osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
-        // osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
-        //  获取边的颜色（使用节点颜色或默认颜色）
-        osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
-        if (currentLODLevel < 3) {
-            // 聚合边使用统一的金色
-            edgeColor = osg::Vec4(0.8f, 0.6f, 0.2f, 1.0f);
+            // 线段的权重（如果需要，可以根据边的属性设置权重）
+            mWeightArray->push_back(edge.weight);
+            mWeightArray->push_back(edge.weight);
+
+            lineID++; // 增加线ID
         }
+        else {
+            // 计算边长度（大圆距离）
+            float lat1 = osg::DegreesToRadians(startPoint.x());
+            float lon1 = osg::DegreesToRadians(startPoint.y());
+            float lat2 = osg::DegreesToRadians(endPoint.x());
+            float lon2 = osg::DegreesToRadians(endPoint.y());
 
-        osg::Vec3 prevPos;
+            float dlat = lat2 - lat1;
+            float dlon = lon2 - lon1;
+            float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                      std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+            float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+            float totalLength = 6371.0f * c; // 6371km是地球平均半径
 
-        // 生成边的插值点
-        for (int j = 0; j <= totalSegments; ++j) {
-            float t = static_cast<float>(j) / totalSegments;
+            // 计算细分段数
+            int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
+            totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
 
-            // 线性插值位置
-            osg::Vec3 interpolatedPos;
-            interpolatedPos.x() =
-                fromNodeIt->second.pos.x() * (1.0f - t) + toNodeIt->second.pos.x() * t;
-            interpolatedPos.y() =
-                fromNodeIt->second.pos.y() * (1.0f - t) + toNodeIt->second.pos.y() * t;
-
-            // 计算弧线高度
-            float baseHeight = getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
-            float arcHeight = std::sin(osg::PI * t) * 100000.f; // 使用边的最大高度
-            interpolatedPos.z() = std::max(baseHeight, arcHeight);
-
-            // 转换为球面坐标
-            osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
-
-            if (j > 0) {
-                // 添加线段的两个顶点
-                mVertexArray->push_back(prevPos);
-                mColorFromArray->push_back(edgeColor);
-                mColorToArray->push_back(edgeColor);
-                mWeightArray->push_back(edge.weight);
-
-                mVertexArray->push_back(spherePos);
-                mColorFromArray->push_back(edgeColor);
-                mColorToArray->push_back(edgeColor);
-                mWeightArray->push_back(edge.weight);
-
-                mLineIDArray->push_back(static_cast<float>(lineID));
-                mLineIDArray->push_back(static_cast<float>(lineID));
+            // osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.0f);
+            // osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
+            // osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
+            //  获取边的颜色（使用节点颜色或默认颜色）
+            osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
+            if (currentLODLevel < 3) {
+                // 聚合边使用统一的金色
+                edgeColor = osg::Vec4(0.8f, 0.6f, 0.2f, 1.0f);
             }
 
-            prevPos = spherePos;
+            osg::Vec3 prevPos;
+
+            // 生成边的插值点
+            for (int j = 0; j <= totalSegments; ++j) {
+                float t = static_cast<float>(j) / totalSegments;
+
+                // 线性插值位置
+                osg::Vec3 interpolatedPos;
+                interpolatedPos.x() =
+                    fromNodeIt->second.pos.x() * (1.0f - t) + toNodeIt->second.pos.x() * t;
+                interpolatedPos.y() =
+                    fromNodeIt->second.pos.y() * (1.0f - t) + toNodeIt->second.pos.y() * t;
+
+                // 计算弧线高度
+                float baseHeight =
+                    getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+                float arcHeight = std::sin(osg::PI * t) * 100000.f; // 使用边的最大高度
+                interpolatedPos.z() = std::max(baseHeight, arcHeight);
+
+                // 转换为球面坐标
+                osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+
+                if (j > 0) {
+                    // 添加线段的两个顶点
+                    mVertexArray->push_back(prevPos);
+                    mColorFromArray->push_back(edgeColor);
+                    mColorToArray->push_back(edgeColor);
+                    mWeightArray->push_back(edge.weight);
+
+                    mVertexArray->push_back(spherePos);
+                    mColorFromArray->push_back(edgeColor);
+                    mColorToArray->push_back(edgeColor);
+                    mWeightArray->push_back(edge.weight);
+
+                    mLineIDArray->push_back(static_cast<float>(lineID));
+                    mLineIDArray->push_back(static_cast<float>(lineID));
+                }
+
+                prevPos = spherePos;
+            }
+            lineID++;
         }
-        lineID++;
+        
     }
 
     // 设置VBO数据
@@ -3232,7 +3355,43 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
     osg::ref_ptr<osg::FloatArray> lineIDArray) {
     if (!edges || edges->empty())
         return;
+    auto isLinePassingThroughEarth = [&](const osg::Vec3 &surfacePoint,
+                                         const osg::Vec3 &satellite) -> bool {
+        // 地球半径（使用极地半径作为基准）
+        const float earthRadius = osg::WGS_84_RADIUS_POLAR;
 
+        // 计算线段参数化方程: P(t) = surfacePoint + t * (satellite - surfacePoint)
+        // 其中 t ∈ [0, 1]
+        osg::Vec3 direction = satellite - surfacePoint;
+
+        // 计算线段到原点（地心）的最近距离
+        // 对于线段 P(t) = A + t * (B - A)，到原点距离的平方为：
+        // |P(t)|² = |A + t*D|² = |A|² + 2t*(A·D) + t²*|D|²
+        // 其中 A = surfacePoint, D = direction
+
+        float a = direction.length2();               // |D|²
+        float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
+        float c = surfacePoint.length2();            // |A|²
+
+        // 如果 a 接近 0，说明两点几乎重合
+        if (std::abs(a) < 1e-6f) {
+            return surfacePoint.length() < earthRadius;
+        }
+
+        // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
+        // 得到 t = -(A·D) / |D|²
+        float t = -b / (2.0f * a);
+
+        // 将 t 限制在 [0, 1] 范围内（线段范围）
+        t = std::max(0.0f, std::min(1.0f, t));
+
+        // 计算线段上最近点到地心的距离
+        osg::Vec3 closestPoint = surfacePoint + direction * t;
+        float minDistance = closestPoint.length();
+
+        // 如果最近距离小于地球半径，则线段穿过地球
+        return minDistance < earthRadius;
+    };
     // 设置基准参数
     const float BASE_LENGTH = 1000.0f; // 基准长度(km)
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
@@ -3240,111 +3399,194 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
     const int MAX_SEGMENTS = 20;       // 最大细分段数
     int lineID = 0;
     // 遍历所有边，生成顶点数据
-    for (const auto &edge : *edges) {
+    for (auto &edge : *edges) {
         if (!edge.visible)
             continue; // 只处理可见边
         if (edge.subDivs.empty())
             continue; // 跳过没有细分点的边
         auto fromNodeIt = nodes->find(edge.from);
         auto toNodeIt = nodes->find(edge.to);
-        // osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.50f);
-        // osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
-        // osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
-        // osg::Vec4 fromColor = edgeColor;
-        // osg::Vec4 toColor = edgeColor;
-        //
-        osg::Vec4 fromColor(0.8f, 0.6f, 0.2f, 1.0f); // 统一的金色
-        osg::Vec4 toColor(0.8f, 0.6f, 0.2f, 1.0f);   // 统一的金色
 
-        // 计算整条边的总长度
-        float totalLength = 0.0f;
-        std::vector<float> segmentLengths;
-        for (size_t i = 1; i < edge.subDivs.size(); ++i) {
-            float lat1 = osg::DegreesToRadians(edge.subDivs[i - 1].x());
-            float lon1 = osg::DegreesToRadians(edge.subDivs[i - 1].y());
-            float lat2 = osg::DegreesToRadians(edge.subDivs[i].x());
-            float lon2 = osg::DegreesToRadians(edge.subDivs[i].y());
-
-            float dlat = lat2 - lat1;
-            float dlon = lon2 - lon1;
-            float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
-                      std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
-            float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
-            float length = 6371.0f * c; // 6371km是地球平均半径
-            totalLength += length;
-            segmentLengths.push_back(length);
-        }
-
-        // 计算总的细分段数
-        int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
-        totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
-
-        // 根据每段长度占总长度的比例分配细分段数
-        std::vector<int> segmentCounts;
-        float accumulatedLength = 0.0f;
-        osg::Vec3 prevPos;
-
-        for (size_t i = 0; i < segmentLengths.size(); ++i) {
-            accumulatedLength += segmentLengths[i];
-            float t = accumulatedLength / totalLength;
-            int currentSegments;
-
-            if (i == segmentLengths.size() - 1) {
-                // 最后一段使用剩余的所有细分段数
-                currentSegments =
-                    totalSegments - std::accumulate(segmentCounts.begin(), segmentCounts.end(), 0);
-            } else {
-                currentSegments =
-                    static_cast<int>(totalSegments * (segmentLengths[i] / totalLength));
-            }
-            currentSegments = std::max(1, currentSegments); // 确保至少有一个细分段
-            segmentCounts.push_back(currentSegments);
-
-            // 在当前段内生成插值点
-            const osg::Vec3 &startPoint = edge.subDivs[i];
-            const osg::Vec3 &endPoint = edge.subDivs[i + 1];
-
-            for (int j = 0; j <= currentSegments; ++j) {
-                float localT = static_cast<float>(j) / currentSegments;
-                float globalT =
-                    (accumulatedLength - segmentLengths[i] + segmentLengths[i] * localT) /
-                    totalLength;
-
-                // 线性插值位置
-                osg::Vec3 interpolatedPos;
-                interpolatedPos.x() = startPoint.x() * (1.0f - localT) + endPoint.x() * localT;
-                interpolatedPos.y() = startPoint.y() * (1.0f - localT) + endPoint.y() * localT;
-
-                // 使用全局t值计算高度，确保整条边的弧线连续
-                float baseHeight =
-                    getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
-                float arcHeight = std::sin(osg::PI * globalT) * 100000.f;
-                interpolatedPos.z() = std::max(baseHeight, arcHeight);
-
-                // 转换为球面坐标
-                osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
-
-                if (i > 0 || j > 0) {
-                    // 添加前一个点
-                    mVertexArray->push_back(prevPos);
-                    mColorFromArray->push_back(fromColor);
-                    mColorToArray->push_back(toColor);
-                    mWeightArray->push_back(edge.weight);
-
-                    // 添加当前点
-                    mVertexArray->push_back(spherePos);
-                    mColorFromArray->push_back(fromColor);
-                    mColorToArray->push_back(toColor);
-                    mWeightArray->push_back(edge.weight);
-
-                    lineIDArray->push_back(static_cast<float>(lineID));
-                    lineIDArray->push_back(static_cast<float>(lineID));
+        if (fromNodeIt->second.level == 100 || toNodeIt->second.level == 100) {
+            // 判断线条是否穿过地球
+            const osg::Vec3 &startPoint = fromNodeIt->second.pos;
+            const osg::Vec3 &endPoint = toNodeIt->second.pos;
+            if (fromNodeIt->second.level == 100) {
+                if (isLinePassingThroughEarth(vec3ToSphere(endPoint), vec3ToSphere(startPoint))) {
+                    lineID++;
+                    edge.visible = false;
+                    continue; // 如果穿过地球则跳过该线条
                 }
-
-                prevPos = spherePos;
+            } else {
+                if (isLinePassingThroughEarth(vec3ToSphere(startPoint), vec3ToSphere(endPoint))) {
+                    lineID++;
+                    continue; // 如果穿过地球则跳过该线条
+                }
             }
+
+            // 获取边的颜色（可以使用自定义的颜色或者节点的颜色）
+            osg::Vec4 edgeColor(1.0f, 1.0f, 1.0f, 1.0f); // 默认白色，可以修改为其他颜色
+
+            // 将边的起点和终点加入顶点数组
+            mVertexArray->push_back(vec3ToSphere(startPoint));
+            mColorFromArray->push_back(edgeColor);
+            mColorToArray->push_back(edgeColor);
+
+            mVertexArray->push_back(vec3ToSphere(endPoint));
+            mColorFromArray->push_back(edgeColor);
+            mColorToArray->push_back(edgeColor);
+
+            // 记录该线段的标识符（如果需要）
+            lineIDArray->push_back(static_cast<float>(lineID));
+            lineIDArray->push_back(static_cast<float>(lineID));
+
+            // 线段的权重（如果需要，可以根据边的属性设置权重）
+            mWeightArray->push_back(edge.weight);
+            mWeightArray->push_back(edge.weight);
+
+            lineID++; // 增加线ID
+        } else {
+            // osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.50f);
+            // osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
+            // osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
+            // osg::Vec4 fromColor = edgeColor;
+            // osg::Vec4 toColor = edgeColor;
+            //
+
+            osg::Vec4 fromColor(0.8f, 0.6f, 0.2f, 1.0f); // 统一的金色
+            osg::Vec4 toColor(0.8f, 0.6f, 0.2f, 1.0f);   // 统一的金色
+
+            // 计算整条边的总长度
+            float totalLength = 0.0f;
+            std::vector<float> segmentLengths;
+            for (size_t i = 1; i < edge.subDivs.size(); ++i) {
+                float lat1 = osg::DegreesToRadians(edge.subDivs[i - 1].x());
+                float lon1 = osg::DegreesToRadians(edge.subDivs[i - 1].y());
+                float lat2 = osg::DegreesToRadians(edge.subDivs[i].x());
+                float lon2 = osg::DegreesToRadians(edge.subDivs[i].y());
+
+                float dlat = lat2 - lat1;
+                float dlon = lon2 - lon1;
+                float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                          std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+                float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+                float length = 6371.0f * c; // 6371km是地球平均半径
+                totalLength += length;
+                segmentLengths.push_back(length);
+            }
+
+            // 计算总的细分段数
+            int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
+            totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
+
+            // 首先得到采样点的高度,进而计算这条边上的最大高度
+            // 计算每个路径上的maxHeight 用Asin(pi*x)绘制
+            float maxRequiredAmplitude = 0.0f;
+            std::vector<float> heightArray;
+            float maxHeightInArray = 0.0;
+            int maxLocation = 0;
+
+            // 计算每个采样点的高度
+            for (int i = 1; i < totalSegments + 1; i++) {
+                float t = static_cast<float>(i) / (totalSegments);
+                osg::Vec3 interpolatedPos;
+                interpolatedPos.x() =
+                    edge.subDivs.front().x() * (1.0f - t) + edge.subDivs.back().x() * t;
+                interpolatedPos.y() =
+                    edge.subDivs.front().y() * (1.0f - t) + edge.subDivs.back().y() * t;
+                interpolatedPos.z() =
+                    getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+                heightArray.push_back(interpolatedPos.z());
+                maxHeightInArray = std::max(maxHeightInArray, interpolatedPos.z());
+                if (interpolatedPos.z() >= maxHeightInArray) {
+                    maxLocation = i;
+                }
+            }
+
+            // 计算所需的最大振幅
+            for (int i = 1; i < (totalSegments / 2) + 2; i++) {
+                float t = static_cast<float>(i) / ((totalSegments / 2) + 2);
+                float sinValue = std::sin(osg::PI * t); // 计算 sin(π * x)
+
+                // 计算出对应位置所需的振幅 A，确保 A * sin(π * x) >= arr[i]
+                if (heightArray[i] < 1.f)
+                    continue;
+                float requiredAmplitude = heightArray[i] / sinValue;
+                maxRequiredAmplitude = std::max(maxRequiredAmplitude, requiredAmplitude);
+            }
+
+            // 方法2：全局控制的最大高度,绘制sin曲线
+            float maxHeight = std::max(maxRequiredAmplitude, 100000.f);
+            edge.maxHeight = maxHeight;
+
+            // 根据每段长度占总长度的比例分配细分段数
+            std::vector<int> segmentCounts;
+            float accumulatedLength = 0.0f;
+            osg::Vec3 prevPos;
+
+            for (size_t i = 0; i < segmentLengths.size(); ++i) {
+                accumulatedLength += segmentLengths[i];
+                float t = accumulatedLength / totalLength;
+                int currentSegments;
+
+                if (i == segmentLengths.size() - 1) {
+                    // 最后一段使用剩余的所有细分段数
+                    currentSegments = totalSegments - std::accumulate(segmentCounts.begin(),
+                                                                      segmentCounts.end(), 0);
+                } else {
+                    currentSegments =
+                        static_cast<int>(totalSegments * (segmentLengths[i] / totalLength));
+                }
+                currentSegments = std::max(1, currentSegments); // 确保至少有一个细分段
+                segmentCounts.push_back(currentSegments);
+
+                // 在当前段内生成插值点
+                const osg::Vec3 &startPoint = edge.subDivs[i];
+                const osg::Vec3 &endPoint = edge.subDivs[i + 1];
+
+                for (int j = 0; j <= currentSegments; ++j) {
+                    float localT = static_cast<float>(j) / currentSegments;
+                    float globalT =
+                        (accumulatedLength - segmentLengths[i] + segmentLengths[i] * localT) /
+                        totalLength;
+
+                    // 线性插值位置
+                    osg::Vec3 interpolatedPos;
+                    interpolatedPos.x() = startPoint.x() * (1.0f - localT) + endPoint.x() * localT;
+                    interpolatedPos.y() = startPoint.y() * (1.0f - localT) + endPoint.y() * localT;
+
+                    // 使用全局t值计算高度，确保整条边的弧线连续
+                    float baseHeight =
+                        getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+                    float arcHeight = std::sin(osg::PI * globalT) * maxHeight;
+                    interpolatedPos.z() = std::max(baseHeight, arcHeight);
+
+                    // 转换为球面坐标
+                    osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+
+                    if (i > 0 || j > 0) {
+                        // 添加前一个点
+                        mVertexArray->push_back(prevPos);
+                        mColorFromArray->push_back(fromColor);
+                        mColorToArray->push_back(toColor);
+                        mWeightArray->push_back(edge.weight);
+
+                        // 添加当前点
+                        mVertexArray->push_back(spherePos);
+                        mColorFromArray->push_back(fromColor);
+                        mColorToArray->push_back(toColor);
+                        mWeightArray->push_back(edge.weight);
+
+                        lineIDArray->push_back(static_cast<float>(lineID));
+                        lineIDArray->push_back(static_cast<float>(lineID));
+                    }
+
+                    prevPos = spherePos;
+                }
+            }
+            lineID++;
         }
-        lineID++;
+        
     }
 
     // 设置VBO数据
@@ -3692,7 +3934,7 @@ void VIS4Earth::GraphRenderer::initializeLODData(
         lodEdgesData[i].reset();
     }
 
-    // LOD 3: 原始完整数据
+    // 更新 LOD 3 数据
     lodNodesData[3] = allNodes;
     lodEdgesData[3] = allEdges;
 
@@ -3749,7 +3991,7 @@ void VIS4Earth::GraphRenderer::generateGeographicLODData(
     for (const auto &nodePair : *allNodes) {
         const Node &node = nodePair.second;
         // 根据LOD级别筛选节点：LOD n 包含 level <= n 的所有节点
-        if (node.level <= lodLevel) {
+        if (node.level <= lodLevel || node.level==100) {
             // 直接使用原始节点，保持原始ID不变
             (*lodNodes)[nodePair.first] = node;
         }
@@ -3802,7 +4044,60 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
         cameraUpdate("LoadedGraph", cameraHeight);
         return;
     }
+    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
+        // v3.x() 是纬度，v3.y() 是经度
+        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
+        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
 
+        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
+
+        osg::Vec3 ret;
+        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
+
+        h = h * cosf(lat); // 根据纬度调整水平投影的半径
+
+        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
+        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
+
+        return ret;
+    };
+    auto isLinePassingThroughEarth = [&](const osg::Vec3 &surfacePoint,
+                                         const osg::Vec3 &satellite) -> bool {
+        // 地球半径（使用极地半径作为基准）
+        const float earthRadius = osg::WGS_84_RADIUS_POLAR;
+
+        // 计算线段参数化方程: P(t) = surfacePoint + t * (satellite - surfacePoint)
+        // 其中 t ∈ [0, 1]
+        osg::Vec3 direction = satellite - surfacePoint;
+
+        // 计算线段到原点（地心）的最近距离
+        // 对于线段 P(t) = A + t * (B - A)，到原点距离的平方为：
+        // |P(t)|² = |A + t*D|² = |A|² + 2t*(A·D) + t²*|D|²
+        // 其中 A = surfacePoint, D = direction
+
+        float a = direction.length2();               // |D|²
+        float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
+        float c = surfacePoint.length2();            // |A|²
+
+        // 如果 a 接近 0，说明两点几乎重合
+        if (std::abs(a) < 1e-6f) {
+            return surfacePoint.length() < earthRadius;
+        }
+
+        // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
+        // 得到 t = -(A·D) / |D|²
+        float t = -b / (2.0f * a);
+
+        // 将 t 限制在 [0, 1] 范围内（线段范围）
+        t = std::max(0.0f, std::min(1.0f, t));
+
+        // 计算线段上最近点到地心的距离
+        osg::Vec3 closestPoint = surfacePoint + direction * t;
+        float minDistance = closestPoint.length();
+
+        // 如果最近距离小于地球半径，则线段穿过地球
+        return minDistance < earthRadius;
+    };
     PerGraphParam *graphParam = getGraph("LoadedGraph");
     if (graphParam && targetMaxNodeLevel >= 0 && targetMaxNodeLevel < 4) {
         // 直接设置PerGraphParam的nodes和edges指针到对应的LOD数据
@@ -3892,16 +4187,30 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
             for (auto itr = graphParam->nodes->begin(); itr != graphParam->nodes->end(); ++itr) {
                 graphNodes.insert(std::pair<std::string, VIS4Earth::Node>(
                     std::string(itr->first),
-                    VIS4Earth::Node(itr->second.pos.x(), itr->second.pos.y(), itr->second.level)));
+                    VIS4Earth::Node(itr->second.pos.x(), itr->second.pos.y(), itr->second.pos.z(),
+                                    itr->second.level, itr->second.label,
+                                    rgbToHex(itr->second.color.x(), itr->second.color.y(),
+                                             itr->second.color.z()))));
             }
             std::vector<VIS4Earth::Edge> garphEdges;
 
             for (auto itr = graphParam->edges->begin(); itr != graphParam->edges->end(); ++itr) {
+
                 osg::Vec3 fromPos = graphParam->nodes->at(itr->from).pos;
                 osg::Vec3 toPos = graphParam->nodes->at(itr->to).pos;
-                glm::vec3 from = glm::vec3(fromPos.x(), fromPos.y(), 0.f);
-                glm::vec3 to = glm::vec3(toPos.x(), toPos.y(), 0.f);
-                garphEdges.push_back(VIS4Earth::Edge(itr->from, itr->to, from, to, itr->weight));
+                if (graphParam->nodes->at(itr->from).level == 100 &&
+                    isLinePassingThroughEarth(vec3ToSphere(toPos), vec3ToSphere(toPos))) {
+                    continue;
+                }
+                if (graphParam->nodes->at(itr->to).level == 100 &&
+                    isLinePassingThroughEarth(vec3ToSphere(fromPos), vec3ToSphere(toPos))) {
+                    continue;
+                }
+                glm::vec3 from = glm::vec3(fromPos.x(), fromPos.y(), fromPos.z());
+                glm::vec3 to = glm::vec3(toPos.x(), toPos.y(), toPos.z());
+                garphEdges.push_back(
+                    VIS4Earth::Edge(itr->from, itr->to, from, to, itr->weight));
+                
             }
             auto graphSetLOD = std::make_shared<VIS4Earth::Graph>();
             graphSetLOD->set(graphNodes, garphEdges);

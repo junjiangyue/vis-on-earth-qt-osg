@@ -5,6 +5,8 @@
 #include <QtWidgets/QMessageBox>
 
 #include <osgGA/TrackballManipulator>
+
+#include <osgGA/TerrainManipulator>
 #include <osgViewer/Viewer>
 
 #include <vis4earth/graph_viser/NodeClickHandler.h>
@@ -21,8 +23,12 @@ int main(int argc, char **argv) {
 
     auto *viewer = new osgViewer::Viewer;
     viewer->setUpViewInWindow(200, 50, 1000, 1000);
-    auto *manipulator = new osgGA::TrackballManipulator;
-    viewer->setCameraManipulator(manipulator);
+    osg::ref_ptr<osgGA::TerrainManipulator> terrainManipulator = new osgGA::TerrainManipulator();
+
+    // 2. 将它设置给 Viewer
+    viewer->setCameraManipulator(terrainManipulator);
+    //auto *manipulator = new osgGA::TrackballManipulator;
+    //viewer->setCameraManipulator(manipulator);
 
     osg::ref_ptr<osg::Group> grp = new osg::Group;
     grp->addChild(VIS4Earth::CreateEarth());

@@ -229,6 +229,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
     std::array<std::shared_ptr<std::map<std::string, Node>>, 4>
         lodNodesData;                                               // 4个LOD层级的节点数据
     std::array<std::shared_ptr<std::vector<Edge>>, 4> lodEdgesData; // 4个LOD层级的边数据
+    std::shared_ptr<std::map<std::string, Node>> satelliteNodes;
+    std::shared_ptr<std::vector<Edge>> satelliteEdges;
+    
     int currentActiveLODLevel = -1; // 当前活动的LOD级别，-1表示未初始化
 
     // 新增：区域和聚合边相关数据结构
@@ -313,7 +316,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::ref_ptr<osg::Image> lineDataImageForGeom;
         
         std::shared_ptr<std::map<std::string, Node>> nodes;                           // 当前nodes
-        std::shared_ptr<std::vector<Edge>> edges;                                     // 当前edges
+        std::shared_ptr<std::vector<Edge>> edges;       
+        std::shared_ptr<std::map<std::string, Node>> satelliteNodes;
+        std::shared_ptr<std::vector<Edge>> satelliteEdges;                            // 当前edges
         std::shared_ptr<std::map<std::string, std::vector<std::string>>> nodeMapping; // 节点映射
         std::shared_ptr<std::map<Edge, std::vector<Edge>>> edgeMapping;
         std::vector<std::vector<float>> heightMap;
@@ -349,7 +354,11 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         // 当前LOD层级
         int currentLODLevel = 3; // 默认为最高细节层级
-
+        void setSatellite(std::shared_ptr<std::map<std::string, Node>> nodes,
+                          std::shared_ptr<std::vector<Edge>> edges) {
+            satelliteNodes = nodes;
+            satelliteEdges = edges;
+        }
         // 初始化Shader程序
         void initEdgeShaders();
         // 更新边的VBO数据

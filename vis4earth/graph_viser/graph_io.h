@@ -212,17 +212,17 @@ class GraphLoader {
         f.GetText(line, 1024);
         int labelCh;
         char name[100];
-        double latitude, longitude;
+        double latitude, longitude,height;
         int level;
         char color[10];
         std::unordered_map<std::string, Node> read_nodes;
 
         for (int r = 1; r < rows; r++) {
             f.GetText(line, 1024);
-            sscanf(line, "%d,%[^,],%lg,%lg,%d,%s", &labelCh, name, &latitude, &longitude, &level,
+            sscanf(line, "%d,%[^,],%lg,%lg,%lg,%d,%s", &labelCh, name, &latitude, &longitude,&height, &level,
                    color);
             read_nodes.insert(std::pair<std::string, Node>(
-                std::to_string(labelCh), Node(latitude, longitude, level, name, color)));
+                std::to_string(labelCh), Node(latitude, longitude, height,level, name, color)));
         }
         f.Close();
 
@@ -289,7 +289,7 @@ class GraphLoader {
             float x = std::rand() % 100;
             float y = std::rand() % 100;
             read_nodes.insert(std::pair<std::string, Node>(std::to_string(labelCh),
-                                                           Node(randomLon, randomLat, 0)));
+                                                           Node(randomLon, randomLat, 0.0,0)));
         }
         f.Close();
 

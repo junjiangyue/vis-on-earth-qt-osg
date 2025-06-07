@@ -51,7 +51,7 @@ class CityLoader {
 
     // 根据经纬度范围和缩放比例绘制建筑物
     void drawBuildings(osg::Group *root, const std::vector<std::pair<float, float>> &latLonBounds,
-                       float scale) {
+                       float scale,int level) {
 
         for (const auto &obb : buildings) {
             std::vector<osg::Vec3> lonlatBuild;
@@ -63,12 +63,15 @@ class CityLoader {
             osg::ref_ptr<osg::Geode> geode = new osg::Geode();
             // 创建建筑物的 OBB 边框
             geode = createOBBBox(obb, latLonBounds, scale);
-
-            // 将建筑物添加到场景的根节点中
-            root->addChild(geode);
+            if (level == 3) {
+                // 将建筑物添加到场景的根节点中
+                root->addChild(geode);
+            }
+            
         }
         calculateHeightMap(coords, latLonBounds);
     }
+    
     std::vector<std::vector<float>> getHeightMap() { return heightMap; }
 
   private:
@@ -183,50 +186,63 @@ class CityLoader {
         osg::ref_ptr<osg::Geometry> geom = new osg::Geometry;
         osg::ref_ptr<osg::Vec3Array> vertices = new osg::Vec3Array;
 
+        // 添加顶点（确保顺序正确）
         for (const auto &point : obb) {
             vertices->push_back(vec3ToSphere(convertToLatLon(point, latLonBounds, scale)));
         }
         geom->setVertexArray(vertices.get());
 
-        // 绘制五个面（排除底面）
-        osg::ref_ptr<osg::DrawElementsUInt> faces = new osg::DrawElementsUInt(GL_QUADS);
+        // 定义索引来创建立方体的面（不包括底面）
+        osg::ref_ptr<osg::DrawElementsUInt> indices =
+            new osg::DrawElementsUInt(osg::PrimitiveSet::QUADS, 0);
 
         // 顶面 (4, 5, 6, 7)
-        faces->push_back(4);
-        faces->push_back(5);
-        faces->push_back(6);
-        faces->push_back(7);
+        indices->push_back(4);
+        indices->push_back(5);
+        indices->push_back(6);
+        indices->push_back(7);
 
-        // 四个侧面
-        faces->push_back(0);
-        faces->push_back(1);
-        faces->push_back(5);
-        faces->push_back(4); // 前
-        faces->push_back(1);
-        faces->push_back(2);
-        faces->push_back(6);
-        faces->push_back(5); // 右
-        faces->push_back(2);
-        faces->push_back(3);
-        faces->push_back(7);
-        faces->push_back(6); // 后
-        faces->push_back(3);
-        faces->push_back(0);
-        faces->push_back(4);
-        faces->push_back(7); // 左
+        // 侧面1 (0, 1, 5, 4)
+        indices->push_back(0);
+        indices->push_back(1);
+        indices->push_back(5);
+        indices->push_back(4);
 
-        geom->addPrimitiveSet(faces.get());
+        // 侧面2 (1, 2, 6, 5)
+        indices->push_back(1);
+        indices->push_back(2);
+        indices->push_back(6);
+        indices->push_back(5);
+
+        // 侧面3 (2, 3, 7, 6)
+        indices->push_back(2);
+        indices->push_back(3);
+        indices->push_back(7);
+        indices->push_back(6);
+
+        // 侧面4 (3, 0, 4, 7)
+        indices->push_back(3);
+        indices->push_back(0);
+        indices->push_back(4);
+        indices->push_back(7);
+
+        geom->addPrimitiveSet(indices.get());
 
         // 设置颜色（淡蓝，带透明）
         osg::ref_ptr<osg::Vec4Array> colors = new osg::Vec4Array;
-        colors->push_back(osg::Vec4(0.2f, 0.5f, 1.0f, 0.6f)); // 半透明蓝
+        colors->push_back(osg::Vec4(0.2f, 0.5f, 1.0f, 0.5f)); // 半透明蓝
         geom->setColorArray(colors.get(), osg::Array::BIND_OVERALL);
 
         // 设置状态
         osg::ref_ptr<osg::StateSet> ss = geom->getOrCreateStateSet();
         ss->setMode(GL_BLEND, osg::StateAttribute::ON);
         ss->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
-        ss->setMode(GL_LIGHTING, osg::StateAttribute::ON);
+        ss->setMode(GL_LIGHTING, osg::StateAttribute::OFF); // 关闭光照
+
+        // 启用背面剔除
+        osg::ref_ptr<osg::CullFace> cullface = new osg::CullFace;
+        cullface->setMode(osg::CullFace::BACK);
+        ss->setAttributeAndModes(cullface.get(), osg::StateAttribute::ON);
 
         osg::ref_ptr<osg::Geode> geode = new osg::Geode;
         geode->addDrawable(geom);
