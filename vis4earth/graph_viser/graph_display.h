@@ -571,6 +571,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
     }
     void loadGeoTypeGraph();
     void loadNoGeoTypeGraph();
+    void LoadConfigFromTxt(const QString &filePath); // 添加此方法
 
     void loadMarker();
 

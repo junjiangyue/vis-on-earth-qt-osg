@@ -61,16 +61,16 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             &GraphRenderer::onResolutionSliderValueChanged);
 
     // 连接参数设置的信号到槽函数
-    // connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //        &GraphRenderer::setAttraction);
-    // connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //        &GraphRenderer::setEdgeLength);
-    // connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //        &GraphRenderer::setRepulsion);
-    // connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //        &GraphRenderer::setSpringK);
-    // connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
-    //        &GraphRenderer::setIteration);
+     connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setAttraction);
+     connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setEdgeLength);
+     connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setRepulsion);
+     connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::setSpringK);
+     connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
+            &GraphRenderer::setIteration);
 
     connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
             &GraphRenderer::setRegionRestriction);
@@ -84,35 +84,35 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             &GraphRenderer::setMaxY);
 
     //// 连接全局弹簧常数 (K)
-    // connect(ui->spinBoxGlobalSpringConstant,
-    // QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onGlobalSpringConstantChanged);
+     connect(ui->spinBoxGlobalSpringConstant,
+     QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+             this, &GraphRenderer::onGlobalSpringConstantChanged);
 
-    //// 连接兼容性阈值
-    // connect(ui->spinBoxCompatibilityThreshold,
-    // QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onCompatibilityThresholdChanged);
+    // 连接兼容性阈值
+     connect(ui->spinBoxCompatibilityThreshold,
+     QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+             this, &GraphRenderer::onCompatibilityThresholdChanged);
 
-    //// 连接平滑宽度
-    // connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::onSmoothWidthChanged);
+    // 连接平滑宽度
+     connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::onSmoothWidthChanged);
 
-    //// 连接位移 (S)
-    // connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::onDisplacementChanged);
+    // 连接位移 (S)
+     connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::onDisplacementChanged);
 
-    //// 连接边距离
-    // connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::onEdgeDistanceChanged);
+    // 连接边距离
+     connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::onEdgeDistanceChanged);
 
-    //// 连接边权重阈值
-    // connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-    //         this, &GraphRenderer::onEdgeWeightThresholdChanged);
+    // 连接边权重阈值
+     connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+             this, &GraphRenderer::onEdgeWeightThresholdChanged);
 
-    //// 连接边百分比阈值
-    // connect(ui->spinBoxEdgePercentageThreshold,
-    //         QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-    //         &GraphRenderer::onEdgePercentageThresholdChanged);
+    // 连接边百分比阈值
+     connect(ui->spinBoxEdgePercentageThreshold,
+             QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+             &GraphRenderer::onEdgePercentageThresholdChanged);
     //  连接箭头流动
     /*connect(ui->arrowFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onArrowFlowButtonClicked);*/
@@ -3259,72 +3259,108 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
             lineID++; // 增加线ID
         }
         else {
-            // 计算边长度（大圆距离）
-            float lat1 = osg::DegreesToRadians(startPoint.x());
-            float lon1 = osg::DegreesToRadians(startPoint.y());
-            float lat2 = osg::DegreesToRadians(endPoint.x());
-            float lon2 = osg::DegreesToRadians(endPoint.y());
-
-            float dlat = lat2 - lat1;
-            float dlon = lon2 - lon1;
-            float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
-                      std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
-            float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
-            float totalLength = 6371.0f * c; // 6371km是地球平均半径
-
-            // 计算细分段数
-            int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
-            totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
-
-            // osg::Vec4 startColor = osg::Vec4(fromNodeIt->second.color, 0.0f);
-            // osg::Vec4 endColor = osg::Vec4(toNodeIt->second.color, 0.5f);
-            // osg::Vec4 edgeColor = (startColor + endColor) * 0.5f;
-            //  获取边的颜色（使用节点颜色或默认颜色）
+            // 获取边的颜色（使用节点颜色或默认颜色）
             osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
             if (currentLODLevel < 3) {
                 // 聚合边使用统一的金色
                 edgeColor = osg::Vec4(0.8f, 0.6f, 0.2f, 1.0f);
             }
 
+            // 检查是否有细分点，如果没有则使用起点和终点
+            std::vector<osg::Vec3> pathPoints;
+            if (!edge.subDivs.empty()) {
+                pathPoints = edge.subDivs;
+            } else {
+                pathPoints.push_back(fromNodeIt->second.pos);
+                pathPoints.push_back(toNodeIt->second.pos);
+            }
+
+            // 计算整条边的总长度
+            float totalLength = 0.0f;
+            std::vector<float> segmentLengths;
+            for (size_t i = 1; i < pathPoints.size(); ++i) {
+                float lat1 = osg::DegreesToRadians(pathPoints[i - 1].x());
+                float lon1 = osg::DegreesToRadians(pathPoints[i - 1].y());
+                float lat2 = osg::DegreesToRadians(pathPoints[i].x());
+                float lon2 = osg::DegreesToRadians(pathPoints[i].y());
+
+                float dlat = lat2 - lat1;
+                float dlon = lon2 - lon1;
+                float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                          std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+                float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+                float length = 6371.0f * c; // 6371km是地球平均半径
+                totalLength += length;
+                segmentLengths.push_back(length);
+            }
+
+            // 计算总的细分段数
+            int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
+            totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
+
+            // 根据每段长度占总长度的比例分配细分段数
+            std::vector<int> segmentCounts;
+            float accumulatedLength = 0.0f;
             osg::Vec3 prevPos;
 
-            // 生成边的插值点
-            for (int j = 0; j <= totalSegments; ++j) {
-                float t = static_cast<float>(j) / totalSegments;
+            for (size_t i = 0; i < segmentLengths.size(); ++i) {
+                accumulatedLength += segmentLengths[i];
+                float t = accumulatedLength / totalLength;
+                int currentSegments;
 
-                // 线性插值位置
-                osg::Vec3 interpolatedPos;
-                interpolatedPos.x() =
-                    fromNodeIt->second.pos.x() * (1.0f - t) + toNodeIt->second.pos.x() * t;
-                interpolatedPos.y() =
-                    fromNodeIt->second.pos.y() * (1.0f - t) + toNodeIt->second.pos.y() * t;
-
-                // 计算弧线高度
-                float baseHeight =
-                    getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
-                float arcHeight = std::sin(osg::PI * t) * 100000.f; // 使用边的最大高度
-                interpolatedPos.z() = std::max(baseHeight, arcHeight);
-
-                // 转换为球面坐标
-                osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
-
-                if (j > 0) {
-                    // 添加线段的两个顶点
-                    mVertexArray->push_back(prevPos);
-                    mColorFromArray->push_back(edgeColor);
-                    mColorToArray->push_back(edgeColor);
-                    mWeightArray->push_back(edge.weight);
-
-                    mVertexArray->push_back(spherePos);
-                    mColorFromArray->push_back(edgeColor);
-                    mColorToArray->push_back(edgeColor);
-                    mWeightArray->push_back(edge.weight);
-
-                    mLineIDArray->push_back(static_cast<float>(lineID));
-                    mLineIDArray->push_back(static_cast<float>(lineID));
+                if (i == segmentLengths.size() - 1) {
+                    // 最后一段使用剩余的所有细分段数
+                    currentSegments = totalSegments - std::accumulate(segmentCounts.begin(),
+                                                                      segmentCounts.end(), 0);
+                } else {
+                    currentSegments =
+                        static_cast<int>(totalSegments * (segmentLengths[i] / totalLength));
                 }
+                currentSegments = std::max(1, currentSegments); // 确保至少有一个细分段
+                segmentCounts.push_back(currentSegments);
 
-                prevPos = spherePos;
+                // 在当前段内生成插值点
+                const osg::Vec3 &startPoint = pathPoints[i];
+                const osg::Vec3 &endPoint = pathPoints[i + 1];
+
+                for (int j = 0; j <= currentSegments; ++j) {
+                    float localT = static_cast<float>(j) / currentSegments;
+                    float globalT =
+                        (accumulatedLength - segmentLengths[i] + segmentLengths[i] * localT) /
+                        totalLength;
+
+                    // 线性插值位置
+                    osg::Vec3 interpolatedPos;
+                    interpolatedPos.x() = startPoint.x() * (1.0f - localT) + endPoint.x() * localT;
+                    interpolatedPos.y() = startPoint.y() * (1.0f - localT) + endPoint.y() * localT;
+
+                    // 计算弧线高度（使用全局t值确保整条边的弧线连续）
+                    float baseHeight =
+                        getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+                    float arcHeight = std::sin(osg::PI * globalT) * 100000.f; // 使用边的最大高度
+                    interpolatedPos.z() = std::max(baseHeight, arcHeight);
+
+                    // 转换为球面坐标
+                    osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+
+                    if (i > 0 || j > 0) {
+                        // 添加线段的两个顶点
+                        mVertexArray->push_back(prevPos);
+                        mColorFromArray->push_back(edgeColor);
+                        mColorToArray->push_back(edgeColor);
+                        mWeightArray->push_back(edge.weight);
+
+                        mVertexArray->push_back(spherePos);
+                        mColorFromArray->push_back(edgeColor);
+                        mColorToArray->push_back(edgeColor);
+                        mWeightArray->push_back(edge.weight);
+
+                        mLineIDArray->push_back(static_cast<float>(lineID));
+                        mLineIDArray->push_back(static_cast<float>(lineID));
+                    }
+
+                    prevPos = spherePos;
+                }
             }
             lineID++;
         }
@@ -5603,5 +5639,141 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startTextureFlowAnimation() {
         }
 
         isTextureFlowAnimating = true;
+    }
+}
+void VIS4Earth::GraphRenderer::LoadConfigFromTxt(const QString &filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qDebug() << "Failed to open config file:" << filePath;
+        return;
+    }
+    int flowType = -1; // 默认无流动
+    bool layoutButton = false;
+    bool RestrictionButton = false;
+    bool EdgeBundlingButton = false;
+
+    QTextStream in(&file);
+    while (!in.atEnd()) {
+        QString line = in.readLine();
+        // 跳过空行和注释行
+        if (line.trimmed().isEmpty() || line.trimmed().startsWith('#')) {
+            continue;
+        }
+
+        // 解析键值对
+        QStringList parts = line.split('=');
+        if (parts.size() == 2) {
+            QString key = parts[0].trimmed();
+            QString value = parts[1].trimmed();
+
+            if (key == "attraction") {
+                double attraction = value.toDouble();
+                ui->spinBoxAttraction->setValue(attraction);
+                // setAttraction(attraction);
+            } else if (key == "edgeLength") {
+                double edgeLength = value.toDouble();
+                ui->spinBoxEdgeLength->setValue(edgeLength);
+                // setEdgeLength(edgeLength);
+            } else if (key == "repulsion") {
+                double repulsion = value.toDouble();
+                ui->spinBoxRepulsion->setValue(repulsion);
+                // setRepulsion(repulsion);
+            } else if (key == "springK") {
+                double springK = value.toDouble();
+                ui->spinBoxSpringK->setValue(springK);
+                // setSpringK(springK);
+            } else if (key == "iteration") {
+                int iteration = value.toInt();
+                ui->spinBoxIteration->setValue(iteration);
+                // setIteration(iteration);
+            } else if (key == "Layout") {
+                if (value == "true") {
+                    layoutButton = true;
+                } else if (value == "false") {
+                    layoutButton = false;
+                }
+            } else if (key == "comboBoxGraphType") {
+                int index = value.toInt();
+                ui->comboBoxGraphType->setCurrentIndex(index);
+                graphTypeIndex = index;
+            } else if (key == "pointsFilePath") {
+                ui->pointsFilePath->setText(value);
+            } else if (key == "edgesFilePath") {
+                ui->edgesFilePath->setText(value);
+            } else if (key == "flowType") {
+                flowType = value.toInt();
+            } else if (key == "MinX") {
+                double MinX = value.toDouble();
+                ui->spinBoxMinX->setValue(MinX);
+            } else if (key == "MaxX") {
+                double MaxX = value.toDouble();
+                ui->spinBoxMaxX->setValue(MaxX);
+            } else if (key == "MinY") {
+                double MinY = value.toDouble();
+                ui->spinBoxMinY->setValue(MinY);
+            } else if (key == "MaxY") {
+                int MaxY = value.toInt();
+                ui->spinBoxMaxY->setValue(MaxY);
+            } else if (key == "Restriction") {
+                if (value == "true") {
+                    RestrictionButton = true;
+                } else if (value == "false") {
+                    RestrictionButton = false;
+                }
+            } else if (key == "EdgeBundling") {
+                if (value == "true") {
+                    EdgeBundlingButton = true;
+                } else if (value == "false") {
+                    EdgeBundlingButton = false;
+                }
+            } else if (key == "GlobalSpringConstant") {
+                double GlobalSpringConstant = value.toDouble();
+                ui->spinBoxGlobalSpringConstant->setValue(GlobalSpringConstant);
+            } else if (key == "CompatibilityThreshold") {
+                double CompatibilityThreshold = value.toDouble();
+                ui->spinBoxCompatibilityThreshold->setValue(CompatibilityThreshold);
+            } else if (key == "SmoothWidth") {
+                double SmoothWidth = value.toDouble();
+                ui->spinBoxSmoothWidth->setValue(SmoothWidth);
+            } else if (key == "EdgeWeightThreshold") {
+                double EdgeWeightThreshold = value.toDouble();
+                ui->spinBoxEdgeWeightThreshold->setValue(EdgeWeightThreshold);
+            } else if (key == "EdgePercentageThreshold") {
+                double EdgePercentageThreshold = value.toDouble();
+                ui->spinBoxEdgePercentageThreshold->setValue(EdgePercentageThreshold);
+            } else if (key == "Displacement") {
+                double Displacement = value.toDouble();
+                ui->spinBoxDisplacement->setValue(Displacement);
+            } else if (key == "EdgeDistance") {
+                double EdgeDistance = value.toDouble();
+                ui->spinBoxEdgeDistance->setValue(EdgeDistance);
+                // 可以根据需要添加更多的配置项
+            }
+        }
+
+        // 第一部分绘制
+        loadAndDrawGraph();
+
+        // 第二部分流动
+        if (flowType == 0) {
+            onHighlightFlowButtonClicked();
+        } else if (flowType == 1) {
+            onTextureFlowButtonClicked();
+        } else if (flowType == 2) {
+            onStarFlowButtonClicked();
+        }
+
+        // 第三部分图布局
+        if (layoutButton) {
+            showGraph();
+        }
+        if (RestrictionButton) {
+            setRegionRestriction(true);
+        }
+        if (EdgeBundlingButton) {
+            showBundling();
+        }
+
+        file.close();
     }
 }
