@@ -305,10 +305,10 @@ class GraphLoader {
         char src[128], dst[128];
         double w, wmax = 0.0;
         std::vector<Edge> allEdges;
-        for (int r = 0; r < rowsEdge - 1; r++) {
+        for (int r = 1; r < rowsEdge; r++) {
             edgeF.GetText(line, 1024);
             w = 1.0;
-            sscanf(line, "%s %s %lg", src, dst, &w);
+            sscanf(line, "%[^,],%[^,]", src, dst);
             allEdges.push_back(Edge(std::string(src), std::string(dst),
                                     read_nodes[std::string(src)].pos,
                                     read_nodes[std::string(dst)].pos, w + 1.0));

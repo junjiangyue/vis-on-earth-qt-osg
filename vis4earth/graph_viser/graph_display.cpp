@@ -1444,7 +1444,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     // 更新图渲染
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
-        graphParam->currentLODLevel = 3;
+        graphParam->currentLODLevel = getCurrentLevel(cameraHeightPresent);
         updateGraphParameters(graphParam); 
         cameraUpdate("LoadedGraph", cameraHeightPresent);
     }
