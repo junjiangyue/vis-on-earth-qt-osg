@@ -324,6 +324,8 @@ class GraphRenderer : public QtOSGReflectableWidget {
         std::vector<std::vector<float>> heightMap;
         std::vector<GraphLevel> levels; // 存放多层次的图
 
+        osg::ref_ptr<osg::Node> _satelliteModel;//卫星
+
         osg::ref_ptr<osg::Group> grp;
         osg::ref_ptr<osg::Group> edgeNodegrp;
 

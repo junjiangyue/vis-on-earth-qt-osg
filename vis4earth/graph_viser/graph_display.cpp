@@ -2696,6 +2696,15 @@ float findOptimalHeight(float p, float max, const std::vector<float> &heightArra
     return h_max;
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
+    if (!_satelliteModel) {
+        _satelliteModel =
+            osgDB::readNodeFile("C:/Users/DELL/Desktop/data/50-satellite/satellite_obj.obj");
+        if (!_satelliteModel) {
+            std::cout << "failed!" << std::endl;
+        } else {
+            std::cout << "success!" << std::endl;
+        }
+    }
     auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
         // v3.x() 是纬度，v3.y() 是经度
         float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
@@ -2743,17 +2752,33 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
         }
         p = vec3ToSphere(p);
-        int scale = .050f;
-        if (itr->second.level == 100) {
-            scale = 1.f;
+        if (itr->second.level == 100 && _satelliteModel.valid()) {
+            osg::ref_ptr<osg::MatrixTransform> transform = new osg::MatrixTransform;
+
+            // 设置状态
+            osg::ref_ptr<osg::Node> modelClone =
+                dynamic_cast<osg::Node *>(_satelliteModel->clone(osg::CopyOp::DEEP_COPY_ALL));
+            modelClone->getOrCreateStateSet()->setMode(GL_CULL_FACE, osg::StateAttribute::OFF);
+
+            // 正确的矩阵变换顺序
+            float modelScale = 50000.0f;
+            osg::Matrix scale = osg::Matrix::scale(modelScale, modelScale, modelScale);
+            osg::Matrix translate = osg::Matrix::translate(p);
+            transform->setMatrix(scale * translate); // 先缩放后平移
+
+            transform->addChild(modelClone);
+            edgeNodegrp->addChild(transform);
+        } else {
+            // 原有的球体绘制逻辑
+            int scale = .050f;
+            auto sphere = new osg::ShapeDrawable(
+                new osg::Sphere(p, itr->second.size * scale * nodeGeomSize), tessl);
+            osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
+            centerData->push_back(itr->second.pos);
+            sphere->setUserData(centerData);
+            sphere->setColor(color);
+            edgeNodegrp->addChild(sphere);
         }
-        auto sphere = new osg::ShapeDrawable(
-            new osg::Sphere(p, itr->second.size * scale * nodeGeomSize), tessl);
-        osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
-        centerData->push_back(itr->second.pos);
-        sphere->setUserData(centerData);
-        sphere->setColor(color);
-        edgeNodegrp->addChild(sphere);
     }
 
     auto states = edgeNodegrp->getOrCreateStateSet();
