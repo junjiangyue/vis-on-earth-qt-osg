@@ -2726,13 +2726,19 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         edgeNodegrp = new osg::Group;
     }
     edgeNodegrp->removeChildren(0, edgeNodegrp->getNumChildren());
-    grp->removeChildren(0, grp->getNumChildren());
+    grp->removeChild(edgeNodegrp);
     auto tessl = new osg::TessellationHints;
     tessl->setDetailRatio(1.f);
     std::map<std::string, osg::ShapeDrawable *> osgNodes;
     std::vector<osg::ref_ptr<osgText::Text>> textNodes;
     
-    
+    if (!sats) {
+        sats = new osg::Group;
+    }
+    bool drawSats = false;
+    if (sats->getNumChildren() == 0) {
+        drawSats = true;
+    }
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         if (!itr->second.visible)
             continue; // 只处理可见节点
@@ -2752,22 +2758,21 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
         }
         p = vec3ToSphere(p);
-        if (itr->second.level == 100 && _satelliteModel.valid()) {
+        if (drawSats && itr->second.level == 100 && _satelliteModel.valid()) {
             osg::ref_ptr<osg::MatrixTransform> transform = new osg::MatrixTransform;
 
             // 设置状态
             osg::ref_ptr<osg::Node> modelClone =
                 dynamic_cast<osg::Node *>(_satelliteModel->clone(osg::CopyOp::DEEP_COPY_ALL));
-            modelClone->getOrCreateStateSet()->setMode(GL_CULL_FACE, osg::StateAttribute::OFF);
 
-            // 正确的矩阵变换顺序
-            float modelScale = 50000.0f;
+            float modelScale = 40000.0f;
             osg::Matrix scale = osg::Matrix::scale(modelScale, modelScale, modelScale);
             osg::Matrix translate = osg::Matrix::translate(p);
             transform->setMatrix(scale * translate); // 先缩放后平移
 
             transform->addChild(modelClone);
-            edgeNodegrp->addChild(transform);
+            sats->addChild(transform);
+
         } else {
             // 原有的球体绘制逻辑
             int scale = .050f;
@@ -2780,7 +2785,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             edgeNodegrp->addChild(sphere);
         }
     }
-
+    grp->addChild(sats);
     auto states = edgeNodegrp->getOrCreateStateSet();
     auto matr = new osg::Material;
     matr->setColorMode(osg::Material::DIFFUSE);

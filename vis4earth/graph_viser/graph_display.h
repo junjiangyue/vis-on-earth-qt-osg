@@ -326,8 +326,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         osg::ref_ptr<osg::Node> _satelliteModel;//卫星
 
-        osg::ref_ptr<osg::Group> grp;
-        osg::ref_ptr<osg::Group> edgeNodegrp;
+        osg::ref_ptr<osg::Group> grp;            // 全部的group，包含grpWithoutSats和卫星
+        osg::ref_ptr<osg::Group> sats;// 卫星
+        osg::ref_ptr<osg::Group> edgeNodegrp; // 节点和线
 
         // 用于边绘制的顶点数据结构
         struct LineVertex {
