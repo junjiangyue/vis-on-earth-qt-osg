@@ -26,9 +26,10 @@ int main(int argc, char **argv) {
     osg::ref_ptr<osgGA::TerrainManipulator> terrainManipulator = new osgGA::TerrainManipulator();
 
     // 2. 将它设置给 Viewer
-    viewer->setCameraManipulator(terrainManipulator);
-    //auto *manipulator = new osgGA::TrackballManipulator;
-    //viewer->setCameraManipulator(manipulator);
+    //viewer->setCameraManipulator(terrainManipulator);
+
+    auto *manipulator = new osgGA::TrackballManipulator;
+    viewer->setCameraManipulator(manipulator);
 
     osg::ref_ptr<osg::Group> grp = new osg::Group;
     grp->addChild(VIS4Earth::CreateEarth());

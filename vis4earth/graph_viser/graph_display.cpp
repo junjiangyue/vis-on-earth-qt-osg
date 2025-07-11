@@ -2739,6 +2739,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     if (sats->getNumChildren() == 0) {
         drawSats = true;
     }
+    osg::ref_ptr<osg::Vec3Array> allNodePositions = new osg::Vec3Array;
+    osg::ref_ptr<osg::Vec4Array> allNodeColors = new osg::Vec4Array;
     for (auto itr = nodes->begin(); itr != nodes->end(); ++itr) {
         if (!itr->second.visible)
             continue; // 只处理可见节点
@@ -2755,7 +2757,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         }
         auto p = itr->second.pos;
         if (p.z() < 100.f) {
-            p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 100.0f;
+            p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 10000.0f;
         }
         p = vec3ToSphere(p);
         if (drawSats && itr->second.level == 100 && _satelliteModel.valid()) {
@@ -2775,17 +2777,34 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
 
         } else {
             // 原有的球体绘制逻辑
-            int scale = .050f;
+            allNodePositions->push_back(p);
+            allNodeColors->push_back(color);
+            /*int scale = 0.050f;
             auto sphere = new osg::ShapeDrawable(
                 new osg::Sphere(p, itr->second.size * scale * nodeGeomSize), tessl);
             osg::ref_ptr<osg::Vec3Array> centerData = new osg::Vec3Array;
             centerData->push_back(itr->second.pos);
             sphere->setUserData(centerData);
             sphere->setColor(color);
-            edgeNodegrp->addChild(sphere);
+            edgeNodegrp->addChild(sphere);*/
         }
     }
     grp->addChild(sats);
+    auto geom = new osg::Geometry;
+    geom->setVertexArray(allNodePositions);
+    geom->setColorArray(allNodeColors, osg::Array::BIND_PER_VERTEX);
+    geom->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::POINTS, 0, allNodePositions->size()));
+
+    auto geode = new osg::Geode;
+    geode->addDrawable(geom);
+    auto ss = geode->getOrCreateStateSet();
+    osg::ref_ptr<osg::Point> pointSize = new osg::Point;
+    pointSize->setSize(3.0f); // 设置点大小（像素单位）
+    ss->setAttributeAndModes(pointSize, osg::StateAttribute::ON);
+
+    edgeNodegrp->addChild(geode);
+    //grp->addChild(edgeNodegrp);
     auto states = edgeNodegrp->getOrCreateStateSet();
     auto matr = new osg::Material;
     matr->setColorMode(osg::Material::DIFFUSE);
@@ -3404,6 +3423,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
+    mEdgeGeometry->setUseVertexBufferObjects(true);
+    mEdgeGeometry->setUseDisplayList(false);
+
 
     // 设置绘制模式
     mEdgeGeometry->addPrimitiveSet(
