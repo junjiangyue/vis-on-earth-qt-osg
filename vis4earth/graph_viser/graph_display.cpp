@@ -4636,6 +4636,175 @@ void VIS4Earth::GraphRenderer::debugNodeCoordinates(
 }
 
 
+// 为指定LOD级别生成聚合边
+void VIS4Earth::GraphRenderer::generateAggregatedEdgesForLOD(
+    int lodLevel, std::shared_ptr<std::map<std::string, Node>> lodNodes,
+    std::shared_ptr<std::vector<Edge>> lodEdges,
+    std::shared_ptr<std::map<std::string, Node>> allNodes,
+    std::shared_ptr<std::vector<Edge>> allEdges) {
+
+    std::cout << "Generating aggregated edges for LOD " << lodLevel << std::endl;
+
+    // 根据LOD级别选择对应的地理分区
+    const std::vector<GeographicRegion> *currentRegions = nullptr;
+    switch (lodLevel) {
+    case 0:
+        currentRegions = &LOD0_REGIONS;
+        break;
+    case 1:
+        currentRegions = &LOD1_REGIONS;
+        break;
+    case 2:
+        currentRegions = &LOD2_REGIONS;
+        break;
+    default:
+        std::cout << "Invalid LOD level for aggregated edges: " << lodLevel << std::endl;
+        return;
+    }
+
+    // 为每个区域分配当前LOD的节点
+    std::map<int, std::vector<std::string>> regionNodes;
+    for (const auto &nodePair : *lodNodes) {
+        const Node &node = nodePair.second;
+        float nodeLat = node.pos.x();
+        float nodeLon = node.pos.y();
+
+        // 找到节点所属的地理区域
+        for (const auto &region : *currentRegions) {
+            if (nodeLat >= region.minLat && nodeLat <= region.maxLat && nodeLon >= region.minLon &&
+                nodeLon <= region.maxLon) {
+                regionNodes[region.regionId].push_back(nodePair.first);
+                break; // 节点只属于第一个匹配的区域
+            }
+        }
+    }
+
+    // 为每个区域选择代表节点（从当前LOD的节点中选择）
+    std::map<int, std::string> regionRepresentatives;
+    for (const auto &regionPair : regionNodes) {
+        int regionId = regionPair.first;
+        const std::vector<std::string> &nodeIds = regionPair.second;
+
+        if (nodeIds.empty())
+            continue;
+
+        // 选择区域内level最低、degree最高的节点作为代表
+        std::string bestNodeId = *std::max_element(
+            nodeIds.begin(), nodeIds.end(), [lodNodes](const std::string &a, const std::string &b) {
+                const Node &nodeA = lodNodes->at(a);
+                const Node &nodeB = lodNodes->at(b);
+                if (nodeA.level != nodeB.level) {
+                    return nodeA.level > nodeB.level; // level越低优先级越高
+                }
+                return nodeA.degree < nodeB.degree; // degree越高优先级越高
+            });
+
+        regionRepresentatives[regionId] = bestNodeId;
+
+        std::cout << "Region " << regionId << " representative: " << bestNodeId
+                  << " (level=" << lodNodes->at(bestNodeId).level
+                  << ", degree=" << lodNodes->at(bestNodeId).degree << ")" << std::endl;
+    }
+
+    // 创建从节点ID到区域ID的映射（针对所有节点）
+    std::map<std::string, int> nodeToRegion;
+    for (const auto &nodePair : *allNodes) {
+        const Node &node = nodePair.second;
+        float nodeLat = node.pos.x();
+        float nodeLon = node.pos.y();
+
+        // 找到节点所属的地理区域
+        for (const auto &region : *currentRegions) {
+            if (nodeLat >= region.minLat && nodeLat <= region.maxLat && nodeLon >= region.minLon &&
+                nodeLon <= region.maxLon) {
+                nodeToRegion[nodePair.first] = region.regionId;
+                break; // 节点只属于第一个匹配的区域
+            }
+        }
+    }
+
+    // 聚合边信息：记录从LOD节点到各区域代表节点的连接
+    std::map<std::pair<std::string, std::string>, int> aggregatedConnections;
+    std::map<std::pair<std::string, std::string>, float> aggregatedWeights;
+
+    // 遍历所有原始边，查找需要聚合的连接
+    for (const auto &edge : *allEdges) {
+        if (!edge.visible)
+            continue;
+
+        bool fromInLOD = (lodNodes->find(edge.from) != lodNodes->end());
+        bool toInLOD = (lodNodes->find(edge.to) != lodNodes->end());
+
+        // 情况1：两端都在LOD中，已经作为直接边处理了，跳过
+        if (fromInLOD && toInLOD) {
+            continue;
+        }
+
+        // 情况2：一端在LOD中，一端不在LOD中，需要聚合
+        if (fromInLOD && !toInLOD) {
+            // from在LOD中，to不在LOD中，需要连接到to所在区域的代表节点
+            auto toRegionIt = nodeToRegion.find(edge.to);
+            if (toRegionIt != nodeToRegion.end()) {
+                int toRegion = toRegionIt->second;
+                auto repIt = regionRepresentatives.find(toRegion);
+                if (repIt != regionRepresentatives.end()) {
+                    std::pair<std::string, std::string> edgeKey = {edge.from, repIt->second};
+                    aggregatedConnections[edgeKey]++;
+                    aggregatedWeights[edgeKey] += edge.weight;
+                }
+            }
+        } else if (!fromInLOD && toInLOD) {
+            // to在LOD中，from不在LOD中，需要连接到from所在区域的代表节点
+            auto fromRegionIt = nodeToRegion.find(edge.from);
+            if (fromRegionIt != nodeToRegion.end()) {
+                int fromRegion = fromRegionIt->second;
+                auto repIt = regionRepresentatives.find(fromRegion);
+                if (repIt != regionRepresentatives.end()) {
+                    std::pair<std::string, std::string> edgeKey = {repIt->second, edge.to};
+                    aggregatedConnections[edgeKey]++;
+                    aggregatedWeights[edgeKey] += edge.weight;
+                }
+            }
+        }
+        // 情况3：两端都不在LOD中，跳过（可能是高级别LOD才有的连接）
+    }
+
+    std::cout << "Found " << aggregatedConnections.size() << " aggregated edge connections"
+              << std::endl;
+
+    // 生成聚合边
+    static int aggregatedEdgeCounter = 0;
+    for (const auto &connPair : aggregatedConnections) {
+        const std::string &fromId = connPair.first.first;
+        const std::string &toId = connPair.first.second;
+        int connectionCount = connPair.second;
+        float totalWeight = aggregatedWeights[connPair.first];
+
+        // 检查聚合边的两端节点是否都存在于当前LOD中
+        if (lodNodes->find(fromId) == lodNodes->end() || lodNodes->find(toId) == lodNodes->end()) {
+            continue; // 如果任一端不在当前LOD中，跳过
+        }
+
+        Edge aggregatedEdge;
+        aggregatedEdge.id =
+            "agg_lod" + std::to_string(lodLevel) + "_" + std::to_string(aggregatedEdgeCounter++);
+        aggregatedEdge.from = fromId;
+        aggregatedEdge.to = toId;
+        aggregatedEdge.weight = totalWeight;
+        aggregatedEdge.visible = true;
+        aggregatedEdge.isAdd = true; // 标记为聚合边
+
+        // 根据LOD级别和连接数调整高度
+        float baseHeight = 30000.0f + (3 - lodLevel) * 15000.0f; // LOD越低高度越高
+        aggregatedEdge.maxHeight = baseHeight + connectionCount * 3000.0f;
+
+        lodEdges->push_back(aggregatedEdge);
+
+        std::cout << "Created aggregated edge " << aggregatedEdge.id << " between " << fromId
+                  << " and " << toId << " with " << connectionCount
+                  << " connections, weight=" << totalWeight << std::endl;
+    }
+}
 // 发光效果控制方法实现
 void VIS4Earth::GraphRenderer::PerGraphParam::setGlowIntensity(float intensity) {
     if (mEdgeGeometry && mEdgeGeometry->getStateSet()) {
