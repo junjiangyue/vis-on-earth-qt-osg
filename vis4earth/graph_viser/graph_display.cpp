@@ -517,6 +517,10 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
 
         return ret;
     };
+    std::size_t maxTextCount = std::numeric_limits<std::size_t>::max();
+    if (graphParam->currentLODLevel == 0 || graphParam->currentLODLevel == 1) {
+        maxTextCount = 100; // LOD0 / LOD1 最多 100 个文字标签
+    }
     // 移除不需要的标签
     for (const auto &labelId : removeList) {
         // 找到并移除对应的标签节点
@@ -553,8 +557,12 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
     std::shared_ptr<std::map<std::string, Node>> nodesWithLevel = graphParam->nodes;
     // 添加新的标签
     for (const auto &labelId : newAddList) {
+        if (textNodes.size() >= maxTextCount) {
+            break;
+        }
         // 直接从当前LOD的节点数据中查找节点信息
         auto it = nodesWithLevel->find(labelId);
+
         if (it != nodesWithLevel->end() && it->second.visible) {
             // 创建新的文字标签
             osg::ref_ptr<osgText::Text> text = new osgText::Text;
