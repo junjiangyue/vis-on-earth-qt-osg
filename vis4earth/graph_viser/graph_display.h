@@ -64,7 +64,21 @@ class GraphRenderer : public QtOSGReflectableWidget {
     std::shared_ptr<VIS4Earth::Graph> myGraph;
     std::future<void> compatibilityFuture; // 保存异步任务状态
     // VIS4Earth::Graph myGraph;
+    std::future<void> _bundlingFuture;
 
+    // 标记整个“全量 bundling 任务”是否在运行
+    std::atomic<bool> _bundlingAllRunning{false};
+
+    // 标记每个 LOD 的 bundling 是否已经完成并写入文件
+    std::array<std::atomic<bool>, 4> _lodBundlingReady;
+
+    // 存储结果文件目录（建议设为源数据所在目录）
+    QString _bundledResultDir;
+
+    // 根据 LOD 生成对应的结果文件路径
+    QString bundledFilePathForLOD(int lod) const {
+        return _bundledResultDir + QString("/bundled_edges_result_lod%1.csv").arg(lod);
+    }
     VIS4Earth::EdgeBundling::BundlingParam mybundlingParam = {
         mybundlingParam.K = 0.1,
         mybundlingParam.I = 50,
@@ -609,6 +623,13 @@ class GraphRenderer : public QtOSGReflectableWidget {
   private slots:
     void onComboBoxGraphTypeChanged(int index);
     void loadPointsCSV();
+
+    std::shared_ptr<VIS4Earth::Graph>
+    buildGraphFromLODData(const std::shared_ptr<std::map<std::string, Node>> &lodNodes,
+                          const std::shared_ptr<std::vector<Edge>> &lodEdges);
+
+    void saveBundledGraphToFile(const std::shared_ptr<VIS4Earth::Graph> &graph,
+                                const QString &filePath);
 
     void loadEdgesCSV();
     void loadAndDrawGraph();
