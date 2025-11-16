@@ -554,6 +554,36 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
             }
         }
     }
+    if (textNodes.size() > maxTextCount) {
+        // 只保留前 maxTextCount 个
+        for (int i = maxTextCount; i < textNodes.size(); ++i) {
+            osgText::Text *text = textNodes[i].get();
+            if (!text)
+                continue;
+
+            // 找到对应 geode 并删除
+            for (int c = 0; c < graphParam->grp->getNumChildren(); ++c) {
+                osg::Node *node = graphParam->grp->getChild(c);
+                osg::Geode *geode = dynamic_cast<osg::Geode *>(node);
+                if (geode) {
+                    for (unsigned int j = 0; j < geode->getNumDrawables(); ++j) {
+                        osgText::Text *t = dynamic_cast<osgText::Text *>(geode->getDrawable(j));
+                        if (t == text) {
+                            graphParam->grp->removeChild(node);
+                            // 移除 sceneLabels 中的 id
+                            std::string id = t->getText().createUTF8EncodedString();
+                            sceneLabels.erase(id);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 截断 textNodes，只保留前 maxTextCount 个
+        textNodes.resize(maxTextCount);
+    }
+    
     std::shared_ptr<std::map<std::string, Node>> nodesWithLevel = graphParam->nodes;
     // 添加新的标签
     for (const auto &labelId : newAddList) {
