@@ -2573,8 +2573,7 @@ float findOptimalHeight(float p, float max, const std::vector<float> &heightArra
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     if (!_satelliteModel) {
-        _satelliteModel =
-            osgDB::readNodeFile("C:/Users/DELL/Desktop/data/50-satellite/satellite_obj.obj");
+        _satelliteModel = osgDB::readNodeFile(DATA_PATH_PREFIX "satellite_obj.obj");
         if (!_satelliteModel) {
             std::cout << "failed!" << std::endl;
         } else {
