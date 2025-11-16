@@ -1208,6 +1208,34 @@ void VIS4Earth::GraphRenderer::showBundling() {
         }
     }
 
+    if (!_lodBundlingReady[currentLOD] && !QFile::exists(filePath)) {
+        if (!_bundlingAllRunning) {
+            auto nodesLOD = lodNodesData[currentLOD];
+            auto edgesLOD = lodEdgesData[currentLOD];
+            if (nodesLOD && edgesLOD) {
+                try {
+                    // 1) 从当前 LOD 的 nodes/edges 构建临时 Graph
+                    auto tmpGraph = buildGraphFromLODData(nodesLOD, edgesLOD);
+                    if (tmpGraph) {
+                        VIS4Earth::EdgeBundling edgeBundling;
+                        edgeBundling.SetGraph(tmpGraph);
+                        tmpGraph->buildCompatibilityListsIfNeeded();
+                        edgeBundling.SetParameter(mybundlingParam);
+                        edgeBundling.EdgeBundle();
+
+                        auto bundledGraph = edgeBundling.GetLayoutedGraph();
+                        saveBundledGraphToFile(bundledGraph, filePath);
+
+                        _lodBundlingReady[currentLOD] = true;
+                    }
+                } catch (const std::exception &e) {
+                    qDebug() << "Error in fallback bundling for LOD" << currentLOD << ":"
+                             << e.what();
+                }
+            }
+        }
+    }
+
     // 5. 兜底检查：如果此时仍然没有 ready，且文件也不存在，就没法加载
     if (!_lodBundlingReady[currentLOD] || !QFile::exists(filePath)) {
         qDebug() << "Bundling result for LOD" << currentLOD << "is not ready. Path =" << filePath;
