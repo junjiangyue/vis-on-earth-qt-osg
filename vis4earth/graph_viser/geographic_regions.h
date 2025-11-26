@@ -14,8 +14,8 @@ struct GeographicRegion {
     std::string regionName;
     osg::Vec3 centerPoint;
     std::vector<std::string> nodeIds;
-    int totalConnections = 0;
-    float totalWeight = 0.0f;
+    int totalConnections;
+    float totalWeight;
 };
 
 // LOD 0: 全球主要国家级别 (约50个区域)

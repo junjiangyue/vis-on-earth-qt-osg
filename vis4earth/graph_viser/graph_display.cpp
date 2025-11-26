@@ -6,9 +6,9 @@
 #include "LOUVAIN.h"
 #include "graph_draw.h"
 #include <algorithm>
+#include <memory>
 #include <osgText/Font>
 #include <set>
-#include <memory>
 
 using namespace VIS4Earth;
 static std::array<float, 2> lonRng = {-90.f, 90.f};
@@ -61,15 +61,15 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             &GraphRenderer::onResolutionSliderValueChanged);
 
     // 连接参数设置的信号到槽函数
-     connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    connect(ui->spinBoxAttraction, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setAttraction);
-     connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    connect(ui->spinBoxEdgeLength, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setEdgeLength);
-     connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    connect(ui->spinBoxRepulsion, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setRepulsion);
-     connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+    connect(ui->spinBoxSpringK, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
             &GraphRenderer::setSpringK);
-     connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
+    connect(ui->spinBoxIteration, QOverload<int>::of(&QSpinBox::valueChanged), this,
             &GraphRenderer::setIteration);
 
     connect(ui->regionRestrictionButton, &QPushButton::clicked, this,
@@ -84,35 +84,33 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
             &GraphRenderer::setMaxY);
 
     //// 连接全局弹簧常数 (K)
-     connect(ui->spinBoxGlobalSpringConstant,
-     QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-             this, &GraphRenderer::onGlobalSpringConstantChanged);
+    connect(ui->spinBoxGlobalSpringConstant, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphRenderer::onGlobalSpringConstantChanged);
 
     // 连接兼容性阈值
-     connect(ui->spinBoxCompatibilityThreshold,
-     QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-             this, &GraphRenderer::onCompatibilityThresholdChanged);
+    connect(ui->spinBoxCompatibilityThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphRenderer::onCompatibilityThresholdChanged);
 
     // 连接平滑宽度
-     connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::onSmoothWidthChanged);
+    connect(ui->spinBoxSmoothWidth, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onSmoothWidthChanged);
 
     // 连接位移 (S)
-     connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::onDisplacementChanged);
+    connect(ui->spinBoxDisplacement, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onDisplacementChanged);
 
     // 连接边距离
-     connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::onEdgeDistanceChanged);
+    connect(ui->spinBoxEdgeDistance, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onEdgeDistanceChanged);
 
     // 连接边权重阈值
-     connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
-             this, &GraphRenderer::onEdgeWeightThresholdChanged);
+    connect(ui->spinBoxEdgeWeightThreshold, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, &GraphRenderer::onEdgeWeightThresholdChanged);
 
     // 连接边百分比阈值
-     connect(ui->spinBoxEdgePercentageThreshold,
-             QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
-             &GraphRenderer::onEdgePercentageThresholdChanged);
+    connect(ui->spinBoxEdgePercentageThreshold,
+            QOverload<double>::of(&QDoubleSpinBox::valueChanged), this,
+            &GraphRenderer::onEdgePercentageThresholdChanged);
     //  连接箭头流动
     /*connect(ui->arrowFlowButton, &QPushButton::clicked, this,
             &GraphRenderer::onArrowFlowButtonClicked);*/
@@ -128,6 +126,10 @@ VIS4Earth::GraphRenderer::GraphRenderer(QWidget *parent) : QtOSGReflectableWidge
     for (int i = 0; i < 4; ++i) {
         lodNodesData[i].reset();
         lodEdgesData[i].reset();
+    }
+
+    for (auto &flag : _lodBundlingReady) {
+        flag = false;
     }
 }
 
@@ -519,7 +521,13 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
     };
     std::size_t maxTextCount = std::numeric_limits<std::size_t>::max();
     if (graphParam->currentLODLevel == 0 || graphParam->currentLODLevel == 1) {
-        maxTextCount = 100; // LOD0 / LOD1 最多 100 个文字标签
+        maxTextCount = 0; // LOD0 / LOD1 最多 50 个文字标签
+    }
+    if (graphParam->currentLODLevel == 2) {
+        maxTextCount = 0; // LOD2 最多 100 个文字标签
+    }
+    if (graphParam->currentLODLevel == 3) {
+        maxTextCount = 0; // LOD3 最多 100 个文字标签
     }
     // 移除不需要的标签
     for (const auto &labelId : removeList) {
@@ -554,6 +562,36 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
             }
         }
     }
+    if (textNodes.size() > maxTextCount) {
+        // 只保留前 maxTextCount 个
+        for (int i = maxTextCount; i < textNodes.size(); ++i) {
+            osgText::Text *text = textNodes[i].get();
+            if (!text)
+                continue;
+
+            // 找到对应 geode 并删除
+            for (int c = 0; c < graphParam->grp->getNumChildren(); ++c) {
+                osg::Node *node = graphParam->grp->getChild(c);
+                osg::Geode *geode = dynamic_cast<osg::Geode *>(node);
+                if (geode) {
+                    for (unsigned int j = 0; j < geode->getNumDrawables(); ++j) {
+                        osgText::Text *t = dynamic_cast<osgText::Text *>(geode->getDrawable(j));
+                        if (t == text) {
+                            graphParam->grp->removeChild(node);
+                            // 移除 sceneLabels 中的 id
+                            std::string id = t->getText().createUTF8EncodedString();
+                            sceneLabels.erase(id);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 截断 textNodes，只保留前 maxTextCount 个
+        textNodes.resize(maxTextCount);
+    }
+
     std::shared_ptr<std::map<std::string, Node>> nodesWithLevel = graphParam->nodes;
     // 添加新的标签
     for (const auto &labelId : newAddList) {
@@ -734,15 +772,26 @@ void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, doub
         }
     }
 }
+// 修改lod级别相机高度
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
+//    if (height < 0)
+//        return 0;
+//    if (height > 2.64834e+07)
+//        return 0; // 全球级
+//    else if (height > 1.73736e+07)
+//        return 1; // 大陆级
+//    else if (height > 1.02563e+07)
+//        return 2; // 国家级
+//    else
+//        return 3;
     if (height < 0)
         return 0;
     if (height > 2.64834e+07)
         return 0; // 全球级
-    else if (height > 1.73736e+07)
+    else if (height > 1.32563e+07)
         return 1; // 大陆级
-    else if (height > 1.02563e+07)
+    else if (height > 0.7123e+07)
         return 2; // 国家级
     else
         return 3;
@@ -797,6 +846,7 @@ std::string rgbToHex(float r, float g, float b) {
 void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     //   加载城市建筑物的 OBB 数据
     VIS4Earth::CityLoader cityLoader;
+
     if (!cityLoader.loadBuildingsFromCSV(DATA_PATH_PREFIX "buildings_obb.csv")) {
         std::cerr << "Failed to load building data!" << std::endl;
     }
@@ -824,6 +874,8 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     if (edgesFileName.isEmpty()) {
         edgesFileName = "C:/Users/DELL/Desktop/data/graph_data/usflight/usroutes.csv";
     }
+    QFileInfo fi(pointsFileName);
+    _bundledResultDir = fi.absolutePath();
 
     // 清空现有的level数据
     for (int i = 0; i < 4; ++i) {
@@ -860,7 +912,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
                 levelIndex[node.level].push_back(node.id);
                 levelNodeIndex[node.level].push_back(node);
             }
-            
+
             nodes->emplace(std::make_pair(itr->first, node));
             earthGrid.insertNodeIntoGrid(node);
             ++i;
@@ -1152,151 +1204,134 @@ void VIS4Earth::GraphRenderer::showGraph() {
 }
 
 void VIS4Earth::GraphRenderer::showBundling() {
-    // 首先尝试加载已有的边绑定结果
-    // QString bundledEdgesFile =
-    //    "C:/Users/DL/Desktop/data/graph_data/usflight/bundled_edges_result.csv";
-    // if (QFile::exists(bundledEdgesFile)) {
-    //    // 如果存在缓存文件，直接读取
-    //    try {
-    //        QFile file(bundledEdgesFile);
-    //        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-    //            QTextStream in(&file);
+    // 1. 获取当前 LOD 等级
+    int currentLOD = getCurrentLevel(cameraHeightPresent);
 
-    //            auto nodes = std::make_shared<std::map<std::string, Node>>();
-    //            auto edges = std::make_shared<std::vector<Edge>>();
+    // 2. 构造当前 LOD 对应的结果文件路径
+    QString filePath = bundledFilePathForLOD(currentLOD);
 
-    //            // 复制节点信息
-    //            for (const auto &node : myGraph->getNodes()) {
-    //                Node newNode;
-    //                newNode.pos = osg::Vec3(node.second.pos.x, node.second.pos.y, 0.f);
-    //                newNode.id = node.first;
-    //                nodes->emplace(node.first, newNode);
-    //            }
-
-    //            // 读取边的信息
-    //            while (!in.atEnd()) {
-    //                QString line = in.readLine();
-    //                QStringList fields = line.split(",");
-    //                if (fields.size() >= 6) { // from,to,hasSubdiv,numPoints,x1,y1,...
-    //                    Edge edge;
-    //                    edge.from = fields[0].toStdString();
-    //                    edge.to = fields[1].toStdString();
-
-    //                    bool hasSubdiv = fields[2].toInt() == 1;
-    //                    int numPoints = fields[3].toInt();
-
-    //                    if (!hasSubdiv) {
-    //                        // 只有起点和终点
-    //                        float startX = fields[4].toFloat();
-    //                        float startY = fields[5].toFloat();
-    //                        float endX = fields[6].toFloat();
-    //                        float endY = fields[7].toFloat();
-    //                        edge.subDivs.emplace_back(osg::Vec3(startX, startY, 0.f));
-    //                        edge.subDivs.emplace_back(osg::Vec3(endX, endY, 0.f));
-    //                    } else {
-    //                        // 有细分点
-    //                        for (int i = 4; i < fields.size(); i += 2) {
-    //                            float x = fields[i].toFloat();
-    //                            float y = fields[i + 1].toFloat();
-    //                            edge.subDivs.emplace_back(osg::Vec3(x, y, 0.f));
-    //                        }
-    //                    }
-    //                    edges->push_back(edge);
-    //                }
-    //            }
-    //            file.close();
-
-    //            // 使用读取的结果更新图形
-    //            auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
-    //            lonRng[0] += lonOffs;
-    //            lonRng[1] += lonOffs;
-
-    //            addGraph("LoadedGraph", nodes, edges);
-    //            auto graphParam = getGraph("LoadedGraph");
-    //            if (graphParam) {
-    //                graphParam->graphTypeIndex = graphTypeIndex;
-    //                graphParam->heightMap = heightMap;
-    //                graphParam->setLongitudeRange(lonRng[0] * size, lonRng[1] * size);
-    //                graphParam->setLatitudeRange(latRng[0] * size, latRng[1] * size);
-    //                graphParam->setHeightFromCenterRange(
-    //                    static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[0],
-    //                    static_cast<float>(osg::WGS_84_RADIUS_EQUATOR) + hScale * hRng[1]);
-    //                graphParam->setNodeGeometrySize(.02f *
-    //                                                static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-    //                graphParam->setTextGeometrySize(.02f *
-    //                                                static_cast<float>(osg::WGS_84_RADIUS_EQUATOR));
-    //                graphParam->setRestriction(myRestriction);
-    //                graphParam->restrictionOFF = true;
-    //                graphParam->generateHierarchicalGraphs(nodes, edges);
-    //                graphParam->setLevelGraph(0);
-    //                graphParam->setCamera(param._camera);
-    //                graphParam->update();
-    //            }
-    //            return;
-    //        }
-    //    } catch (const std::exception &e) {
-    //        qDebug() << "Error loading bundled edges:" << e.what();
-    //    }
-    //}
-
-    // 如果没有缓存文件或读取失败，执行边绑定计算
-    auto edgeBundling = VIS4Earth::EdgeBundling();
-    edgeBundling.SetGraph(myGraph);
-    glm::vec3 gravitationCenter(-75.0, 30.0, 0.0);
-    // 确保兼容性计算已完成
-    if (compatibilityFuture.valid()) {
-        compatibilityFuture.wait(); // 阻塞直到任务完成
+    // 3. 如果标记还没 ready，先检查磁盘上是否已有该 LOD 的结果文件
+    if (!_lodBundlingReady[currentLOD]) {
+        if (QFile::exists(filePath)) {
+            // 说明之前已经算过，直接认为 ready
+            _lodBundlingReady[currentLOD] = true;
+        }
     }
-    // 在需要边绑定效果时才计算兼容性
-    myGraph->buildCompatibilityListsIfNeeded();
 
-    edgeBundling.SetParameter(mybundlingParam);
-    edgeBundling.EdgeBundle();
-    myGraph = edgeBundling.GetLayoutedGraph();
+    // 4. 如果还没 ready 且全局 bundling 任务在运行，则只等待当前 LOD 完成
+    if (!_lodBundlingReady[currentLOD] && _bundlingAllRunning && _bundlingFuture.valid()) {
+        // 简单轮询等待当前 LOD 完成，不必等所有 LOD 都结束
+        while (!_lodBundlingReady[currentLOD] && _bundlingAllRunning) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    }
 
-    // 保存边绑定结果
-    // try {
-    //    QFile file(bundledEdgesFile);
-    //    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
-    //        QTextStream out(&file);
+    if (!_lodBundlingReady[currentLOD] && !QFile::exists(filePath)) {
+        if (!_bundlingAllRunning) {
+            auto nodesLOD = lodNodesData[currentLOD];
+            auto edgesLOD = lodEdgesData[currentLOD];
+            if (nodesLOD && edgesLOD) {
+                try {
+                    // 1) 从当前 LOD 的 nodes/edges 构建临时 Graph
+                    auto tmpGraph = buildGraphFromLODData(nodesLOD, edgesLOD);
+                    if (tmpGraph) {
+                        VIS4Earth::EdgeBundling edgeBundling;
+                        edgeBundling.SetGraph(tmpGraph);
+                        tmpGraph->buildCompatibilityListsIfNeeded();
+                        edgeBundling.SetParameter(mybundlingParam);
+                        edgeBundling.EdgeBundle();
 
-    //        // 保存所有边的信息
-    //        for (const auto &edge : myGraph->getEdges()) {
-    //            out << QString::fromStdString(edge.sourceLabel) << ","
-    //                << QString::fromStdString(edge.targetLabel);
+                        auto bundledGraph = edgeBundling.GetLayoutedGraph();
+                        saveBundledGraphToFile(bundledGraph, filePath);
 
-    //            // 保存细分点
-    //            if (edge.subdivs.empty()) {
-    //                // 标记为0表示无细分点，后面是2个点（起点终点）
-    //                out << ",0,2";
-    //                out << "," << edge.start.x << "," << edge.start.y << "," << edge.end.x << ","
-    //                    << edge.end.y;
-    //            } else {
-    //                // 标记为1表示有细分点，后面是点的总数
-    //                out << ",1," << edge.subdivs.size();
-    //                out << "," << edge.start.x << "," << edge.start.y;
-    //                for (const auto &subdiv : edge.subdivs) {
-    //                    out << "," << subdiv.x << "," << subdiv.y;
-    //                }
-    //                out << "," << edge.end.x << "," << edge.end.y;
-    //            }
-    //            out << "\n";
-    //        }
-    //        file.close();
-    //    }
-    //} catch (const std::exception &e) {
-    //    qDebug() << "Error saving bundled edges:" << e.what();
-    //}
+                        _lodBundlingReady[currentLOD] = true;
+                    }
+                } catch (const std::exception &e) {
+                    qDebug() << "Error in fallback bundling for LOD" << currentLOD << ":"
+                             << e.what();
+                }
+            }
+        }
+    }
 
-    // 更新显示
+    // 5. 兜底检查：如果此时仍然没有 ready，且文件也不存在，就没法加载
+    if (!_lodBundlingReady[currentLOD] || !QFile::exists(filePath)) {
+        qDebug() << "Bundling result for LOD" << currentLOD << "is not ready. Path =" << filePath;
+        return;
+    }
+
+    // 6. 拿到当前 LOD 的节点数据
+    auto nodes = lodNodesData[currentLOD];
+    if (!nodes) {
+        qDebug() << "LOD" << currentLOD << "nodes data is null.";
+        return;
+    }
+
+    // 7. 从 CSV 读取绑定后的边，转换成渲染层的 Edge（带 subDivs）
+    auto edges = std::make_shared<std::vector<Edge>>();
+
+    try {
+        QFile file(filePath);
+        if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QTextStream in(&file);
+
+            while (!in.atEnd()) {
+                QString line = in.readLine();
+                if (line.trimmed().isEmpty())
+                    continue;
+
+                QStringList fields = line.split(",");
+                if (fields.size() < 6) {
+                    continue; // 格式不对，跳过
+                }
+
+                Edge e; // 这里用的是 GraphRenderer::Edge
+                e.from = fields[0].toStdString();
+                e.to = fields[1].toStdString();
+
+                bool hasSubdiv = fields[2].toInt() == 1;
+                int numPoints = fields[3].toInt();
+                Q_UNUSED(numPoints);
+
+                e.subDivs.clear();
+
+                if (!hasSubdiv) {
+                    // 无细分点：只有起点和终点
+                    if (fields.size() >= 8) {
+                        float sx = fields[4].toFloat();
+                        float sy = fields[5].toFloat();
+                        float ex = fields[6].toFloat();
+                        float ey = fields[7].toFloat();
+                        e.subDivs.emplace_back(osg::Vec3(sx, sy, 0.f));
+                        e.subDivs.emplace_back(osg::Vec3(ex, ey, 0.f));
+                    }
+                } else {
+                    // 有细分点：起点、若干 subdiv、终点，都在 CSV 里
+                    // 格式：from,to,1,numPoints,x0,y0,x1,y1,...,xN,yN
+                    for (int i = 4; i + 1 < fields.size(); i += 2) {
+                        float x = fields[i].toFloat();
+                        float y = fields[i + 1].toFloat();
+                        e.subDivs.emplace_back(osg::Vec3(x, y, 0.f));
+                    }
+                }
+
+                edges->push_back(e);
+            }
+
+            file.close();
+        } else {
+            qDebug() << "Failed to open bundled edges file:" << filePath;
+            return;
+        }
+    } catch (const std::exception &e) {
+        qDebug() << "Error loading bundled edges:" << e.what();
+        return;
+    }
+
+    // 8. 为了避免和原始图重叠，我们稍微平移一下经度范围（可按需保留/修改）
     auto lonOffs = 1.5f * (lonRng[1] - lonRng[0]);
     lonRng[0] += lonOffs;
     lonRng[1] += lonOffs;
-    auto nodes = std::make_shared<std::map<std::string, Node>>();
-    auto edges = std::make_shared<std::vector<Edge>>();
-
-    // 复制节点和边的信息
-    copyGraphData(nodes, edges);
 
     // 添加图到渲染器中
     addGraphForBundling("LoadedGraph", nodes, edges);
@@ -1304,7 +1339,7 @@ void VIS4Earth::GraphRenderer::showBundling() {
     auto graphParam = getGraph("LoadedGraph");
     if (graphParam) {
         graphParam->currentLODLevel = getCurrentLevel(cameraHeightPresent);
-        updateGraphParameters(graphParam); 
+        updateGraphParameters(graphParam);
         cameraUpdate("LoadedGraph", cameraHeightPresent);
     }
 }
@@ -1749,8 +1784,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::createArrowAnimation(const osg::Ve
             // 标记颜色数组已修改
             _colors->dirty();
             _geometry->setColorArray(_colors, osg::Array::BIND_PER_VERTEX); // 重新绑定颜色数组
-            _geometry->dirtyDisplayList(); // 标记显示列表为脏
-            _geometry->dirtyBound();       // 标记边界为脏（可选）
+            _geometry->dirtyDisplayList();                                  // 标记显示列表为脏
+            _geometry->dirtyBound();                                        // 标记边界为脏（可选）
 
             // 调用父类的traverse方法
             traverse(node, nv);
@@ -2107,6 +2142,12 @@ void main() {
     finalAlpha = clamp(finalAlpha, 0.0, 1.0);
     
     gl_FragColor = vec4(finalColor, finalAlpha);
+
+//      vec4 baseColor = vec4(0.85f, 0.5f, 0.12f, uGlobalAlpha);
+//      vec3 highlightGlow = vec3(1.0, 1.0, 0.8)
+//      vec3 finalColor = mix(baseColor.rgb, highlightGlow, highlightIntensity);
+//      float finalAlpha = mix(baseColor.a, 1.0, highlightIntensity);
+//       gl_FragColor = vec4(finalColor, finalAlpha);
 }
 )";
 
@@ -2179,6 +2220,7 @@ void main() {
     
     // 输出颜色（固定透明度 1.0）
     gl_FragColor = vec4(color, 0.2);
+//    gl_FragColor = vec4(color, 1.0);
 }
 )";
 
@@ -2325,12 +2367,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
 
             // 启用透明度混合
             osg::BlendFunc *blendFunc = new osg::BlendFunc();
-            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // 加法混合
+//            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // 加法混合
+            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // alpha混合
             arrowStates->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
 
             // 禁用深度写入但保留深度测试
             osg::Depth *depth = new osg::Depth();
-            depth->setWriteMask(false);
+//            depth->setWriteMask(false);
+            depth->setFunction(osg::Depth::LEQUAL);
             arrowStates->setAttributeAndModes(depth, osg::StateAttribute::ON);
 
             // 设置渲染顺序
@@ -2348,7 +2392,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
 
             // 发光和透明度控制参数
             arrowStates->addUniform(new osg::Uniform("uGlowIntensity", 0.2f)); // 适当降低发光强度
-            arrowStates->addUniform(new osg::Uniform("uGlobalAlpha", 0.2f)); // 增加全局透明度
+            arrowStates->addUniform(new osg::Uniform("uGlobalAlpha", 0.2f));   // 增加全局透明度
             arrowStates->addUniform(new osg::Uniform("uLineThickness", 1.5f)); // 减小线条粗细
 
             // 初始化每条边的动画参数
@@ -2556,8 +2600,12 @@ float findOptimalHeight(float p, float max, const std::vector<float> &heightArra
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     if (!_satelliteModel) {
-        _satelliteModel =
-            osgDB::readNodeFile("C:/Users/DELL/Desktop/data/50-satellite/satellite_obj.obj");
+        //AppEnv& env = AppEnv::instance();
+        //String data_dir = env.getPath(AppEnv::DATA_DIR);
+        //std::string str_path = data_dir.c_str();
+        //str_path = str_path + "/graph/graph_data/test_data/satellite_obj.obj";
+        _satelliteModel = osgDB::readNodeFile(DATA_PATH_PREFIX "satellite_obj.obj");
+        //_satelliteModel = osgDB::readNodeFile(str_path);
         if (!_satelliteModel) {
             std::cout << "failed!" << std::endl;
         } else {
@@ -2590,7 +2638,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     tessl->setDetailRatio(1.f);
     std::map<std::string, osg::ShapeDrawable *> osgNodes;
     std::vector<osg::ref_ptr<osgText::Text>> textNodes;
-    
+
     if (!sats) {
         sats = new osg::Group;
     }
@@ -2611,7 +2659,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
                 itr->second.pos.x() <= restriction.rightBound &&
                 itr->second.pos.y() >= restriction.bottomBound &&
                 itr->second.pos.y() <= restriction.upperBound) {
-                color = osg::Vec4(1.0f, 1.0f, 1.0f, 0.5f); // 设置边框内的点为半透明白色
+                color = osg::Vec4(1.0f, 0.0f, 0.0f, 0.5f); // 设置边框内的点为半透明白色
             }
         }
         auto p = itr->second.pos;
@@ -2663,7 +2711,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     ss->setAttributeAndModes(pointSize, osg::StateAttribute::ON);
 
     edgeNodegrp->addChild(geode);
-    //grp->addChild(edgeNodegrp);
+    // grp->addChild(edgeNodegrp);
     auto states = edgeNodegrp->getOrCreateStateSet();
     auto matr = new osg::Material;
     matr->setColorMode(osg::Material::DIFFUSE);
@@ -2961,13 +3009,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
                 float finalAlpha = baseAlpha * uGlobalAlpha * (1.0 + glowFactor * 0.5);
                 finalAlpha = clamp(finalAlpha, 0.0, 1.0);
                 
-                gl_FragColor = vec4(finalColor, finalAlpha);
+//                gl_FragColor = vec4(finalColor, finalAlpha);
+                gl_FragColor = vec4(finalColor, 1.0);
             }
         )";
 
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
-        mEdgeProgram->addBindAttribLocation("lineID", 1); // lineID -> slot 1
+        mEdgeProgram->addBindAttribLocation("lineID", 1);         // lineID -> slot 1
         mEdgeProgram->addBindAttribLocation("vertexPosition", 2); // lineID -> slot 1
     }
 
@@ -2979,12 +3028,17 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
         // 启用透明度混合
         osg::BlendFunc *blendFunc = new osg::BlendFunc();
         blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // Additive blending
-        stateset->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
+        stateset->setAttributeAndModes(blendFunc, osg::StateAttribute::OFF);
 
         // 禁用深度写入但保留深度测试
         osg::Depth *depth = new osg::Depth();
-        depth->setWriteMask(false);
+//        depth->setWriteMask(false);
+        //  修改深度测试
+        depth->setFunction(osg::Depth::LEQUAL);
         stateset->setAttributeAndModes(depth, osg::StateAttribute::ON);
+
+        // 多边形偏移
+//        osg::Polyg
 
         // 设置渲染顺序确保透明物体正确渲染
         stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
@@ -3064,22 +3118,29 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
         return minDistance < earthRadius;
     };
 
-
     // 创建顶点数组
     mVertexArray = new osg::Vec3Array;
     mColorFromArray = new osg::Vec4Array;
     mColorToArray = new osg::Vec4Array;
     mWeightArray = new osg::FloatArray;
     int lineID = 0;
-    
+
     std::cout << "updateEdgeVBO: Using LOD level " << currentLODLevel << std::endl;
 
     if (currentLODLevel == 3) {
         //   加载城市建筑物的 OBB 数据
         VIS4Earth::CityLoader cityLoader;
+        //AppEnv& env = AppEnv::instance();
+        //String data_dir = env.getPath(AppEnv::DATA_DIR);
+        //std::string str_path = data_dir.c_str();
+        //str_path = str_path + "/graph/buildings_obb.csv";
         if (!cityLoader.loadBuildingsFromCSV(DATA_PATH_PREFIX "buildings_obb.csv")) {
             std::cerr << "Failed to load building data!" << std::endl;
         }
+        /*if (!cityLoader.loadBuildingsFromCSV(str_path)) {
+            std::cerr << "Failed to load building data!" << std::endl;
+        }*/
+
 
         // 设置经纬度范围（lat_min, lon_min）到（lat_max, lon_max）
         std::vector<std::pair<float, float>> latLonBounds = {
@@ -3111,13 +3172,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
     const int MIN_SEGMENTS = 5;        // 最小细分段数（聚合边可以更少）
     const int MAX_SEGMENTS = 15;       // 最大细分段数（聚合边不需要太多）
-    
 
     // 直接遍历当前LOD级别的边数据（这些已经是聚合边）
     for (auto &edge : *edges) {
         if (!edge.visible)
             continue; // 只处理可见边
-
 
         // 获取起点和终点节点
         auto fromNodeIt = nodes->find(edge.from);
@@ -3127,7 +3186,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
         const osg::Vec3 &startPoint = fromNodeIt->second.pos;
         const osg::Vec3 &endPoint = toNodeIt->second.pos;
-        
+
         if (fromNodeIt->second.level == 100 || toNodeIt->second.level == 100) {
             // 判断线条是否穿过地球
             if (fromNodeIt->second.level == 100) {
@@ -3136,16 +3195,15 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
                     edge.visible = false;
                     continue; // 如果穿过地球则跳过该线条
                 }
-            }
-            else {
+            } else {
                 if (isLinePassingThroughEarth(vec3ToSphere(startPoint), vec3ToSphere(endPoint))) {
                     lineID++;
                     continue; // 如果穿过地球则跳过该线条
                 }
             }
-            
+
             // 获取边的颜色（可以使用自定义的颜色或者节点的颜色）
-            osg::Vec4 edgeColor(1.0f, 1.0f, 1.0f, 1.0f); // 默认白色，可以修改为其他颜色
+            osg::Vec4 edgeColor(1.0f, 0.0f, 0.0f, 0.0f); // 默认白色，可以修改为其他颜色
 
             // 将边的起点和终点加入顶点数组
             mVertexArray->push_back(vec3ToSphere(startPoint));
@@ -3165,9 +3223,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
             mWeightArray->push_back(edge.weight);
 
             lineID++; // 增加线ID
-        }
-        else {
+        } else {
             // 获取边的颜色（使用节点颜色或默认颜色）
+//            0.8 0.6 0.2
             osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
             if (currentLODLevel < 3) {
                 // 聚合边使用统一的金色
@@ -3272,7 +3330,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
             }
             lineID++;
         }
-        
     }
 
     // 设置VBO数据
@@ -3284,7 +3341,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
     mEdgeGeometry->setUseVertexBufferObjects(true);
     mEdgeGeometry->setUseDisplayList(false);
-
 
     // 设置绘制模式
     mEdgeGeometry->addPrimitiveSet(
@@ -3372,7 +3428,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
             }
 
             // 获取边的颜色（可以使用自定义的颜色或者节点的颜色）
-            osg::Vec4 edgeColor(1.0f, 1.0f, 1.0f, 1.0f); // 默认白色，可以修改为其他颜色
+            osg::Vec4 edgeColor(1.0f, 0.0f, 0.0f, 1.0f); // 默认白色，可以修改为其他颜色
 
             // 将边的起点和终点加入顶点数组
             mVertexArray->push_back(vec3ToSphere(startPoint));
@@ -3533,7 +3589,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
             }
             lineID++;
         }
-        
     }
 
     // 设置VBO数据
@@ -3870,6 +3925,120 @@ float VIS4Earth::GraphRenderer::PerGraphParam::getBuildingHeightAtLatLon(float l
     return std::max({height1, height2, height3, height4});
 }
 
+// 渲染用 Node -> bundling 用 Node 的转换小工具
+static glm::vec3 osgToGlm(const osg::Vec3 &v) { return glm::vec3(v.x(), v.y(), v.z()); }
+
+// 根据当前 LOD 的节点 / 边数据，构建一个 VIS4Earth::Graph，供 EdgeBundling 使用
+std::shared_ptr<VIS4Earth::Graph>
+GraphRenderer::buildGraphFromLODData(const std::shared_ptr<std::map<std::string, Node>> &lodNodes,
+                                     const std::shared_ptr<std::vector<Edge>> &lodEdges) {
+    using namespace VIS4Earth;
+
+    if (!lodNodes || !lodEdges) {
+        return nullptr;
+    }
+
+    auto graph = std::make_shared<Graph>();
+
+    // 1. 先把渲染用的节点转成 bundling Graph 里的 Node
+    std::unordered_map<std::string, VIS4Earth::Node> gNodes;
+    gNodes.reserve(lodNodes->size());
+
+    for (const auto &kv : *lodNodes) {
+        const std::string &id = kv.first;
+        const Node &rn = kv.second; // 渲染层的节点
+
+        // 用经纬度（x,y）和高度（z）构建 Graph::Node
+        VIS4Earth::Node gn(rn.pos.x(), rn.pos.y(), rn.pos.z(), rn.level);
+        gn.id = id;
+        gn.name = rn.id; // 你可以按需赋值
+        gn.color = rgbToHex(rn.color.x(), rn.color.y(), rn.color.z());
+
+        gNodes.emplace(id, gn);
+    }
+
+    // 2. 再把渲染用的 Edge 转成 Graph::Edge
+    std::vector<VIS4Earth::Edge> gEdges;
+    gEdges.reserve(lodEdges->size());
+
+    for (const auto &re : *lodEdges) {
+        // 假定 re.from / re.to 对应 lodNodes 里的 key
+        auto itFrom = gNodes.find(re.from);
+        auto itTo = gNodes.find(re.to);
+        if (itFrom == gNodes.end() || itTo == gNodes.end()) {
+            // LOD 数据不完整，跳过这条边
+            continue;
+        }
+
+        const auto &fromNode = itFrom->second;
+        const auto &toNode = itTo->second;
+
+        glm::vec3 start = fromNode.pos;
+        glm::vec3 end = toNode.pos;
+        double width = 1.0; // 这里随便给个宽度，后续 Graph::set 会归一化
+
+        VIS4Earth::Edge ge(re.from, re.to, start, end, width);
+        // 构造函数里会调用 arrangeDirection() 和 addSubdivisions()
+
+        gEdges.push_back(std::move(ge));
+    }
+
+    // 3. 用 Graph::set() 把节点+边塞进去（会顺便计算度数、归一化宽度等）
+    graph->set(gNodes, gEdges);
+
+    return graph;
+}
+
+void GraphRenderer::saveBundledGraphToFile(const std::shared_ptr<VIS4Earth::Graph> &graph,
+                                           const QString &filePath) {
+    if (!graph)
+        return;
+
+    try {
+        QFile file(filePath);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            qDebug() << "Failed to open bundledEdges file for write:" << filePath;
+            return;
+        }
+
+        QTextStream out(&file);
+
+        auto &edges = graph->getEdges();
+        for (const auto &edge : edges) {
+            out << QString::fromStdString(edge.sourceLabel) << ","
+                << QString::fromStdString(edge.targetLabel);
+
+            const auto &subdivs = edge.subdivs;
+
+            if (subdivs.empty()) {
+                // 标记为0表示无细分点，后面是2个点（起点终点）
+                out << ",0,2";
+                out << "," << edge.start.x << "," << edge.start.y << "," << edge.end.x << ","
+                    << edge.end.y;
+            } else {
+                // 标记为1表示有细分点，后面是点的总数
+                out << ",1," << subdivs.size();
+
+                // 先写起点
+                out << "," << edge.start.x << "," << edge.start.y;
+
+                // 再写所有细分点
+                for (const auto &p : subdivs) {
+                    out << "," << p.x << "," << p.y;
+                }
+
+                // 最后写终点
+                out << "," << edge.end.x << "," << edge.end.y;
+            }
+            out << "\n";
+        }
+
+        file.close();
+    } catch (const std::exception &e) {
+        qDebug() << "Error saving bundled edges to" << filePath << ":" << e.what();
+    }
+}
+
 // 初始化LOD数据 (在GraphRenderer层面管理)
 void VIS4Earth::GraphRenderer::initializeLODData(
     std::shared_ptr<std::map<std::string, Node>> allNodes,
@@ -3922,6 +4091,67 @@ void VIS4Earth::GraphRenderer::initializeLODData(
     } else {
         std::cout << "ERROR: LOD3 data is null, cannot initialize Earth Grid" << std::endl;
     }
+
+    bool needAnyBundling = false;
+    for (int lod = 0; lod < 4; ++lod) {
+        QString path = bundledFilePathForLOD(lod);
+        if (QFile::exists(path)) {
+            // 已经有对应 LOD 的绑定结果文件了，直接认为 ready
+            _lodBundlingReady[lod] = true;
+        } else {
+            _lodBundlingReady[lod] = false;
+            needAnyBundling = true; // 至少有一个 LOD 需要重新计算
+        }
+    }
+
+    // 如果所有 LOD 都已经有绑定结果，就不需要开辟线程
+    if (!needAnyBundling) {
+        _bundlingAllRunning = false;
+        return;
+    }
+    // 如果之前已经有一个 bundling 任务在跑，先不重复启动
+    if (_bundlingAllRunning) {
+        return;
+    }
+
+    _bundlingAllRunning = true;
+
+    _bundlingFuture = std::async(std::launch::async, [this]() {
+        try {
+            // 依次计算 LOD 0~3 的 bundling，算完一个就写文件并标记 ready
+            for (int lod = 0; lod < 4; ++lod) {
+                auto nodes = lodNodesData[lod];
+                auto edges = lodEdgesData[lod];
+                if (!nodes || !edges) {
+                    _lodBundlingReady[lod] = false;
+                    continue;
+                }
+
+                // 这里根据你的工程实际情况，构建临时 Graph
+                auto tmpGraph = buildGraphFromLODData(lodNodesData[lod], lodEdgesData[lod]);
+                if (!tmpGraph) {
+                    _lodBundlingReady[lod] = false;
+                    continue;
+                }
+
+                VIS4Earth::EdgeBundling edgeBundling;
+                edgeBundling.SetGraph(tmpGraph);
+
+                // 如果你有兼容性预计算，可以在这里做（或确认已做）
+                tmpGraph->buildCompatibilityListsIfNeeded();
+
+                edgeBundling.SetParameter(mybundlingParam);
+                edgeBundling.EdgeBundle();
+
+                auto bundledGraph = edgeBundling.GetLayoutedGraph();
+                saveBundledGraphToFile(bundledGraph, bundledFilePathForLOD(lod));
+                _lodBundlingReady[lod] = true;
+            }
+        } catch (const std::exception &e) {
+            qDebug() << "Error in background bundling:" << e.what();
+        }
+        _bundlingAllRunning = false;
+    });
 }
 
 // 生成基于地理分区的LOD数据（重新设计为基于节点level的简化版本）
@@ -3938,7 +4168,7 @@ void VIS4Earth::GraphRenderer::generateGeographicLODData(
     for (const auto &nodePair : *allNodes) {
         const Node &node = nodePair.second;
         // 根据LOD级别筛选节点：LOD n 包含 level <= n 的所有节点
-        if (node.level <= lodLevel || node.level==100) {
+        if (node.level <= lodLevel || node.level == 100) {
             // 直接使用原始节点，保持原始ID不变
             (*lodNodes)[nodePair.first] = node;
         }
@@ -3974,7 +4204,6 @@ void VIS4Earth::GraphRenderer::generateGeographicLODData(
     lodNodesData[lodLevel] = lodNodes;
     lodEdgesData[lodLevel] = lodEdges;
 }
-
 
 // 更新活动LOD
 void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
@@ -4065,7 +4294,7 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
 
             // 根据LOD级别计算发光效果参数
             switch (targetMaxNodeLevel) {
-            case 0: // LOD0 - 最粗糙级别，需要强烈发光突出聚合边
+            case 0:                         // LOD0 - 最粗糙级别，需要强烈发光突出聚合边
                 targetGlowIntensity = 2.5f; // 高发光强度
                 targetGlobalAlpha = 0.8f;   // 较高透明度
                 targetLineThickness = 3.0f; // 粗线条
@@ -4156,9 +4385,7 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
                 }
                 glm::vec3 from = glm::vec3(fromPos.x(), fromPos.y(), fromPos.z());
                 glm::vec3 to = glm::vec3(toPos.x(), toPos.y(), toPos.z());
-                garphEdges.push_back(
-                    VIS4Earth::Edge(itr->from, itr->to, from, to, itr->weight));
-                
+                garphEdges.push_back(VIS4Earth::Edge(itr->from, itr->to, from, to, itr->weight));
             }
             auto graphSetLOD = std::make_shared<VIS4Earth::Graph>();
             graphSetLOD->set(graphNodes, garphEdges);
@@ -4180,7 +4407,6 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
         }
     }
 }
-
 
 // 生成基于地理分区的LOD数据（重新设计为基于节点level的简化版本）
 void VIS4Earth::GraphRenderer::generateGeographicLODDataOld(
@@ -4642,7 +4868,6 @@ void VIS4Earth::GraphRenderer::debugNodeCoordinates(
               << maxLon << "]" << std::endl;
     std::cout << "=============================" << std::endl;
 }
-
 
 // 为指定LOD级别生成聚合边
 void VIS4Earth::GraphRenderer::generateAggregatedEdgesForLOD(
