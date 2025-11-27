@@ -49,6 +49,7 @@
 #include <vis4earth/osg_util.h>
 #include <vis4earth/qt_osg_reflectable.h>
 #include <vis4earth/volume_cmpt.h>
+#include <vis4earth/graph_viser/graph_display_utils.h>
 
 namespace Ui {
 class GraphRenderer;
@@ -132,13 +133,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
             return from < other.from;
         }
     };
-    struct CoordRange {
-        float minX;
-        float maxX;
-        float minY;
-        float maxY;
-    };
-    CoordRange coordRange;
+    VIS4Earth::GraphUtils::CoordRange coordRange;
     std::array<std::vector<std::string>, 4> levelIndex;
     std::array<std::vector<Node>, 4> levelNodeIndex; // 不同层级的nodes
     std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
@@ -294,10 +289,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
                             std::shared_ptr<std::vector<Edge>> allEdges);
     void updateVisibilityFromCache(const std::string &graphName);
 
-    // 调试函数
-    void debugEarthGridStatus();
-    void debugNodeCoordinates(std::shared_ptr<std::map<std::string, Node>> nodes,
-                              int maxSamples = 10);
 
     void generateAggregatedEdgesForLOD(int lodLevel,
                                        std::shared_ptr<std::map<std::string, Node>> lodNodes,
@@ -305,7 +296,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
                                        std::shared_ptr<std::map<std::string, Node>> allNodes,
                                        std::shared_ptr<std::vector<Edge>> allEdges);
 
-    // std::unordered_set<std::string> currentLevelLabels; // 当前层级全部标签ID（快速存在性检查）
   private:
     struct GraphLevel {
         std::shared_ptr<std::map<std::string, Node>> nodes; // 当前层次的节点
@@ -422,10 +412,7 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         void setCamera(osg::Camera *camera) { _camera = camera; }
         void update();
-        void createArrowAnimation(const osg::Vec3 &start, const osg::Vec3 &end,
-                                  const osg::Vec4 &color, const int startIndex, const int endIndex);
         osg::Image *createLineDataTexture();
-        void startArrowAnimation();
         void startHighlightAnimation();
         void startTextureAnimation();
         void startStarAnimation();
@@ -441,9 +428,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         void setNodeGeometrySize(float sz) { nodeGeomSize = sz; }
         void setTextGeometrySize(float sz) { textSize = sz; }
-        void setLevelGraph(int level);
-        void generateHierarchicalGraphs(std::shared_ptr<std::map<std::string, Node>> &initialNodes,
-                                        std::shared_ptr<std::vector<Edge>> &initialEdges);
         void performClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel, int p);
         void performLouvainClustering(const GraphLevel &previousLevel, GraphLevel &currentLevel,
                                       int p);
@@ -602,11 +586,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void generateGeographicLODData(int lodLevel,
                                    std::shared_ptr<std::map<std::string, Node>> allNodes,
                                    std::shared_ptr<std::vector<Edge>> allEdges);
-    // 生成基于地理分区的LOD数据
-    void generateGeographicLODDataOld(int lodLevel,
-                                      std::shared_ptr<std::map<std::string, Node>> allNodes,
-                                      std::shared_ptr<std::vector<Edge>> allEdges);
-
     // 渐进式LOD辅助函数
     std::string simplifyRegionName(const std::string &originalName);
     osg::Vec3 calculateRegionCentroid(const std::vector<std::string> &nodeIds,
@@ -656,7 +635,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
     void setMinY(double value);
     void setMaxY(double value);
-    void onArrowFlowButtonClicked();
     void onHighlightFlowButtonClicked();
     void onTextureFlowButtonClicked();
     void onStarFlowButtonClicked();
@@ -690,8 +668,6 @@ class GraphRenderer : public QtOSGReflectableWidget {
     void onEdgePercentageThresholdChanged(double value);
 
     void onFontSizeSliderValueChanged(int value);
-
-    void onResolutionSliderValueChanged(int value);
 
     void updateGraphParameters(PerGraphParam *graphParam);
     void copyGraphData(std::shared_ptr<std::map<std::string, Node>> &nodes,
