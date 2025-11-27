@@ -239,6 +239,53 @@ inline bool checkOverlap(const osg::BoundingBox& bb1, const osg::BoundingBox& bb
 }
 
 /**
+ * @brief 判断连接两点的线段是否穿过地球
+ * @param surfacePoint 地表点的球面坐标
+ * @param satellite 卫星点的球面坐标
+ * @return 如果线段穿过地球内部返回true，否则返回false
+ * 
+ * @details 使用线段参数化方程计算线段到地心的最近距离。
+ * 如果最近距离小于地球半径，则认为线段穿过地球。
+ * 
+ * 算法原理:
+ * - 线段参数化: P(t) = surfacePoint + t * (satellite - surfacePoint), t ∈ [0, 1]
+ * - 距离平方函数: |P(t)|² = |A|² + 2t*(A·D) + t²*|D|²
+ * - 最小距离点: t = -(A·D) / |D|²
+ */
+inline bool isLinePassingThroughEarth(const osg::Vec3& surfacePoint, 
+                                     const osg::Vec3& satellite) {
+    // 地球半径（使用极地半径作为基准）
+    const float earthRadius = osg::WGS_84_RADIUS_POLAR;
+
+    // 计算线段方向向量
+    osg::Vec3 direction = satellite - surfacePoint;
+
+    // 计算线段距离平方函数的系数
+    // |P(t)|² = |A|² + 2t*(A·D) + t²*|D|²
+    float a = direction.length2();               // |D|²
+    float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
+    
+    // 如果 a 接近 0，说明两点几乎重合
+    if (std::abs(a) < 1e-6f) {
+        return surfacePoint.length() < earthRadius;
+    }
+
+    // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
+    // 得到 t = -(A·D) / |D|²
+    float t = -b / (2.0f * a);
+
+    // 将 t 限制在 [0, 1] 范围内（线段范围）
+    t = std::max(0.0f, std::min(1.0f, t));
+
+    // 计算线段上最近点到地心的距离
+    osg::Vec3 closestPoint = surfacePoint + direction * t;
+    float minDistance = closestPoint.length();
+
+    // 如果最近距离小于地球半径，则线段穿过地球
+    return minDistance < earthRadius;
+}
+
+/**
  * @brief 找到满足条件的最优高度
  * @param p 参数p
  * @param max 最大值

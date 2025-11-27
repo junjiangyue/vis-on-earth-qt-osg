@@ -50,6 +50,7 @@
 #include <vis4earth/qt_osg_reflectable.h>
 #include <vis4earth/volume_cmpt.h>
 #include <vis4earth/graph_viser/graph_display_utils.h>
+#include <vis4earth/graph_viser/graph_gpu_edge_tables.h>
 
 namespace Ui {
 class GraphRenderer;
@@ -350,6 +351,21 @@ class GraphRenderer : public QtOSGReflectableWidget {
         osg::ref_ptr<osg::Vec4Array> mColorFromArray;
         osg::ref_ptr<osg::Vec4Array> mColorToArray;
         osg::ref_ptr<osg::FloatArray> mWeightArray;
+        osg::ref_ptr<osg::FloatArray> mLineIDArray;
+        osg::ref_ptr<osg::FloatArray> mSegmentIDArray;
+
+        // GPU 曲线渲染相关表结构（ControlPointTable / SegmentTable / EdgeMeta）
+        std::vector<VIS4Earth::GpuEdge::ControlPoint> mControlPoints;
+        std::vector<VIS4Earth::GpuEdge::SegmentInfo> mSegments;
+        std::vector<VIS4Earth::GpuEdge::EdgeMetaInfo> mEdgeMetas;
+
+        // 表对应的纹理资源
+        osg::ref_ptr<osg::Image> mControlPointImage;
+        osg::ref_ptr<osg::Image> mSegmentImage;
+        osg::ref_ptr<osg::Texture2D> mControlPointTex;
+        osg::ref_ptr<osg::Texture2D> mSegmentTex;
+        // LineDataTexture 统一挂在此处，便于动画回调复用
+        osg::ref_ptr<osg::Texture2D> mLineDataTex;
 
         // Shader相关成员
         osg::ref_ptr<osg::Program> mEdgeProgram;
@@ -362,6 +378,9 @@ class GraphRenderer : public QtOSGReflectableWidget {
 
         // 当前LOD层级
         int currentLODLevel = 3; // 默认为最高细节层级
+        // 表和 VBO 的脏标记
+        bool mTablesDirty = false;
+        bool mVboDirty = false;
         void setSatellite(std::shared_ptr<std::map<std::string, Node>> nodes,
                           std::shared_ptr<std::vector<Edge>> edges) {
             satelliteNodes = nodes;
@@ -369,11 +388,23 @@ class GraphRenderer : public QtOSGReflectableWidget {
         }
         // 初始化Shader程序
         void initEdgeShaders();
+        void initEdgeShaders_GPUInterpolation();
         // 更新边的VBO数据
         void updateEdgeVBO();
+        int calculateSegmentCount(const Edge &edge);
+        osg::Vec3 calculateInterpolatedPosition(int segmentID, const Edge &edge);
+        // GPU 曲线渲染路径下，基于 EdgeMeta 的 VBO 构建
+        void updateEdgeVBO_GpuInterpolated();
+        void updateEdgeVBO_GPUInterpolation(
+            const std::function<osg::Vec3(const osg::Vec3 &)> &vec3ToSphere,
+            osg::ref_ptr<osg::FloatArray> mLineIDArray);
         // 原有的VBO更新逻辑（LOD 3使用）
         void updateEdgeVBO_Original(const std::function<osg::Vec3(const osg::Vec3 &)> &vec3ToSphere,
                                     osg::ref_ptr<osg::FloatArray> mLineIDArray);
+        // 从当前边集合构建 ControlPointTable / SegmentTable / EdgeMeta
+        void buildTablesFromEdges(const std::vector<Edge> &edgesRef, bool useBundling);
+        // 将表上传为纹理
+        void uploadTablesToTextures();
 
       public:
         int graphTypeIndex;

@@ -1,9 +1,9 @@
 ﻿#include "graph_display.h"
 #include "DBSCAN.h"
 #include <ui_graph_layout.h>
-#include "LOUVAIN.h"
 #include "graph_draw.h"
 #include "graph_animation.h"
+#include "graph_gpu_edge_tables.h"
 #include <algorithm>
 #include <memory>
 #include <osgText/Font>
@@ -209,23 +209,6 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
     auto graphParam = getGraph(graphName);
     if (!graphParam)
         return;
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        // v3.x() 是纬度，v3.y() 是经度
-        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
-
-        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
-
-        h = h * cosf(lat); // 根据纬度调整水平投影的半径
-
-        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
-
-        return ret;
-    };
     std::size_t maxTextCount = std::numeric_limits<std::size_t>::max();
     if (graphParam->currentLODLevel == 0 || graphParam->currentLODLevel == 1) {
         maxTextCount = 0; // LOD0 / LOD1 最多 50 个文字标签
@@ -318,7 +301,7 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
                                                         : graphParam->nodeGeomSize * 0.25);
 
             // 设置标签位置
-            osg::Vec3 pos = vec3ToSphere(it->second.pos);
+            osg::Vec3 pos = GraphUtils::vec3ToSphere(it->second.pos);
             pos.z() += it->second.size * 0.30f * graphParam->nodeGeomSize;
             text->setPosition(pos);
 
@@ -1245,23 +1228,6 @@ void VIS4Earth::GraphRenderer::onFontSizeSliderValueChanged(int value) {
 }
 
 osg::Image *VIS4Earth::GraphRenderer::PerGraphParam::createLineDataTexture() {
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        // v3.x() 是纬度，v3.y() 是经度
-        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
-
-        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
-
-        h = h * cosf(lat); // 根据纬度调整水平投影的半径
-
-        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
-
-        return ret;
-    };
     int texWidth = edges->size();
     int texHeight = 4; // 使用4行存储不同参数
 
@@ -1285,7 +1251,7 @@ osg::Image *VIS4Earth::GraphRenderer::PerGraphParam::createLineDataTexture() {
 
         // 第1行: 起点 (y=1)
         int startPos = (1 * texWidth + x) * 4;
-        auto realPos = vec3ToSphere(nodes->at(edge.from).pos);
+        auto realPos = GraphUtils::vec3ToSphere(nodes->at(edge.from).pos);
         data[startPos] = realPos.x();
         data[startPos + 1] = realPos.y();
         data[startPos + 2] = realPos.z();
@@ -1293,7 +1259,7 @@ osg::Image *VIS4Earth::GraphRenderer::PerGraphParam::createLineDataTexture() {
 
         // 第2行: 终点 (y=2)
         int endPos = (2 * texWidth + x) * 4;
-        auto realEndPos = vec3ToSphere(nodes->at(edge.to).pos);
+        auto realEndPos = GraphUtils::vec3ToSphere(nodes->at(edge.to).pos);
         data[endPos] = realEndPos.x();
         data[endPos + 1] = realEndPos.y();
         data[endPos + 2] = realEndPos.z();
@@ -1545,23 +1511,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             std::cout << "success!" << std::endl;
         }
     }
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        // v3.x() 是纬度，v3.y() 是经度
-        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
-
-        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
-
-        h = h * cosf(lat); // 根据纬度调整水平投影的半径
-
-        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
-
-        return ret;
-    };
     if (!edgeNodegrp) {
         edgeNodegrp = new osg::Group;
     }
@@ -1597,9 +1546,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         }
         auto p = itr->second.pos;
         if (p.z() < 100.f) {
-            p.z() = getBuildingHeightAtLatLon(p.x(), p.y()) + 10000.0f;
+            p.z() = getBuildingHeightAtLatLon(p.x(), p.y());
         }
-        p = vec3ToSphere(p);
+        p = GraphUtils::vec3ToSphere(p);
         if (drawSats && itr->second.level == 100 && _satelliteModel.valid()) {
             osg::ref_ptr<osg::MatrixTransform> transform = new osg::MatrixTransform;
 
@@ -1674,9 +1623,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             dCol /= (edge.subDivs.size() == 1 ? 1 : edge.subDivs.size() - 1);
 
             osg::Vec3 prevPos = nodes->at(edge.from).pos;
-            osg::Vec3 startPos = vec3ToSphere(prevPos); // 起点
+            osg::Vec3 startPos = GraphUtils::vec3ToSphere(prevPos); // 起点
             osg::Vec3 endPos = nodes->at(edge.to).pos;
-            endPos = vec3ToSphere(endPos);
+            endPos = GraphUtils::vec3ToSphere(endPos);
 
             // 总点数，包括起点、所有细分点和终点
             // 每段有 totalNum 个插值点，总段数是 subDivs.size() - 1
@@ -1763,9 +1712,9 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
                         osg::Vec4 interpolatedColor = prevColor * (1.0f - t) + currentColor * t;
 
                         if (j >= 0) {
-                            segVerts->push_back(vec3ToSphere(prevInterpolatedPos));
+                            segVerts->push_back(GraphUtils::vec3ToSphere(prevInterpolatedPos));
                             segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f));
-                            segVerts->push_back(vec3ToSphere(interpolatedPos));
+                            segVerts->push_back(GraphUtils::vec3ToSphere(interpolatedPos));
                             segCols->push_back(osg::Vec4(15 / 255.f, 176 / 255.0f, 1.f, 0.8f));
                             lineIDs->push_back(static_cast<float>(lineID));
                             lineIDs->push_back(static_cast<float>(lineID));
@@ -1840,7 +1789,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             edgeNodegrp->addChild(mEdgeGeode);
             grp->addChild(edgeNodegrp);
             // 初始化着色器
-            initEdgeShaders();
+            //initEdgeShaders();
+            initEdgeShaders_GPUInterpolation();
         }
 
         // 更新VBO数据
@@ -1848,6 +1798,335 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
         updateEdgeVBO();
     }
 }
+
+void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders_GPUInterpolation() {
+    if (!mEdgeProgram) {
+        mEdgeProgram = new osg::Program;
+
+        // 顶点着色器
+        const char *vertSource = R"(
+            #version 120
+
+            varying vec4 vColorFrom;
+            varying vec4 vColorTo;
+            varying float vWeight;
+            varying float vLineID;
+            varying float vDistanceToCamera;
+
+            attribute vec3 vertexPosition;   // 基线位置（球面上的点）
+            attribute float lineID;          // 显式绑定 slot 1（在 C++ 中 addBindAttribLocation）
+            attribute float segmentParam;    // 细分参数 t \in [0,1]，绑定到 slot 3
+            attribute float maxHeight;       // 当前曲线的最大高度，绑定到 slot 4
+
+            void main() {
+                // 计算弧线高度：h = sin(pi * t) * maxHeight
+                float t = clamp(segmentParam, 0.0, 1.0);
+                float arcH = sin(3.1415926 * t) * maxHeight;
+
+                // 沿球心方向抬高：基线点在球面上，dir 为法向
+                vec3 dir = normalize(vertexPosition);
+                vec3 liftedPos = vertexPosition + dir * arcH;
+
+                vec4 worldPos = gl_ModelViewMatrix * vec4(liftedPos, 1.0);
+                gl_Position = gl_ProjectionMatrix * worldPos;
+
+                vColorFrom = gl_MultiTexCoord0;
+                vColorTo   = gl_MultiTexCoord1;
+                vWeight    = gl_MultiTexCoord2.x;
+                vLineID = lineID; // 将属性传给片元着色器
+                
+                // 计算到相机的距离用于透明度调节
+                vDistanceToCamera = length(worldPos.xyz);
+            }
+        )";
+
+        // 片段着色器 - 添加透明度和发光效果
+        const char *fragSource = R"(
+            #version 120
+            varying vec4 vColorFrom;
+            varying vec4 vColorTo;
+            varying float vWeight;
+            varying float vLineID;
+            varying float vDistanceToCamera;
+
+            uniform bool uEnableHighlight;
+            uniform sampler2D uLineDataTex;
+            uniform float uTotalLines;
+            uniform vec4 uHighlightColor;
+            uniform float uGlobalAlpha;      // 全局透明度控制
+            uniform float uGlowIntensity;    // 发光强度控制
+            uniform float uLineThickness;    // 线条粗细影响发光范围
+
+            void main() {
+                // 基础渐变颜色计算
+                float t = fract(gl_FragCoord.x * 0.001); // 简化的插值参数
+                vec4 baseColor = mix(vColorFrom, vColorTo, t);
+                
+                // 基于权重的亮度增强
+                float weightFactor = clamp(vWeight * 0.1, 0.3, 2.0); // 权重影响亮度
+                baseColor.rgb *= weightFactor;
+                
+                // 距离衰减透明度
+                float distanceFactor = 1.0 / (1.0 + vDistanceToCamera * 0.0000001);
+                float baseAlpha = clamp(distanceFactor, 0.1, 1.0);
+                
+                // 发光效果 - 基于线条中心的距离衰减
+                float centerDistance = abs(gl_FragCoord.y - floor(gl_FragCoord.y + 0.5)); // 到线条中心的距离
+                float glowRadius = uLineThickness * 2.0; // 发光半径
+                float glowFactor = 1.0 - smoothstep(0.0, glowRadius, centerDistance);
+                glowFactor = pow(glowFactor, 2.0); // 增强发光衰减
+                
+                // 组合发光效果
+                vec3 glowColor = baseColor.rgb * uGlowIntensity * glowFactor;
+                vec3 finalColor = baseColor.rgb + glowColor;
+                
+                // 高亮动画效果（保留原有功能）
+                if (uEnableHighlight) {
+                    float lineID = vLineID;
+                    float texX = (lineID + 0.5) / uTotalLines;
+                    float highlightPos = texture2D(uLineDataTex, vec2(texX, 0.0)).r;
+
+                    float highlightWidth = 0.05;
+                    float highlightIntensity = 0.0;
+
+                    if (t >= highlightPos && t <= highlightPos + highlightWidth) {
+                        float posInHighlight = (t - highlightPos) / highlightWidth;
+                        highlightIntensity = smoothstep(0.0, 1.0, posInHighlight);
+                    }
+
+                    finalColor = mix(finalColor, uHighlightColor.rgb, highlightIntensity);
+                }
+                
+                // 最终透明度计算 - 结合发光效果
+                float finalAlpha = baseAlpha * uGlobalAlpha * (1.0 + glowFactor * 0.5);
+                finalAlpha = clamp(finalAlpha, 0.0, 1.0);
+                
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        )";
+
+        mEdgeProgram->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
+        mEdgeProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
+        mEdgeProgram->addBindAttribLocation("lineID", 1);           // lineID -> slot 1
+        mEdgeProgram->addBindAttribLocation("vertexPosition", 2);   // vertexPosition -> slot 2
+        mEdgeProgram->addBindAttribLocation("segmentParam", 3);     // segmentParam(t) -> slot 3
+        mEdgeProgram->addBindAttribLocation("maxHeight", 4);        // maxHeight -> slot 4
+    }
+
+    // 每次调用都为当前几何体设置StateSet和uniform参数
+    if (mEdgeGeometry) {
+        auto stateset = mEdgeGeometry->getOrCreateStateSet();
+        stateset->setAttributeAndModes(mEdgeProgram, osg::StateAttribute::ON);
+
+        // 启用透明度混合
+        osg::BlendFunc *blendFunc = new osg::BlendFunc();
+        blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // Additive blending
+        stateset->setAttributeAndModes(blendFunc, osg::StateAttribute::OFF);
+
+        // 禁用深度写入但保留深度测试
+        osg::Depth *depth = new osg::Depth();
+        depth->setFunction(osg::Depth::LEQUAL);
+        stateset->setAttributeAndModes(depth, osg::StateAttribute::ON);
+
+        // 设置渲染顺序确保透明物体正确渲染
+        stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
+        stateset->setRenderBinDetails(10, "DepthSortedBin");
+
+        // 添加uniform变量
+        stateset->addUniform(new osg::Uniform("uEnableHighlight", false));
+        stateset->addUniform(new osg::Uniform("uLineDataTex", 0));
+        stateset->addUniform(new osg::Uniform("uTotalLines", static_cast<float>(edges->size())));
+        stateset->addUniform(
+            new osg::Uniform("uHighlightColor", osg::Vec4(1.0f, 1.0f, 1.0f, 1.0f)));
+        stateset->addUniform(new osg::Uniform("uGlobalAlpha", 0.6f));   // 默认透明度
+        stateset->addUniform(new osg::Uniform("uGlowIntensity", 1.5f)); // 默认发光强度
+        stateset->addUniform(new osg::Uniform("uLineThickness", 2.0f)); // 默认线条粗细
+    }
+}
+int VIS4Earth::GraphRenderer::PerGraphParam::calculateSegmentCount(const Edge &edge) {
+    const float BASE_LENGTH = 1000.0f; // 基准长度(km)
+    const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
+    const int MIN_SEGMENTS = 10;       // 最小细分段数
+    const int MAX_SEGMENTS = 20;       // 最大细分段数
+
+    // 计算边的总长度
+    float totalLength = 0.0f;
+    std::vector<float> segmentLengths;
+    for (size_t i = 1; i < edge.subDivs.size(); ++i) {
+        float lat1 = osg::DegreesToRadians(edge.subDivs[i - 1].x());
+        float lon1 = osg::DegreesToRadians(edge.subDivs[i - 1].y());
+        float lat2 = osg::DegreesToRadians(edge.subDivs[i].x());
+        float lon2 = osg::DegreesToRadians(edge.subDivs[i].y());
+
+        float dlat = lat2 - lat1;
+        float dlon = lon2 - lon1;
+        float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                  std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+        float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+        float length = 6371.0f * c; // 6371km是地球平均半径
+        totalLength += length;
+        segmentLengths.push_back(length);
+    }
+
+    // 根据边的总长度计算细分段数
+    int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
+    totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
+
+    return totalSegments;
+}
+osg::Vec3 VIS4Earth::GraphRenderer::PerGraphParam::calculateInterpolatedPosition(int segmentID,
+                                                                                 const Edge &edge) {
+    // 若没有细分点，直接返回原点
+    if (edge.subDivs.empty()) {
+        return osg::Vec3(0.0f, 0.0f, 0.0f);
+    }
+
+    // 获取边的起点和终点（经纬度）
+    const osg::Vec3 &startPoint = edge.subDivs.front();
+    const osg::Vec3 &endPoint = edge.subDivs.back();
+
+    // 计算总的细分段数，用于归一化 t
+    int totalSegments = calculateSegmentCount(edge);
+    if (totalSegments <= 0) {
+        return startPoint;
+    }
+
+    // 当前细分段在 [0, 1] 范围内的插值比例
+    float t = static_cast<float>(segmentID) / static_cast<float>(totalSegments);
+    if (t < 0.0f)
+        t = 0.0f;
+    if (t > 1.0f)
+        t = 1.0f;
+
+    // 线性插值计算“基线”位置（不做弧线抬高，留给 GPU 在 Shader 中处理）
+    osg::Vec3 interpolatedPos;
+    interpolatedPos.x() = startPoint.x() * (1.0f - t) + endPoint.x() * t;
+    interpolatedPos.y() = startPoint.y() * (1.0f - t) + endPoint.y() * t;
+    interpolatedPos.z() = 0.0f; // 高度由 Shader 根据 t 和 maxHeight 计算
+
+    return interpolatedPos;
+}
+
+void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_GPUInterpolation(
+    const std::function<osg::Vec3(const osg::Vec3 &)> &vec3ToSphere,
+    osg::ref_ptr<osg::FloatArray> lineIDArray) {
+    if (!edges || edges->empty() || !mEdgeGeometry)
+        return;
+
+    // 确保数组已分配
+    if (!mVertexArray)
+        mVertexArray = new osg::Vec3Array;
+    if (!mColorFromArray)
+        mColorFromArray = new osg::Vec4Array;
+    if (!mColorToArray)
+        mColorToArray = new osg::Vec4Array;
+    if (!mWeightArray)
+        mWeightArray = new osg::FloatArray;
+    if (!mSegmentIDArray)
+        mSegmentIDArray = new osg::FloatArray;
+    if (!lineIDArray)
+        lineIDArray = new osg::FloatArray;
+
+    // 每次重建前清空数据，避免多次调用时顶点残留
+    mVertexArray->clear();
+    mColorFromArray->clear();
+    mColorToArray->clear();
+    mWeightArray->clear();
+    mSegmentIDArray->clear();
+    lineIDArray->clear();
+
+    // 每个顶点对应的最大高度（每条曲线一个参数，这里先统一固定为 100000）
+    osg::ref_ptr<osg::FloatArray> maxHeightArray = new osg::FloatArray;
+
+    int lineID = 0;
+
+    // 遍历所有边，生成顶点数据
+    for (std::vector<Edge>::iterator eit = edges->begin(); eit != edges->end(); ++eit) {
+        Edge &edge = *eit;
+        if (!edge.visible)
+            continue;
+
+        // 计算每条边的细分段数
+        const int totalSegments = calculateSegmentCount(edge);
+        if (totalSegments <= 0)
+            continue;
+
+        // 本条曲线的最大高度参数（若 edge.maxHeight 尚未设置，则使用默认值 100000）
+        float maxHeight = edge.maxHeight > 0.0f ? edge.maxHeight : 100000.0f;
+
+        // 使用统一的颜色（可按需改为基于节点颜色）
+        const osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f);
+
+        // 为该边生成一系列插值点，并用 GL_LINES 连接相邻点形成折线
+        osg::Vec3 prevSpherePos;
+        bool hasPrev = false;
+        float prevT = 0.0f;
+
+        for (int i = 0; i <= totalSegments; ++i) {
+            // 归一化参数 t，用于在 Shader 中做弧线高度插值
+            float t = static_cast<float>(i) / static_cast<float>(totalSegments);
+
+            osg::Vec3 interpolatedPos = calculateInterpolatedPosition(i, edge);
+            osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+
+            if (hasPrev) {
+                // 每段线段写入两个顶点：前一点和当前点
+                mVertexArray->push_back(prevSpherePos);
+                mVertexArray->push_back(spherePos);
+
+                // 颜色（from / to 统一为 edgeColor）
+                mColorFromArray->push_back(edgeColor);
+                mColorFromArray->push_back(edgeColor);
+                mColorToArray->push_back(edgeColor);
+                mColorToArray->push_back(edgeColor);
+
+                // 同一条边的所有段共用一个 lineID，便于纹理高亮
+                lineIDArray->push_back(static_cast<float>(lineID));
+                lineIDArray->push_back(static_cast<float>(lineID));
+
+                // 权重
+                mWeightArray->push_back(edge.weight);
+                mWeightArray->push_back(edge.weight);
+
+                // 记录段内的起止参数 t（0~1），用于 Shader 中计算弧线高度
+                mSegmentIDArray->push_back(prevT);
+                mSegmentIDArray->push_back(t);
+
+                // 记录每个顶点对应的最大高度参数
+                maxHeightArray->push_back(maxHeight);
+                maxHeightArray->push_back(maxHeight);
+            }
+
+            prevSpherePos = spherePos;
+            hasPrev = true;
+            prevT = t;
+        }
+
+        // 完成一条边后递增 lineID
+        ++lineID;
+    }
+
+    // 设置VBO数据及 attribute 绑定（与 Shader 中的 slot 对齐）
+    mEdgeGeometry->setVertexArray(mVertexArray);
+    mEdgeGeometry->setVertexAttribArray(1, lineIDArray, osg::Array::BIND_PER_VERTEX);     // lineID
+    mEdgeGeometry->setVertexAttribArray(2, mVertexArray, osg::Array::BIND_PER_VERTEX);    // vertexPosition（基线）
+    mEdgeGeometry->setVertexAttribArray(3, mSegmentIDArray, osg::Array::BIND_PER_VERTEX); // segmentParam (t)
+    mEdgeGeometry->setVertexAttribArray(4, maxHeightArray, osg::Array::BIND_PER_VERTEX);  // maxHeight
+    mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
+    mEdgeGeometry->setTexCoordArray(1, mColorToArray);
+    mEdgeGeometry->setTexCoordArray(2, mWeightArray);
+    mEdgeGeometry->setUseVertexBufferObjects(true);
+    mEdgeGeometry->setUseDisplayList(false);
+
+    // 重新设置 PrimitiveSet，避免多次调用时叠加
+    mEdgeGeometry->removePrimitiveSet(0, mEdgeGeometry->getNumPrimitiveSets());
+    mEdgeGeometry->addPrimitiveSet(
+        new osg::DrawArrays(osg::PrimitiveSet::LINES, 0,
+                            static_cast<GLsizei>(mVertexArray->size())));
+    lineGeode = mEdgeGeode;
+    lineGeometry = mEdgeGeometry;
+}
+
 
 // 初始化边的着色器程序
 void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
@@ -1995,70 +2274,22 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
 void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     if (!edges || edges->empty())
         return;
-    osg::ref_ptr<osg::FloatArray> mLineIDArray = new osg::FloatArray;
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        // v3.x() 是纬度，v3.y() 是经度
-        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
-
-        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
-
-        h = h * cosf(lat); // 根据纬度调整水平投影的半径
-
-        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
-
-        return ret;
-    };
-    auto isLinePassingThroughEarth = [&](const osg::Vec3 &surfacePoint,
-                                         const osg::Vec3 &satellite) -> bool {
-        // 地球半径（使用极地半径作为基准）
-        const float earthRadius = osg::WGS_84_RADIUS_POLAR;
-
-        // 计算线段参数化方程: P(t) = surfacePoint + t * (satellite - surfacePoint)
-        // 其中 t ∈ [0, 1]
-        osg::Vec3 direction = satellite - surfacePoint;
-
-        // 计算线段到原点（地心）的最近距离
-        // 对于线段 P(t) = A + t * (B - A)，到原点距离的平方为：
-        // |P(t)|² = |A + t*D|² = |A|² + 2t*(A·D) + t²*|D|²
-        // 其中 A = surfacePoint, D = direction
-
-        float a = direction.length2();               // |D|²
-        float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
-        float c = surfacePoint.length2();            // |A|²
-
-        // 如果 a 接近 0，说明两点几乎重合
-        if (std::abs(a) < 1e-6f) {
-            return surfacePoint.length() < earthRadius;
-        }
-
-        // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
-        // 得到 t = -(A·D) / |D|²
-        float t = -b / (2.0f * a);
-
-        // 将 t 限制在 [0, 1] 范围内（线段范围）
-        t = std::max(0.0f, std::min(1.0f, t));
-
-        // 计算线段上最近点到地心的距离
-        osg::Vec3 closestPoint = surfacePoint + direction * t;
-        float minDistance = closestPoint.length();
-
-        // 如果最近距离小于地球半径，则线段穿过地球
-        return minDistance < earthRadius;
-    };
-
+    mLineIDArray = new osg::FloatArray;
     // 创建顶点数组
     mVertexArray = new osg::Vec3Array;
     mColorFromArray = new osg::Vec4Array;
     mColorToArray = new osg::Vec4Array;
     mWeightArray = new osg::FloatArray;
+    mSegmentIDArray = new osg::FloatArray;
     int lineID = 0;
 
     std::cout << "updateEdgeVBO: Using LOD level " << currentLODLevel << std::endl;
+
+    //// 对于 LOD0/1/2，统一走 GPU 曲线渲染路径
+    //if (currentLODLevel != 3) {
+    //    updateEdgeVBO_GpuInterpolated();
+    //    return;
+    //}
 
     if (currentLODLevel == 3) {
         //   加载城市建筑物的 OBB 数据
@@ -2086,7 +2317,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
         cityLoader.drawBuildings(grp, latLonBounds, scale, currentLODLevel);
         heightMap = cityLoader.getHeightMap();
 
-        updateEdgeVBO_Original(vec3ToSphere, mLineIDArray);
+        updateEdgeVBO_GPUInterpolation(GraphUtils::vec3ToSphere, mLineIDArray);
         return;
     }
 
@@ -2123,13 +2354,17 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
         if (fromNodeIt->second.level == 100 || toNodeIt->second.level == 100) {
             // 判断线条是否穿过地球
             if (fromNodeIt->second.level == 100) {
-                if (isLinePassingThroughEarth(vec3ToSphere(endPoint), vec3ToSphere(startPoint))) {
+                if (GraphUtils::isLinePassingThroughEarth(
+                        GraphUtils::vec3ToSphere(endPoint),
+                                              GraphUtils::vec3ToSphere(startPoint))) {
                     lineID++;
                     edge.visible = false;
                     continue; // 如果穿过地球则跳过该线条
                 }
             } else {
-                if (isLinePassingThroughEarth(vec3ToSphere(startPoint), vec3ToSphere(endPoint))) {
+                if (VIS4Earth::GraphUtils::isLinePassingThroughEarth(
+                        GraphUtils::vec3ToSphere(startPoint),
+                                              GraphUtils::vec3ToSphere(endPoint))) {
                     lineID++;
                     continue; // 如果穿过地球则跳过该线条
                 }
@@ -2139,11 +2374,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
             osg::Vec4 edgeColor(1.0f, 0.0f, 0.0f, 0.0f); // 默认白色，可以修改为其他颜色
 
             // 将边的起点和终点加入顶点数组
-            mVertexArray->push_back(vec3ToSphere(startPoint));
+            mVertexArray->push_back(GraphUtils::vec3ToSphere(startPoint));
             mColorFromArray->push_back(edgeColor);
             mColorToArray->push_back(edgeColor);
 
-            mVertexArray->push_back(vec3ToSphere(endPoint));
+            mVertexArray->push_back(GraphUtils::vec3ToSphere(endPoint));
             mColorFromArray->push_back(edgeColor);
             mColorToArray->push_back(edgeColor);
 
@@ -2240,7 +2475,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
                     interpolatedPos.z() = std::max(baseHeight, arcHeight);
 
                     // 转换为球面坐标
-                    osg::Vec3 spherePos = vec3ToSphere(interpolatedPos);
+                    osg::Vec3 spherePos = GraphUtils::vec3ToSphere(interpolatedPos);
 
                     if (i > 0 || j > 0) {
                         // 添加线段的两个顶点
@@ -2285,49 +2520,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
               << " aggregated edges" << std::endl;
 }
 
+
 // 原有的updateEdgeVBO逻辑，用于LOD 3
 void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
     const std::function<osg::Vec3(const osg::Vec3 &)> &vec3ToSphere,
     osg::ref_ptr<osg::FloatArray> lineIDArray) {
     if (!edges || edges->empty())
         return;
-    auto isLinePassingThroughEarth = [&](const osg::Vec3 &surfacePoint,
-                                         const osg::Vec3 &satellite) -> bool {
-        // 地球半径（使用极地半径作为基准）
-        const float earthRadius = osg::WGS_84_RADIUS_POLAR;
-
-        // 计算线段参数化方程: P(t) = surfacePoint + t * (satellite - surfacePoint)
-        // 其中 t ∈ [0, 1]
-        osg::Vec3 direction = satellite - surfacePoint;
-
-        // 计算线段到原点（地心）的最近距离
-        // 对于线段 P(t) = A + t * (B - A)，到原点距离的平方为：
-        // |P(t)|² = |A + t*D|² = |A|² + 2t*(A·D) + t²*|D|²
-        // 其中 A = surfacePoint, D = direction
-
-        float a = direction.length2();               // |D|²
-        float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
-        float c = surfacePoint.length2();            // |A|²
-
-        // 如果 a 接近 0，说明两点几乎重合
-        if (std::abs(a) < 1e-6f) {
-            return surfacePoint.length() < earthRadius;
-        }
-
-        // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
-        // 得到 t = -(A·D) / |D|²
-        float t = -b / (2.0f * a);
-
-        // 将 t 限制在 [0, 1] 范围内（线段范围）
-        t = std::max(0.0f, std::min(1.0f, t));
-
-        // 计算线段上最近点到地心的距离
-        osg::Vec3 closestPoint = surfacePoint + direction * t;
-        float minDistance = closestPoint.length();
-
-        // 如果最近距离小于地球半径，则线段穿过地球
-        return minDistance < earthRadius;
-    };
     // 设置基准参数
     const float BASE_LENGTH = 1000.0f; // 基准长度(km)
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
@@ -2348,13 +2547,15 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
             const osg::Vec3 &startPoint = fromNodeIt->second.pos;
             const osg::Vec3 &endPoint = toNodeIt->second.pos;
             if (fromNodeIt->second.level == 100) {
-                if (isLinePassingThroughEarth(vec3ToSphere(endPoint), vec3ToSphere(startPoint))) {
+                if (VIS4Earth::GraphUtils::isLinePassingThroughEarth(vec3ToSphere(endPoint),
+                                                                     vec3ToSphere(startPoint))) {
                     lineID++;
                     edge.visible = false;
                     continue; // 如果穿过地球则跳过该线条
                 }
             } else {
-                if (isLinePassingThroughEarth(vec3ToSphere(startPoint), vec3ToSphere(endPoint))) {
+                if (VIS4Earth::GraphUtils::isLinePassingThroughEarth(vec3ToSphere(startPoint),
+                                                                     vec3ToSphere(endPoint))) {
                     lineID++;
                     continue; // 如果穿过地球则跳过该线条
                 }
@@ -2540,6 +2741,88 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::setRestriction(VIS4Earth::Area res) {
     restriction = res;
+}
+
+// 从当前边集合构建 GPU 曲线渲染所需的表结构
+void VIS4Earth::GraphRenderer::PerGraphParam::buildTablesFromEdges(const std::vector<Edge> &edgesRef,
+                                                                   bool useBundling) {
+    if (!nodes || edgesRef.empty()) {
+        mControlPoints.clear();
+        mSegments.clear();
+        mEdgeMetas.clear();
+        mTablesDirty = false;
+        return;
+    }
+
+    VIS4Earth::GpuEdge::buildTablesFromEdges<Node, Edge>(*nodes, edgesRef, mControlPoints,
+                                                         mSegments, mEdgeMetas, useBundling);
+    mTablesDirty = false;
+}
+
+// 将表上传为纹理（首版作为占位，后续根据 Shader 接口补充采样细节）
+void VIS4Earth::GraphRenderer::PerGraphParam::uploadTablesToTextures() {
+    if (mControlPoints.empty() || mSegments.empty()) {
+        return;
+    }
+
+    // 简单的一维展开到 2D 纹理：单行存储，后续可根据规模调整为近似正方形
+    const int controlCount = static_cast<int>(mControlPoints.size());
+    const int controlWidth = controlCount;
+    const int controlHeight = 1;
+
+    mControlPointImage = new osg::Image;
+    mControlPointImage->allocateImage(controlWidth, controlHeight, 1, GL_RGBA, GL_FLOAT);
+
+    float *cpData = reinterpret_cast<float *>(mControlPointImage->data());
+    int i = 0;
+    for (std::vector<VIS4Earth::GpuEdge::ControlPoint>::const_iterator it = mControlPoints.begin();
+         it != mControlPoints.end(); ++it, ++i) {
+        const osg::Vec3 &p = it->pos;
+        const int base = i * 4;
+        cpData[base + 0] = p.x();
+        cpData[base + 1] = p.y();
+        cpData[base + 2] = p.z();
+        cpData[base + 3] = 0.0f;
+    }
+
+    mControlPointTex = new osg::Texture2D;
+    mControlPointTex->setImage(mControlPointImage.get());
+    mControlPointTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+    mControlPointTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+    mControlPointTex->setResizeNonPowerOfTwoHint(false);
+
+    // 段表纹理：同样使用单行布局
+    const int segmentCount = static_cast<int>(mSegments.size());
+    const int segmentWidth = segmentCount;
+    const int segmentHeight = 1;
+
+    mSegmentImage = new osg::Image;
+    mSegmentImage->allocateImage(segmentWidth, segmentHeight, 1, GL_RGBA, GL_FLOAT);
+
+    float *segData = reinterpret_cast<float *>(mSegmentImage->data());
+    int sIndex = 0;
+    for (std::vector<VIS4Earth::GpuEdge::SegmentInfo>::const_iterator sit = mSegments.begin();
+         sit != mSegments.end(); ++sit, ++sIndex) {
+        const int base = sIndex * 4;
+        segData[base + 0] = static_cast<float>(sit->controlStart);
+        segData[base + 1] = static_cast<float>(sit->count);
+        segData[base + 2] = static_cast<float>(sit->type);
+        segData[base + 3] = 0.0f;
+    }
+
+    mSegmentTex = new osg::Texture2D;
+    mSegmentTex->setImage(mSegmentImage.get());
+    mSegmentTex->setFilter(osg::Texture2D::MIN_FILTER, osg::Texture2D::NEAREST);
+    mSegmentTex->setFilter(osg::Texture2D::MAG_FILTER, osg::Texture2D::NEAREST);
+    mSegmentTex->setResizeNonPowerOfTwoHint(false);
+
+    if (mEdgeGeometry.valid()) {
+        osg::ref_ptr<osg::StateSet> ss = mEdgeGeometry->getOrCreateStateSet();
+        ss->setTextureAttributeAndModes(1, mControlPointTex.get(), osg::StateAttribute::ON);
+        ss->addUniform(new osg::Uniform("uControlPointTex", 1));
+        ss->setTextureAttributeAndModes(2, mSegmentTex.get(), osg::StateAttribute::ON);
+        ss->addUniform(new osg::Uniform("uSegmentTex", 2));
+    }
 }
 
 bool VIS4Earth::GraphRenderer::PerGraphParam::setLongitudeRange(float minLonDeg, float maxLonDeg) {
@@ -3115,60 +3398,6 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
     if (targetMaxNodeLevel == 0 && currentActiveLODLevel == 1) {
         return;
     }
-    auto vec3ToSphere = [&](const osg::Vec3 &v3) -> osg::Vec3 {
-        // v3.x() 是纬度，v3.y() 是经度
-        float lat = osg::DegreesToRadians(v3.x()); // 纬度转换为弧度
-        float lon = osg::DegreesToRadians(v3.y()); // 经度转换为弧度
-
-        float h = osg::WGS_84_RADIUS_POLAR + v3.z(); // 固定为地球半径，单位为米
-
-        osg::Vec3 ret;
-        ret.z() = h * sinf(lat); // 根据纬度计算 Z 坐标
-
-        h = h * cosf(lat); // 根据纬度调整水平投影的半径
-
-        ret.y() = h * sinf(lon); // 根据经度计算 Y 坐标
-        ret.x() = h * cosf(lon); // 根据经度计算 X 坐标
-
-        return ret;
-    };
-    auto isLinePassingThroughEarth = [&](const osg::Vec3 &surfacePoint,
-                                         const osg::Vec3 &satellite) -> bool {
-        // 地球半径（使用极地半径作为基准）
-        const float earthRadius = osg::WGS_84_RADIUS_POLAR;
-
-        // 计算线段参数化方程: P(t) = surfacePoint + t * (satellite - surfacePoint)
-        // 其中 t ∈ [0, 1]
-        osg::Vec3 direction = satellite - surfacePoint;
-
-        // 计算线段到原点（地心）的最近距离
-        // 对于线段 P(t) = A + t * (B - A)，到原点距离的平方为：
-        // |P(t)|² = |A + t*D|² = |A|² + 2t*(A·D) + t²*|D|²
-        // 其中 A = surfacePoint, D = direction
-
-        float a = direction.length2();               // |D|²
-        float b = 2.0f * (surfacePoint * direction); // 2*(A·D)
-        float c = surfacePoint.length2();            // |A|²
-
-        // 如果 a 接近 0，说明两点几乎重合
-        if (std::abs(a) < 1e-6f) {
-            return surfacePoint.length() < earthRadius;
-        }
-
-        // 求导数为0的点：d/dt|P(t)|² = 2*(A·D) + 2t*|D|² = 0
-        // 得到 t = -(A·D) / |D|²
-        float t = -b / (2.0f * a);
-
-        // 将 t 限制在 [0, 1] 范围内（线段范围）
-        t = std::max(0.0f, std::min(1.0f, t));
-
-        // 计算线段上最近点到地心的距离
-        osg::Vec3 closestPoint = surfacePoint + direction * t;
-        float minDistance = closestPoint.length();
-
-        // 如果最近距离小于地球半径，则线段穿过地球
-        return minDistance < earthRadius;
-    };
     PerGraphParam *graphParam = getGraph("LoadedGraph");
     if (graphParam && targetMaxNodeLevel >= 0 && targetMaxNodeLevel < 4) {
         // 直接设置PerGraphParam的nodes和edges指针到对应的LOD数据
@@ -3271,11 +3500,14 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
                 osg::Vec3 fromPos = graphParam->nodes->at(itr->from).pos;
                 osg::Vec3 toPos = graphParam->nodes->at(itr->to).pos;
                 if (graphParam->nodes->at(itr->from).level == 100 &&
-                    isLinePassingThroughEarth(vec3ToSphere(toPos), vec3ToSphere(toPos))) {
+                    VIS4Earth::GraphUtils::isLinePassingThroughEarth(GraphUtils::vec3ToSphere(toPos),
+                                              GraphUtils::vec3ToSphere(toPos))) {
                     continue;
                 }
                 if (graphParam->nodes->at(itr->to).level == 100 &&
-                    isLinePassingThroughEarth(vec3ToSphere(fromPos), vec3ToSphere(toPos))) {
+                    VIS4Earth::GraphUtils::isLinePassingThroughEarth(
+                        GraphUtils::vec3ToSphere(fromPos),
+                                              GraphUtils::vec3ToSphere(toPos))) {
                     continue;
                 }
                 glm::vec3 from = glm::vec3(fromPos.x(), fromPos.y(), fromPos.z());
