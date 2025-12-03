@@ -627,6 +627,10 @@ class GraphRenderer : public QtOSGReflectableWidget {
                               std::shared_ptr<std::map<std::string, Node>> allNodes, int maxNodes,
                               int minLevel, int maxLevel);
 
+    // 预计算边高度的函数
+    void precomputeEdgeHeights(std::vector<Edge> &edges);
+    float getBuildingHeightAtLatLon(float lat, float lon);
+
   protected:
     Ui::GraphRenderer *ui;
 

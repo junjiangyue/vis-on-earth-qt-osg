@@ -8,6 +8,7 @@
 #include <memory>
 #include <osgText/Font>
 #include <set>
+#include <omp.h>
 
 using namespace VIS4Earth;
 static std::array<float, 2> lonRng = {-90.f, 90.f};
@@ -598,6 +599,9 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             (*nodes)[edge.from].degree++; // 增加起始节点的度数
             (*nodes)[edge.to].degree++;   // 增加结束节点的度数（如果是无向图）
         }
+            // 预计算所有边的高度（并行计算加速）
+        precomputeEdgeHeights(*edges);
+
         // 添加图到渲染器中
         addGraph("LoadedGraph", nodes, edges);
         // 更新图渲染
@@ -632,6 +636,86 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
     } catch (const std::exception &e) {
         QMessageBox::critical(this, tr("Error"), tr("Failed to load graph data: %1").arg(e.what()));
     }
+}
+
+// 预计算所有边的高度（并行计算加速）
+void VIS4Earth::GraphRenderer::precomputeEdgeHeights(std::vector<Edge> &edges) {
+    const float BASE_LENGTH = 1000.0f; // 基准长度(km)
+    const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
+    const int MIN_SEGMENTS = 10;       // 最小细分段数
+    const int MAX_SEGMENTS = 20;       // 最大细分段数
+
+    std::cout << "Precomputing heights for " << edges.size() << " edges using parallel processing..." << std::endl;
+
+    // 使用OpenMP并行处理每条边的高度计算
+#pragma omp parallel for schedule(dynamic)
+    for (size_t edgeIdx = 0; edgeIdx < edges.size(); ++edgeIdx) {
+        Edge &edge = edges[edgeIdx];
+
+        if (edge.subDivs.size() < 2) {
+            // 如果没有足够的细分点，设置默认高度
+            edge.maxHeight = 100000.0f;
+            continue;
+        }
+
+        // 计算边的总长度
+        float totalLength = 0.0f;
+        std::vector<float> segmentLengths;
+
+        for (size_t i = 1; i < edge.subDivs.size(); ++i) {
+            float lat1 = osg::DegreesToRadians(edge.subDivs[i - 1].x());
+            float lon1 = osg::DegreesToRadians(edge.subDivs[i - 1].y());
+            float lat2 = osg::DegreesToRadians(edge.subDivs[i].x());
+            float lon2 = osg::DegreesToRadians(edge.subDivs[i].y());
+
+            float dlat = lat2 - lat1;
+            float dlon = lon2 - lon1;
+            float a = std::sin(dlat / 2) * std::sin(dlat / 2) +
+                      std::cos(lat1) * std::cos(lat2) * std::sin(dlon / 2) * std::sin(dlon / 2);
+            float c = 2 * std::atan2(std::sqrt(a), std::sqrt(1 - a));
+            float length = 6371.0f * c; // 6371km是地球平均半径
+            totalLength += length;
+            segmentLengths.push_back(length);
+        }
+
+        // 计算总的细分段数
+        int totalSegments = static_cast<int>(BASE_SEGMENTS * (totalLength / BASE_LENGTH));
+        totalSegments = std::max(MIN_SEGMENTS, std::min(MAX_SEGMENTS, totalSegments));
+
+        // 计算每个采样点的高度
+        std::vector<float> heightArray;
+        float maxHeightInArray = 0.0f;
+
+        for (int i = 1; i < totalSegments + 1; i++) {
+            float t = static_cast<float>(i) / (totalSegments);
+            osg::Vec3 interpolatedPos;
+            interpolatedPos.x() = edge.subDivs.front().x() * (1.0f - t) + edge.subDivs.back().x() * t;
+            interpolatedPos.y() = edge.subDivs.front().y() * (1.0f - t) + edge.subDivs.back().y() * t;
+            interpolatedPos.z() = getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+
+            heightArray.push_back(interpolatedPos.z());
+            maxHeightInArray = std::max(maxHeightInArray, interpolatedPos.z());
+        }
+
+        // 计算所需的最大振幅
+        float maxRequiredAmplitude = 0.0f;
+        for (int i = 1; i < (totalSegments / 2) + 2; i++) {
+            float t = static_cast<float>(i) / ((totalSegments / 2) + 2);
+            float sinValue = std::sin(osg::PI * t); // 计算 sin(π * x)
+
+            // 计算出对应位置所需的振幅 A，确保 A * sin(π * x) >= arr[i]
+            if (heightArray[i] < 1.f)
+                continue;
+            float requiredAmplitude = heightArray[i] / sinValue;
+            maxRequiredAmplitude = std::max(maxRequiredAmplitude, requiredAmplitude);
+        }
+
+        // 方法2：全局控制的最大高度,绘制sin曲线
+        float maxHeight = std::max(maxRequiredAmplitude, 100000.f);
+        edge.maxHeight = maxHeight;
+    }
+
+    std::cout << "Height precomputation completed for " << edges.size() << " edges" << std::endl;
 }
 
 void VIS4Earth::GraphRenderer::loadNoGeoTypeGraph() {
@@ -1946,8 +2030,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders_GPUInterpolation()
 int VIS4Earth::GraphRenderer::PerGraphParam::calculateSegmentCount(const Edge &edge) {
     const float BASE_LENGTH = 1000.0f; // 基准长度(km)
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
-    const int MIN_SEGMENTS = 10;       // 最小细分段数
-    const int MAX_SEGMENTS = 20;       // 最大细分段数
+    const int MIN_SEGMENTS = 5;       // 最小细分段数
+    const int MAX_SEGMENTS = 10;       // 最大细分段数
 
     // 计算边的总长度
     float totalLength = 0.0f;
@@ -2027,6 +2111,14 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_GPUInterpolation(
     if (!lineIDArray)
         lineIDArray = new osg::FloatArray;
 
+
+    int totalVertices = 0;
+    for (const auto &edge : *edges) {
+        if (!edge.visible)
+            continue;
+        int segCount = calculateSegmentCount(edge);
+        totalVertices += segCount * 2; // 每条细分段两顶点
+    }
     // 每次重建前清空数据，避免多次调用时顶点残留
     mVertexArray->clear();
     mColorFromArray->clear();
@@ -2034,6 +2126,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_GPUInterpolation(
     mWeightArray->clear();
     mSegmentIDArray->clear();
     lineIDArray->clear();
+
+    mVertexArray->reserve(totalVertices);
+    mColorFromArray->reserve(totalVertices);
+    mColorToArray->reserve(totalVertices);
+    mWeightArray->reserve(totalVertices);
+    mSegmentIDArray->reserve(totalVertices);
+    lineIDArray->reserve(totalVertices);
 
     // 每个顶点对应的最大高度（每条曲线一个参数，这里先统一固定为 100000）
     osg::ref_ptr<osg::FloatArray> maxHeightArray = new osg::FloatArray;
@@ -2335,7 +2434,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     const float BASE_LENGTH = 1000.0f; // 基准长度(km)
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
     const int MIN_SEGMENTS = 5;        // 最小细分段数（聚合边可以更少）
-    const int MAX_SEGMENTS = 15;       // 最大细分段数（聚合边不需要太多）
+    const int MAX_SEGMENTS = 10;       // 最大细分段数（聚合边不需要太多）
 
     // 直接遍历当前LOD级别的边数据（这些已经是聚合边）
     for (auto &edge : *edges) {
@@ -3905,6 +4004,36 @@ void VIS4Earth::GraphRenderer::PerGraphParam::setLineThickness(float thickness) 
             uniform->set(thickness);
         }
     }
+}
+
+// 获取建筑物高度
+float VIS4Earth::GraphRenderer::getBuildingHeightAtLatLon(float lat, float lon) {
+    std::vector<std::pair<float, float>> latLonBounds = {
+        {20.0f, -85.0f}, // 经纬度范围的左下角
+        {41.0f, -74.0f}  // 经纬度范围的右上角
+    };
+    // 将经纬度映射到高度图的行列
+    int row = static_cast<int>((lat - latLonBounds[0].first) /
+                               (latLonBounds[1].first - latLonBounds[0].first) * (100 - 1));
+    int col = static_cast<int>((lon - latLonBounds[0].second) /
+                               (latLonBounds[1].second - latLonBounds[0].second) * (100 - 1));
+
+    // 获取四邻点的索引
+    int x1 = std::max(0, row - 1);
+    int y1 = std::max(0, col - 1);
+    int x2 = std::min(100 - 1, row + 1);
+    int y2 = std::min(100 - 1, col + 1);
+    if (x1 >= 100 || y1 >= 100 || x2 >= 100 || y2 >= 100 || x1 < 0 || y1 < 0 || x2 < 0 || y2 < 0) {
+        return 0;
+    }
+    // 获取四个邻近点的高度
+    float height1 = heightMap[x1][y1];
+    float height2 = heightMap[x1][y2];
+    float height3 = heightMap[x2][y1];
+    float height4 = heightMap[x2][y2];
+
+    // 返回最大高度
+    return std::max({height1, height2, height3, height4});
 }
 
 void VIS4Earth::GraphRenderer::LoadConfigFromTxt(const QString &filePath) {
