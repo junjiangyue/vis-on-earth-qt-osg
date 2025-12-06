@@ -1,14 +1,14 @@
 ﻿#include "graph_display.h"
 #include "DBSCAN.h"
-#include <ui_graph_layout.h>
-#include "graph_draw.h"
 #include "graph_animation.h"
+#include "graph_draw.h"
 #include "graph_gpu_edge_tables.h"
 #include <algorithm>
 #include <memory>
+#include <omp.h>
 #include <osgText/Font>
 #include <set>
-#include <omp.h>
+#include <ui_graph_layout.h>
 
 using namespace VIS4Earth;
 static std::array<float, 2> lonRng = {-90.f, 90.f};
@@ -319,7 +319,8 @@ void VIS4Earth::GraphRenderer::syncSceneGraph(const std::string &graphName) {
             sceneLabels.insert(labelId);
         }
     }
-    VIS4Earth::GraphUtils::adjustTextPosition(textNodes, graphParam->nodeGeomSize, graphParam->_camera);
+    /*VIS4Earth::GraphUtils::adjustTextPosition(textNodes, graphParam->nodeGeomSize,
+                                              graphParam->_camera);*/
 }
 void VIS4Earth::GraphRenderer::cameraUpdate(const std::string &graphName, double cameraHeight) {
     /*
@@ -460,16 +461,16 @@ void VIS4Earth::GraphRenderer::frustumCulling(const std::string &graphName, doub
 // 修改lod级别相机高度
 int VIS4Earth::GraphRenderer::getCurrentLevel(double height) {
     std::cout << "height:" << height << std::endl;
-//    if (height < 0)
-//        return 0;
-//    if (height > 2.64834e+07)
-//        return 0; // 全球级
-//    else if (height > 1.73736e+07)
-//        return 1; // 大陆级
-//    else if (height > 1.02563e+07)
-//        return 2; // 国家级
-//    else
-//        return 3;
+    //    if (height < 0)
+    //        return 0;
+    //    if (height > 2.64834e+07)
+    //        return 0; // 全球级
+    //    else if (height > 1.73736e+07)
+    //        return 1; // 大陆级
+    //    else if (height > 1.02563e+07)
+    //        return 2; // 国家级
+    //    else
+    //        return 3;
     if (height < 0)
         return 0;
     if (height > 2.64834e+07)
@@ -599,7 +600,7 @@ void VIS4Earth::GraphRenderer::loadGeoTypeGraph() {
             (*nodes)[edge.from].degree++; // 增加起始节点的度数
             (*nodes)[edge.to].degree++;   // 增加结束节点的度数（如果是无向图）
         }
-            // 预计算所有边的高度（并行计算加速）
+        // 预计算所有边的高度（并行计算加速）
         precomputeEdgeHeights(*edges);
 
         // 添加图到渲染器中
@@ -645,7 +646,8 @@ void VIS4Earth::GraphRenderer::precomputeEdgeHeights(std::vector<Edge> &edges) {
     const int MIN_SEGMENTS = 10;       // 最小细分段数
     const int MAX_SEGMENTS = 20;       // 最大细分段数
 
-    std::cout << "Precomputing heights for " << edges.size() << " edges using parallel processing..." << std::endl;
+    std::cout << "Precomputing heights for " << edges.size()
+              << " edges using parallel processing..." << std::endl;
 
     // 使用OpenMP并行处理每条边的高度计算
 #pragma omp parallel for schedule(dynamic)
@@ -689,9 +691,12 @@ void VIS4Earth::GraphRenderer::precomputeEdgeHeights(std::vector<Edge> &edges) {
         for (int i = 1; i < totalSegments + 1; i++) {
             float t = static_cast<float>(i) / (totalSegments);
             osg::Vec3 interpolatedPos;
-            interpolatedPos.x() = edge.subDivs.front().x() * (1.0f - t) + edge.subDivs.back().x() * t;
-            interpolatedPos.y() = edge.subDivs.front().y() * (1.0f - t) + edge.subDivs.back().y() * t;
-            interpolatedPos.z() = getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
+            interpolatedPos.x() =
+                edge.subDivs.front().x() * (1.0f - t) + edge.subDivs.back().x() * t;
+            interpolatedPos.y() =
+                edge.subDivs.front().y() * (1.0f - t) + edge.subDivs.back().y() * t;
+            interpolatedPos.z() =
+                getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
 
             heightArray.push_back(interpolatedPos.z());
             maxHeightInArray = std::max(maxHeightInArray, interpolatedPos.z());
@@ -1207,7 +1212,6 @@ void VIS4Earth::GraphRenderer::setMinY(double value) { myRestriction.bottomBound
 
 void VIS4Earth::GraphRenderer::setMaxY(double value) { myRestriction.upperBound = value; }
 
-
 void VIS4Earth::GraphRenderer::onHighlightFlowButtonClicked() {
     auto graphParam = getGraph("LoadedGraph");
     graphParam->startHighlightAnimation();
@@ -1354,7 +1358,6 @@ osg::Image *VIS4Earth::GraphRenderer::PerGraphParam::createLineDataTexture() {
     return image;
 }
 
-
 void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
     if (isAnimating) {
         // 停止动画
@@ -1408,13 +1411,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
 
             // 启用透明度混合
             osg::BlendFunc *blendFunc = new osg::BlendFunc();
-//            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // 加法混合
+            //            blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE); // 加法混合
             blendFunc->setFunction(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA); // alpha混合
             arrowStates->setAttributeAndModes(blendFunc, osg::StateAttribute::ON);
 
             // 禁用深度写入但保留深度测试
             osg::Depth *depth = new osg::Depth();
-//            depth->setWriteMask(false);
+            //            depth->setWriteMask(false);
             depth->setFunction(osg::Depth::LEQUAL);
             arrowStates->setAttributeAndModes(depth, osg::StateAttribute::ON);
 
@@ -1433,7 +1436,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startHighlightAnimation() {
 
             // 发光和透明度控制参数
             arrowStates->addUniform(new osg::Uniform("uGlowIntensity", 0.2f)); // 适当降低发光强度
-            arrowStates->addUniform(new osg::Uniform("uGlobalAlpha", 0.2f));   // 增加全局透明度
+            arrowStates->addUniform(new osg::Uniform("uGlobalAlpha", 0.2f)); // 增加全局透明度
             arrowStates->addUniform(new osg::Uniform("uLineThickness", 1.5f)); // 减小线条粗细
 
             // 初始化每条边的动画参数
@@ -1494,7 +1497,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startTextureAnimation() {
                 // 禁用光照
                 auto arrowStates = lineGeometry->getOrCreateStateSet();
                 arrowStates->setAttributeAndModes(
-                    VIS4Earth::GraphAnimation::createTextureBasedShaderProgramColorFlow(edges->size()),
+                    VIS4Earth::GraphAnimation::createTextureBasedShaderProgramColorFlow(
+                        edges->size()),
                     osg::StateAttribute::ON);
 
                 // 绑定纹理
@@ -1562,7 +1566,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
                 // 禁用光照
                 auto arrowStates = lineGeometry->getOrCreateStateSet();
                 arrowStates->setAttributeAndModes(
-                    VIS4Earth::GraphAnimation::createTextureBasedShaderProgramStarFlow(edges->size()),
+                    VIS4Earth::GraphAnimation::createTextureBasedShaderProgramStarFlow(
+                        edges->size()),
                     osg::StateAttribute::ON);
 
                 // 绑定纹理
@@ -1583,10 +1588,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::startStarAnimation() {
 }
 void VIS4Earth::GraphRenderer::PerGraphParam::update() {
     if (!_satelliteModel) {
-        //AppEnv& env = AppEnv::instance();
-        //String data_dir = env.getPath(AppEnv::DATA_DIR);
-        //std::string str_path = data_dir.c_str();
-        //str_path = str_path + "/graph/graph_data/test_data/satellite_obj.obj";
+        // AppEnv& env = AppEnv::instance();
+        // String data_dir = env.getPath(AppEnv::DATA_DIR);
+        // std::string str_path = data_dir.c_str();
+        // str_path = str_path + "/graph/graph_data/test_data/satellite_obj.obj";
         _satelliteModel = osgDB::readNodeFile(DATA_PATH_PREFIX "satellite_obj.obj");
         //_satelliteModel = osgDB::readNodeFile(str_path);
         if (!_satelliteModel) {
@@ -1873,7 +1878,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::update() {
             edgeNodegrp->addChild(mEdgeGeode);
             grp->addChild(edgeNodegrp);
             // 初始化着色器
-            //initEdgeShaders();
+            // initEdgeShaders();
             initEdgeShaders_GPUInterpolation();
         }
 
@@ -1991,10 +1996,10 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders_GPUInterpolation()
 
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::VERTEX, vertSource));
         mEdgeProgram->addShader(new osg::Shader(osg::Shader::FRAGMENT, fragSource));
-        mEdgeProgram->addBindAttribLocation("lineID", 1);           // lineID -> slot 1
-        mEdgeProgram->addBindAttribLocation("vertexPosition", 2);   // vertexPosition -> slot 2
-        mEdgeProgram->addBindAttribLocation("segmentParam", 3);     // segmentParam(t) -> slot 3
-        mEdgeProgram->addBindAttribLocation("maxHeight", 4);        // maxHeight -> slot 4
+        mEdgeProgram->addBindAttribLocation("lineID", 1);         // lineID -> slot 1
+        mEdgeProgram->addBindAttribLocation("vertexPosition", 2); // vertexPosition -> slot 2
+        mEdgeProgram->addBindAttribLocation("segmentParam", 3);   // segmentParam(t) -> slot 3
+        mEdgeProgram->addBindAttribLocation("maxHeight", 4);      // maxHeight -> slot 4
     }
 
     // 每次调用都为当前几何体设置StateSet和uniform参数
@@ -2030,7 +2035,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders_GPUInterpolation()
 int VIS4Earth::GraphRenderer::PerGraphParam::calculateSegmentCount(const Edge &edge) {
     const float BASE_LENGTH = 1000.0f; // 基准长度(km)
     const int BASE_SEGMENTS = 5;       // 基准长度对应的细分段数
-    const int MIN_SEGMENTS = 5;       // 最小细分段数
+    const int MIN_SEGMENTS = 5;        // 最小细分段数
     const int MAX_SEGMENTS = 10;       // 最大细分段数
 
     // 计算边的总长度
@@ -2110,7 +2115,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_GPUInterpolation(
         mSegmentIDArray = new osg::FloatArray;
     if (!lineIDArray)
         lineIDArray = new osg::FloatArray;
-
 
     int totalVertices = 0;
     for (const auto &edge : *edges) {
@@ -2207,10 +2211,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_GPUInterpolation(
 
     // 设置VBO数据及 attribute 绑定（与 Shader 中的 slot 对齐）
     mEdgeGeometry->setVertexArray(mVertexArray);
-    mEdgeGeometry->setVertexAttribArray(1, lineIDArray, osg::Array::BIND_PER_VERTEX);     // lineID
-    mEdgeGeometry->setVertexAttribArray(2, mVertexArray, osg::Array::BIND_PER_VERTEX);    // vertexPosition（基线）
-    mEdgeGeometry->setVertexAttribArray(3, mSegmentIDArray, osg::Array::BIND_PER_VERTEX); // segmentParam (t)
-    mEdgeGeometry->setVertexAttribArray(4, maxHeightArray, osg::Array::BIND_PER_VERTEX);  // maxHeight
+    mEdgeGeometry->setVertexAttribArray(1, lineIDArray, osg::Array::BIND_PER_VERTEX); // lineID
+    mEdgeGeometry->setVertexAttribArray(2, mVertexArray,
+                                        osg::Array::BIND_PER_VERTEX); // vertexPosition（基线）
+    mEdgeGeometry->setVertexAttribArray(3, mSegmentIDArray,
+                                        osg::Array::BIND_PER_VERTEX); // segmentParam (t)
+    mEdgeGeometry->setVertexAttribArray(4, maxHeightArray,
+                                        osg::Array::BIND_PER_VERTEX); // maxHeight
     mEdgeGeometry->setTexCoordArray(0, mColorFromArray);
     mEdgeGeometry->setTexCoordArray(1, mColorToArray);
     mEdgeGeometry->setTexCoordArray(2, mWeightArray);
@@ -2219,13 +2226,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_GPUInterpolation(
 
     // 重新设置 PrimitiveSet，避免多次调用时叠加
     mEdgeGeometry->removePrimitiveSet(0, mEdgeGeometry->getNumPrimitiveSets());
-    mEdgeGeometry->addPrimitiveSet(
-        new osg::DrawArrays(osg::PrimitiveSet::LINES, 0,
-                            static_cast<GLsizei>(mVertexArray->size())));
+    mEdgeGeometry->addPrimitiveSet(new osg::DrawArrays(osg::PrimitiveSet::LINES, 0,
+                                                       static_cast<GLsizei>(mVertexArray->size())));
     lineGeode = mEdgeGeode;
     lineGeometry = mEdgeGeometry;
 }
-
 
 // 初始化边的着色器程序
 void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
@@ -2343,13 +2348,13 @@ void VIS4Earth::GraphRenderer::PerGraphParam::initEdgeShaders() {
 
         // 禁用深度写入但保留深度测试
         osg::Depth *depth = new osg::Depth();
-//        depth->setWriteMask(false);
+        //        depth->setWriteMask(false);
         //  修改深度测试
         depth->setFunction(osg::Depth::LEQUAL);
         stateset->setAttributeAndModes(depth, osg::StateAttribute::ON);
 
         // 多边形偏移
-//        osg::Polyg
+        //        osg::Polyg
 
         // 设置渲染顺序确保透明物体正确渲染
         stateset->setRenderingHint(osg::StateSet::TRANSPARENT_BIN);
@@ -2383,43 +2388,11 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     int lineID = 0;
 
     std::cout << "updateEdgeVBO: Using LOD level " << currentLODLevel << std::endl;
-
-    //// 对于 LOD0/1/2，统一走 GPU 曲线渲染路径
-    //if (currentLODLevel != 3) {
-    //    updateEdgeVBO_GpuInterpolated();
-    //    return;
-    //}
-
     if (currentLODLevel == 3) {
-        //   加载城市建筑物的 OBB 数据
-        VIS4Earth::CityLoader cityLoader;
-        //AppEnv& env = AppEnv::instance();
-        //String data_dir = env.getPath(AppEnv::DATA_DIR);
-        //std::string str_path = data_dir.c_str();
-        //str_path = str_path + "/graph/buildings_obb.csv";
-        if (!cityLoader.loadBuildingsFromCSV(DATA_PATH_PREFIX "buildings_obb.csv")) {
-            std::cerr << "Failed to load building data!" << std::endl;
-        }
-        /*if (!cityLoader.loadBuildingsFromCSV(str_path)) {
-            std::cerr << "Failed to load building data!" << std::endl;
-        }*/
-
-
-        // 设置经纬度范围（lat_min, lon_min）到（lat_max, lon_max）
-        std::vector<std::pair<float, float>> latLonBounds = {
-            {20.0f, -85.0f}, // 经纬度范围的左下角
-            {41.0f, -74.0f}  // 经纬度范围的右上角
-        };
-
-        // 设置比例因子，将建筑物的尺寸映射到地球表面
-        float scale = 1000.f; // 可调整的比例因子，根据需要调整
-        cityLoader.drawBuildings(grp, latLonBounds, scale, currentLODLevel);
-        heightMap = cityLoader.getHeightMap();
 
         updateEdgeVBO_GPUInterpolation(GraphUtils::vec3ToSphere, mLineIDArray);
         return;
     }
-
     // LOD 0, 1, 2: 直接使用已生成的聚合边数据
     // 检查当前边数据是否为空
     if (edges->empty()) {
@@ -2453,17 +2426,15 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
         if (fromNodeIt->second.level == 100 || toNodeIt->second.level == 100) {
             // 判断线条是否穿过地球
             if (fromNodeIt->second.level == 100) {
-                if (GraphUtils::isLinePassingThroughEarth(
-                        GraphUtils::vec3ToSphere(endPoint),
-                                              GraphUtils::vec3ToSphere(startPoint))) {
+                if (GraphUtils::isLinePassingThroughEarth(GraphUtils::vec3ToSphere(endPoint),
+                                                          GraphUtils::vec3ToSphere(startPoint))) {
                     lineID++;
                     edge.visible = false;
                     continue; // 如果穿过地球则跳过该线条
                 }
             } else {
                 if (VIS4Earth::GraphUtils::isLinePassingThroughEarth(
-                        GraphUtils::vec3ToSphere(startPoint),
-                                              GraphUtils::vec3ToSphere(endPoint))) {
+                        GraphUtils::vec3ToSphere(startPoint), GraphUtils::vec3ToSphere(endPoint))) {
                     lineID++;
                     continue; // 如果穿过地球则跳过该线条
                 }
@@ -2492,7 +2463,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
             lineID++; // 增加线ID
         } else {
             // 获取边的颜色（使用节点颜色或默认颜色）
-//            0.8 0.6 0.2
+            //            0.8 0.6 0.2
             osg::Vec4 edgeColor(0.8f, 0.6f, 0.2f, 1.0f); // 默认金色
             if (currentLODLevel < 3) {
                 // 聚合边使用统一的金色
@@ -2501,12 +2472,85 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
             // 检查是否有细分点，如果没有则使用起点和终点
             std::vector<osg::Vec3> pathPoints;
+            bool useDirectSubdiv = false; // 是否直接使用 subdiv 点画线（不再插值）
+
             if (!edge.subDivs.empty()) {
-                pathPoints = edge.subDivs;
+                size_t n = edge.subDivs.size();
+
+                if (n > 20) {
+                    // > 20 个：均匀采样 20 个点
+                    const int TARGET_POINTS = 20;
+                    pathPoints.reserve(TARGET_POINTS);
+                    for (int i = 0; i < TARGET_POINTS; ++i) {
+                        float t = (TARGET_POINTS == 1)
+                                      ? 0.0f
+                                      : static_cast<float>(i) / (TARGET_POINTS - 1);
+                        size_t idx = static_cast<size_t>(std::round(t * (n - 1)));
+                        if (idx >= n)
+                            idx = n - 1;
+                        pathPoints.push_back(edge.subDivs[idx]);
+                    }
+                } else {
+                    // 6~20 个：直接全部拷贝进来
+                    pathPoints = edge.subDivs;
+                }
+
+                // 如果最终点数大于 5，则直接使用这些点画线，不再做后面的插值
+                if (pathPoints.size() > 5) {
+                    useDirectSubdiv = true;
+                }
             } else {
+                // 没有 subdiv：用起点和终点，后面走原来的插值逻辑
                 pathPoints.push_back(fromNodeIt->second.pos);
                 pathPoints.push_back(toNodeIt->second.pos);
             }
+
+            // ===== 情况 A：subDivs.size() > 5（或者采样后 > 5）=> 直接用 pathPoints 画线，不再插值
+            // =====
+            if (useDirectSubdiv) {
+                int n = static_cast<int>(pathPoints.size());
+                osg::Vec3 prevPos;
+                bool hasPrev = false;
+
+                for (int i = 0; i < n; ++i) {
+                    osg::Vec3 pos = pathPoints[i];
+
+                    // 按整条线的归一化位置算弧高，保证整条边是连续的弓形
+                    float globalT = (n > 1) ? static_cast<float>(i) / (n - 1) : 0.0f;
+
+                    // 计算高度
+                    float baseHeight = getBuildingHeightAtLatLon(pos.x(), pos.y());
+                    float arcHeight = std::sin(osg::PI * globalT) * 100000.f; // 最大高度不变
+                    pos.z() = std::max(baseHeight, arcHeight);
+
+                    // 转球面
+                    osg::Vec3 spherePos = GraphUtils::vec3ToSphere(pos);
+
+                    if (hasPrev) {
+                        // 添加线段两个端点
+                        mVertexArray->push_back(prevPos);
+                        mColorFromArray->push_back(edgeColor);
+                        mColorToArray->push_back(edgeColor);
+                        mWeightArray->push_back(edge.weight);
+
+                        mVertexArray->push_back(spherePos);
+                        mColorFromArray->push_back(edgeColor);
+                        mColorToArray->push_back(edgeColor);
+                        mWeightArray->push_back(edge.weight);
+
+                        mLineIDArray->push_back(static_cast<float>(lineID));
+                        mLineIDArray->push_back(static_cast<float>(lineID));
+                    }
+
+                    prevPos = spherePos;
+                    hasPrev = true;
+                }
+
+                ++lineID; // 一条边一个 ID
+                continue; // 这条边已经画完，跳过下面的插值逻辑
+            }
+
+            // ===== 情况 B：subDivs.size() <= 5 或没有 subdiv => 走你原来的插值逻辑 =====
 
             // 计算整条边的总长度
             float totalLength = 0.0f;
@@ -2538,7 +2582,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
 
             for (size_t i = 0; i < segmentLengths.size(); ++i) {
                 accumulatedLength += segmentLengths[i];
-                float t = accumulatedLength / totalLength;
                 int currentSegments;
 
                 if (i == segmentLengths.size() - 1) {
@@ -2552,9 +2595,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
                 currentSegments = std::max(1, currentSegments); // 确保至少有一个细分段
                 segmentCounts.push_back(currentSegments);
 
-                // 在当前段内生成插值点
-                const osg::Vec3 &startPoint = pathPoints[i];
-                const osg::Vec3 &endPoint = pathPoints[i + 1];
+                const osg::Vec3 &startPointSeg = pathPoints[i];
+                const osg::Vec3 &endPointSeg = pathPoints[i + 1];
 
                 for (int j = 0; j <= currentSegments; ++j) {
                     float localT = static_cast<float>(j) / currentSegments;
@@ -2562,22 +2604,20 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
                         (accumulatedLength - segmentLengths[i] + segmentLengths[i] * localT) /
                         totalLength;
 
-                    // 线性插值位置
                     osg::Vec3 interpolatedPos;
-                    interpolatedPos.x() = startPoint.x() * (1.0f - localT) + endPoint.x() * localT;
-                    interpolatedPos.y() = startPoint.y() * (1.0f - localT) + endPoint.y() * localT;
+                    interpolatedPos.x() =
+                        startPointSeg.x() * (1.0f - localT) + endPointSeg.x() * localT;
+                    interpolatedPos.y() =
+                        startPointSeg.y() * (1.0f - localT) + endPointSeg.y() * localT;
 
-                    // 计算弧线高度（使用全局t值确保整条边的弧线连续）
                     float baseHeight =
                         getBuildingHeightAtLatLon(interpolatedPos.x(), interpolatedPos.y());
-                    float arcHeight = std::sin(osg::PI * globalT) * 100000.f; // 使用边的最大高度
+                    float arcHeight = std::sin(osg::PI * globalT) * 100000.f;
                     interpolatedPos.z() = std::max(baseHeight, arcHeight);
 
-                    // 转换为球面坐标
                     osg::Vec3 spherePos = GraphUtils::vec3ToSphere(interpolatedPos);
 
                     if (i > 0 || j > 0) {
-                        // 添加线段的两个顶点
                         mVertexArray->push_back(prevPos);
                         mColorFromArray->push_back(edgeColor);
                         mColorToArray->push_back(edgeColor);
@@ -2595,7 +2635,7 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
                     prevPos = spherePos;
                 }
             }
-            lineID++;
+            ++lineID;
         }
     }
 
@@ -2618,7 +2658,6 @@ void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO() {
     std::cout << "Generated " << mVertexArray->size() << " vertices from " << edges->size()
               << " aggregated edges" << std::endl;
 }
-
 
 // 原有的updateEdgeVBO逻辑，用于LOD 3
 void VIS4Earth::GraphRenderer::PerGraphParam::updateEdgeVBO_Original(
@@ -2843,8 +2882,8 @@ void VIS4Earth::GraphRenderer::PerGraphParam::setRestriction(VIS4Earth::Area res
 }
 
 // 从当前边集合构建 GPU 曲线渲染所需的表结构
-void VIS4Earth::GraphRenderer::PerGraphParam::buildTablesFromEdges(const std::vector<Edge> &edgesRef,
-                                                                   bool useBundling) {
+void VIS4Earth::GraphRenderer::PerGraphParam::buildTablesFromEdges(
+    const std::vector<Edge> &edgesRef, bool useBundling) {
     if (!nodes || edgesRef.empty()) {
         mControlPoints.clear();
         mSegments.clear();
@@ -3516,7 +3555,7 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
 
             // 根据LOD级别计算发光效果参数
             switch (targetMaxNodeLevel) {
-            case 0:                         // LOD0 - 最粗糙级别，需要强烈发光突出聚合边
+            case 0: // LOD0 - 最粗糙级别，需要强烈发光突出聚合边
                 targetGlowIntensity = 2.5f; // 高发光强度
                 targetGlobalAlpha = 0.8f;   // 较高透明度
                 targetLineThickness = 3.0f; // 粗线条
@@ -3590,7 +3629,7 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
                                     itr->second.level, itr->second.label,
                                     VIS4Earth::GraphUtils::rgbToHex(itr->second.color.x(),
                                                                     itr->second.color.y(),
-                                             itr->second.color.z()))));
+                                                                    itr->second.color.z()))));
             }
             std::vector<VIS4Earth::Edge> garphEdges;
 
@@ -3599,14 +3638,13 @@ void VIS4Earth::GraphRenderer::updateActiveLOD(double cameraHeight) {
                 osg::Vec3 fromPos = graphParam->nodes->at(itr->from).pos;
                 osg::Vec3 toPos = graphParam->nodes->at(itr->to).pos;
                 if (graphParam->nodes->at(itr->from).level == 100 &&
-                    VIS4Earth::GraphUtils::isLinePassingThroughEarth(GraphUtils::vec3ToSphere(toPos),
-                                              GraphUtils::vec3ToSphere(toPos))) {
+                    VIS4Earth::GraphUtils::isLinePassingThroughEarth(
+                        GraphUtils::vec3ToSphere(toPos), GraphUtils::vec3ToSphere(toPos))) {
                     continue;
                 }
                 if (graphParam->nodes->at(itr->to).level == 100 &&
                     VIS4Earth::GraphUtils::isLinePassingThroughEarth(
-                        GraphUtils::vec3ToSphere(fromPos),
-                                              GraphUtils::vec3ToSphere(toPos))) {
+                        GraphUtils::vec3ToSphere(fromPos), GraphUtils::vec3ToSphere(toPos))) {
                     continue;
                 }
                 glm::vec3 from = glm::vec3(fromPos.x(), fromPos.y(), fromPos.z());
@@ -3695,7 +3733,6 @@ bool VIS4Earth::GraphRenderer::frustumSignificantlyChanged(const SimpleFrustumBo
             std::abs(current.maxLon - last.maxLon) > threshold);
 }
 
-
 void VIS4Earth::GraphRenderer::performPreciseCulling(
     osg::Camera *camera, const std::vector<std::string> &candidateNodes,
     std::shared_ptr<std::map<std::string, Node>> allNodes) {
@@ -3718,7 +3755,8 @@ void VIS4Earth::GraphRenderer::performPreciseCulling(
             continue;
         it->second.visible = true;
         visibleCount++;
-        osg::Vec3 worldPos = VIS4Earth::GraphUtils::latLonToWorldPos(it->second.pos.x(), it->second.pos.y());
+        osg::Vec3 worldPos =
+            VIS4Earth::GraphUtils::latLonToWorldPos(it->second.pos.x(), it->second.pos.y());
         if (frustum.contains(worldPos)) {
             it->second.visible = true; // 设置为可见
             visibleCount++;
